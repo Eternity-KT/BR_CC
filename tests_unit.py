@@ -1,5 +1,10 @@
 import numpy as np
-from src.models import BinaryRelevanceClassifier, BinaryRelevanceLogisticRegression, ClassifierChainClassifier
+from src.models import (
+    BinaryRelevanceClassifier,
+    BinaryRelevanceLogisticRegression,
+    BinaryRelevanceMLP,
+    ClassifierChainClassifier
+)
 
 def run_tests():
     # 1. Synthetic data
@@ -44,7 +49,18 @@ def run_tests():
     assert np.all((probs_svm >= 0.0) & (probs_svm <= 1.0))
     print("   -> Passed BinaryRelevanceClassifier(base_estimator='svm')!")
 
-    print("4. Testing ClassifierChain with base_estimator='logistic'...")
+    print("4. Testing BinaryRelevanceMLP...")
+    clf_br_mlp = BinaryRelevanceMLP(hidden_layer_sizes=(32,), max_iter=100)
+    clf_br_mlp.fit(X, Y)
+    preds_mlp = clf_br_mlp.predict(X)
+    probs_mlp = clf_br_mlp.predict_proba(X)
+    assert preds_mlp.shape == (60, 5)
+    assert probs_mlp.shape == (60, 5)
+    assert np.all((probs_mlp >= 0.0) & (probs_mlp <= 1.0))
+    assert np.all(preds_mlp[:, 4] == 0)
+    print("   -> Passed BinaryRelevanceMLP!")
+
+    print("5. Testing ClassifierChain with base_estimator='logistic'...")
     clf_cc_lr = ClassifierChainClassifier(base_estimator="logistic")
     clf_cc_lr.fit(X, Y)
     preds_cc = clf_cc_lr.predict(X)
@@ -54,7 +70,18 @@ def run_tests():
     assert np.all((probs_cc >= 0.0) & (probs_cc <= 1.0))
     print("   -> Passed ClassifierChainClassifier(base_estimator='logistic')!")
 
+    print("6. Testing ClassifierChain with base_estimator='mlp'...")
+    clf_cc_mlp = ClassifierChainClassifier(base_estimator="mlp")
+    clf_cc_mlp.fit(X, Y)
+    preds_cc_mlp = clf_cc_mlp.predict(X)
+    probs_cc_mlp = clf_cc_mlp.predict_proba(X)
+    assert preds_cc_mlp.shape == (60, 5)
+    assert probs_cc_mlp.shape == (60, 5)
+    assert np.all((probs_cc_mlp >= 0.0) & (probs_cc_mlp <= 1.0))
+    print("   -> Passed ClassifierChainClassifier(base_estimator='mlp')!")
+
     print("\nALL UNIT TESTS PASSED SUCCESSFULLY!")
 
 if __name__ == "__main__":
     run_tests()
+

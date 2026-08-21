@@ -17,11 +17,18 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 
-# Add project root to sys.path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import warnings
+from sklearn.exceptions import ConvergenceWarning
+warnings.filterwarnings("ignore", category=ConvergenceWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
 
+from sklearn.preprocessing import MaxAbsScaler
 from src.data.loader import load_dataset, DATASET_CONFIG
-from src.models.binary_relevance import BinaryRelevanceClassifier, BinaryRelevanceLogisticRegression
+from src.models.binary_relevance import (
+    BinaryRelevanceClassifier,
+    BinaryRelevanceLogisticRegression,
+    BinaryRelevanceMLP
+)
 from src.models.classifier_chain import ClassifierChainClassifier
 from src.evaluation.metrics import compute_all_metrics
 from src.evaluation.cv import get_multilabel_cv
@@ -37,12 +44,19 @@ def _create_model(model_name, random_state=42):
         return BinaryRelevanceClassifier(base_estimator="svm", random_state=random_state)
     elif m in ("BR_LOGISTIC", "BR_LR", "BR_LOGREG"):
         return BinaryRelevanceLogisticRegression(random_state=random_state)
+    elif m in ("BR_MLP", "BR_NEURAL_NETWORK", "BR_NN"):
+        return BinaryRelevanceMLP(random_state=random_state)
     elif m in ("CC", "CC_SVC", "CC_LINEARSVC"):
         return ClassifierChainClassifier(base_estimator="svm", random_state=random_state)
     elif m in ("CC_LOGISTIC", "CC_LR", "CC_LOGREG"):
         return ClassifierChainClassifier(base_estimator="logistic", random_state=random_state)
+    elif m in ("CC_MLP", "CC_NEURAL_NETWORK", "CC_NN"):
+        return ClassifierChainClassifier(base_estimator="mlp", random_state=random_state)
     else:
-        raise ValueError(f"Unknown model name: {model_name}. Supported: BR, BR_Logistic, CC, CC_Logistic")
+        raise ValueError(
+            f"Unknown model name: {model_name}. "
+            f"Supported: BR, BR_Logistic, BR_MLP, CC, CC_Logistic, CC_MLP"
+        )
 
 
 def _standardize_model_name(name):
@@ -51,10 +65,14 @@ def _standardize_model_name(name):
         return "BR"
     elif m in ("BR_LOGISTIC", "BR_LR", "BR_LOGREG"):
         return "BR_Logistic"
+    elif m in ("BR_MLP", "BR_NEURAL_NETWORK", "BR_NN"):
+        return "BR_MLP"
     elif m in ("CC", "CC_SVC", "CC_LINEARSVC"):
         return "CC"
     elif m in ("CC_LOGISTIC", "CC_LR", "CC_LOGREG"):
         return "CC_Logistic"
+    elif m in ("CC_MLP", "CC_NEURAL_NETWORK", "CC_NN"):
+        return "CC_MLP"
     return name
 
 
@@ -64,7 +82,7 @@ def run_experiment(datasets=None, models=None, n_splits=5, random_state=42, outp
 
     Parameters:
         datasets (list, optional): List of dataset names to evaluate. Defaults to all 10 datasets.
-        models (list, optional): List of models to evaluate ('BR', 'BR_Logistic', 'CC').
+        models (list, optional): List of models to evaluate ('BR', 'BR_Logistic', 'BR_MLP', 'CC', 'CC_MLP').
         n_splits (int, default=5): Number of cross-validation folds.
         random_state (int, default=42): Seed for reproducibility.
         output_dir (str, default='results'): Directory to save figures and tables.
@@ -73,7 +91,7 @@ def run_experiment(datasets=None, models=None, n_splits=5, random_state=42, outp
         datasets = list(DATASET_CONFIG.keys())
 
     if models is None:
-        models = ["BR", "BR_Logistic", "CC"]
+        models = ["BR", "BR_Logistic", "BR_MLP", "CC", "CC_MLP"]
 
     std_models = [_standardize_model_name(m) for m in models]
 
@@ -111,7 +129,9 @@ def run_experiment(datasets=None, models=None, n_splits=5, random_state=42, outp
 
         # 3. Cross-validation loop
         for fold_i, (train_idx, test_idx) in enumerate(splits, 1):
-            X_train, X_test = X[train_idx], X[test_idx]
+            scaler = MaxAbsScaler()
+            X_train = scaler.fit_transform(X[train_idx])
+            X_test = scaler.transform(X[test_idx])
             Y_train, Y_test = Y[train_idx], Y[test_idx]
 
             for m_name in std_models:
@@ -180,11 +200,11 @@ def run_experiment(datasets=None, models=None, n_splits=5, random_state=42, outp
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Multi-Label Classification Benchmark Pipeline (BR, BR_Logistic, CC)")
+    parser = argparse.ArgumentParser(description="Multi-Label Classification Benchmark Pipeline (BR, BR_Logistic, BR_MLP, CC, CC_MLP)")
     parser.add_argument("--datasets", nargs="+", default=None,
                         help="List of datasets to evaluate (e.g., emotions music scene). Defaults to all 10 datasets.")
-    parser.add_argument("--models", nargs="+", default=["BR", "BR_Logistic", "CC"],
-                        help="List of models to evaluate (e.g., BR BR_Logistic CC). Defaults to BR, BR_Logistic, CC.")
+    parser.add_argument("--models", nargs="+", default=["BR", "BR_Logistic", "BR_MLP", "CC", "CC_MLP"],
+                        help="List of models to evaluate (e.g., BR BR_Logistic BR_MLP CC CC_MLP). Defaults to all 5.")
     parser.add_argument("--n_splits", type=int, default=5,
                         help="Number of cross-validation folds (default: 5).")
     parser.add_argument("--random_state", type=int, default=42,
@@ -205,4 +225,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 

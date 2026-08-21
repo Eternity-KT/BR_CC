@@ -32,24 +32,30 @@ plt.rcParams.update({
 COLORS = {
     "BR": "#2563EB",           # Royal Blue
     "BR_Logistic": "#0D9488",  # Teal / Emerald Green
+    "BR_MLP": "#7C3AED",       # Deep Purple
     "CC": "#EA580C",           # Vibrant Orange
-    "CC_Logistic": "#D97706"   # Amber
+    "CC_Logistic": "#D97706",  # Amber
+    "CC_MLP": "#E11D48"        # Rose / Crimson
 }
 
-FALLBACK_COLORS = ["#6366F1", "#8B5CF6", "#EC4899", "#14B8A6", "#F59E0B"]
+FALLBACK_COLORS = ["#6366F1", "#8B5CF6", "#EC4899", "#14B8A6", "#F59E0B", "#10B981"]
 
 MODEL_LABELS = {
     "BR": "BR (LinearSVC)",
     "BR_Logistic": "BR (Logistic Reg)",
+    "BR_MLP": "BR (MLP)",
     "CC": "CC (LinearSVC)",
-    "CC_Logistic": "CC (Logistic Reg)"
+    "CC_Logistic": "CC (Logistic Reg)",
+    "CC_MLP": "CC (MLP)"
 }
 
 HEATMAP_CMAPS = {
     "BR": "Blues",
     "BR_Logistic": "YlGn",
+    "BR_MLP": "Purples",
     "CC": "Oranges",
-    "CC_Logistic": "YlOrBr"
+    "CC_Logistic": "YlOrBr",
+    "CC_MLP": "Reds"
 }
 
 METRIC_FILENAMES = {

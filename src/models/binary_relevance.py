@@ -9,6 +9,7 @@ import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin, clone
 from sklearn.svm import LinearSVC
 from sklearn.linear_model import LogisticRegression
+from sklearn.neural_network import MLPClassifier
 
 
 class _ConstantClassifier:
@@ -39,19 +40,55 @@ def _get_base_estimator(base_estimator, random_state=42):
     Resolve base classifier from string or estimator instance.
 
     Supported string presets:
-    - 'svm', 'linearsvc', None: LinearSVC(C=1.0, dual='auto', max_iter=10000, random_state=random_state)
-    - 'logistic', 'lr', 'logistic_regression': LogisticRegression(solver='liblinear', C=1.0, max_iter=1000, random_state=random_state)
+    - 'svm', 'linearsvc', None: LinearSVC(C=1.0, dual='auto', tol=1e-3, max_iter=5000, random_state=random_state)
+    - 'logistic', 'lr', 'logistic_regression': LogisticRegression(solver='liblinear', C=1.0, tol=1e-3, max_iter=1000, random_state=random_state)
+    - 'mlp', 'pytorch_mlp', 'gpu_mlp', 'nn': FastPyTorchBinaryMLP(hidden_layer_sizes=(64,), lr=3e-3, weight_decay=1e-3, epochs=80, random_state=random_state) [GPU accelerated via CUDA]
+    - 'sklearn_mlp': MLPClassifier(hidden_layer_sizes=(100,), activation='relu', solver='adam', alpha=1e-4, max_iter=200, early_stopping=False, tol=1e-4, n_iter_no_change=10, random_state=random_state)
     """
     if base_estimator is None or (isinstance(base_estimator, str) and base_estimator.lower() in ("svm", "linearsvc", "linear_svc")):
-        return LinearSVC(C=1.0, dual="auto", max_iter=10000, random_state=random_state)
+        return LinearSVC(C=1.0, dual="auto", tol=1e-3, max_iter=5000, random_state=random_state)
     elif isinstance(base_estimator, str) and base_estimator.lower() in ("logistic", "lr", "logistic_regression", "logreg"):
-        return LogisticRegression(solver="liblinear", C=1.0, max_iter=1000, random_state=random_state)
+        return LogisticRegression(solver="liblinear", C=1.0, tol=1e-3, max_iter=1000, random_state=random_state)
+    elif isinstance(base_estimator, str) and base_estimator.lower() in ("mlp", "pytorch_mlp", "gpu_mlp", "mlpclassifier", "neural_network", "nn"):
+        try:
+            from .pytorch_mlp import FastPyTorchBinaryMLP
+            return FastPyTorchBinaryMLP(
+                hidden_layer_sizes=(64,),
+                lr=3e-3,
+                weight_decay=1e-3,
+                epochs=80,
+                random_state=random_state
+            )
+        except Exception:
+            return MLPClassifier(
+                hidden_layer_sizes=(100,),
+                activation="relu",
+                solver="adam",
+                alpha=1e-4,
+                max_iter=200,
+                early_stopping=False,
+                tol=1e-4,
+                n_iter_no_change=10,
+                random_state=random_state
+            )
+    elif isinstance(base_estimator, str) and base_estimator.lower() in ("sklearn_mlp", "cpu_mlp"):
+        return MLPClassifier(
+            hidden_layer_sizes=(100,),
+            activation="relu",
+            solver="adam",
+            alpha=1e-4,
+            max_iter=200,
+            early_stopping=False,
+            tol=1e-4,
+            n_iter_no_change=10,
+            random_state=random_state
+        )
     elif hasattr(base_estimator, "fit"):
         return clone(base_estimator)
     else:
         raise ValueError(
             f"Unsupported base_estimator: {base_estimator}. "
-            f"Must be None, 'svm', 'logistic', or an estimator instance implementing fit/predict."
+            f"Must be None, 'svm', 'logistic', 'mlp', or an estimator instance implementing fit/predict."
         )
 
 
@@ -216,3 +253,106 @@ class BinaryRelevanceLogisticRegression(BinaryRelevanceClassifier):
             **kwargs
         )
         super().__init__(base_estimator=base_lr, random_state=random_state)
+
+
+class BinaryRelevanceMLP(BinaryRelevanceClassifier):
+    """
+    Binary Relevance (BR) Multi-Label Classifier using Multi-Layer Perceptron (MLP).
+
+    Decomposes multi-label learning into q independent Multi-Layer Perceptron (MLP)
+    binary classification problems. Supports non-linear decision boundaries through
+    hidden layers and backpropagation learning.
+
+    Parameters:
+        hidden_layer_sizes (tuple, default=(100,)):
+            The ith element represents the number of neurons in the ith hidden layer.
+        activation (str, default='relu'):
+            Activation function for the hidden layer ('identity', 'logistic', 'tanh', 'relu').
+        solver (str, default='adam'):
+            The solver for weight optimization ('lbfgs', 'sgd', 'adam').
+        alpha (float, default=1e-4):
+            Strength of the L2 regularization term.
+        learning_rate_init (float, default=0.001):
+            The initial learning rate used.
+        max_iter (int, default=500):
+            Maximum number of iterations.
+        early_stopping (bool, default=True):
+            Whether to use early stopping to terminate training when validation score is not improving.
+        validation_fraction (float, default=0.1):
+            The proportion of training data to set aside as validation set for early stopping.
+        n_iter_no_change (int, default=10):
+            Maximum number of epochs to not meet tol improvement.
+        random_state (int, default=42):
+            Random seed for reproducibility.
+        **kwargs:
+            Additional parameters passed to sklearn.neural_network.MLPClassifier.
+    """
+class BinaryRelevanceMLP(BaseEstimator, ClassifierMixin):
+    """
+    Binary Relevance (BR) Multi-Label Classifier using GPU-Accelerated Multi-Label MLP.
+
+    Predicts all q labels simultaneously on GPU via PyTorch with BCEWithLogitsLoss
+    and positive class imbalance weighting.
+
+    Parameters:
+        hidden_layer_sizes (tuple, default=(128, 64)):
+            Neurons in hidden layers.
+        lr (float, default=3e-3):
+            Learning rate for AdamW optimizer.
+        weight_decay (float, default=1e-3):
+            L2 regularization strength.
+        epochs (int, default=150):
+            Number of training epochs.
+        dropout (float, default=0.15):
+            Dropout rate for regularization.
+        device (str, default=None):
+            'cuda', 'cpu', or None (auto-detects).
+        random_state (int, default=42):
+            Random seed for reproducibility.
+    """
+    def __init__(
+        self,
+        hidden_layer_sizes=(128, 64),
+        lr=3e-3,
+        weight_decay=1e-3,
+        epochs=150,
+        dropout=0.15,
+        device=None,
+        random_state=42,
+        **kwargs
+    ):
+        self.hidden_layer_sizes = hidden_layer_sizes
+        self.lr = lr
+        self.weight_decay = weight_decay
+        self.epochs = epochs
+        self.dropout = dropout
+        self.device = device
+        self.random_state = random_state
+        self.kwargs = kwargs
+        from .pytorch_mlp import MultiLabelMLPClassifier
+        self.model_ = MultiLabelMLPClassifier(
+            hidden_layer_sizes=self.hidden_layer_sizes,
+            lr=self.lr,
+            weight_decay=self.weight_decay,
+            epochs=self.epochs,
+            dropout=self.dropout,
+            device=self.device,
+            random_state=self.random_state,
+            **kwargs
+        )
+
+    def fit(self, X, Y):
+        self.model_.fit(X, Y)
+        return self
+
+    def predict(self, X):
+        return self.model_.predict(X)
+
+    def predict_proba(self, X):
+        return self.model_.predict_proba(X)
+
+    def decision_function(self, X):
+        return self.model_.decision_function(X)
+
+
+
