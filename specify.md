@@ -812,3 +812,283 @@ liac-arff>=2.5.0
 - Datasets lớn (bibtex: 7,395 samples × 1,836 features × 159 labels) có thể mất thời gian đáng kể
 - LinearSVC nhanh hơn nhiều so với SVC(kernel='rbf') → phù hợp cho thí nghiệm quy mô lớn
 - Cân nhắc thêm progress bar (`tqdm`) để theo dõi tiến trình
+
+---
+
+## 12. Phân Tích Giảm Chiều Dữ Liệu & Phụ Thuộc Tuyến Tính: Genbase và Medical
+
+> **Mục đích:** Phân tích chi tiết vấn đề **phụ thuộc tuyến tính giữa các features** (linear dependency / multicollinearity) và tiềm năng **giảm chiều dữ liệu** (dimensionality reduction) trong 2 tập dữ liệu **Genbase** và **Medical** — hai tập có tỷ lệ `n_features > n_samples` (high-dimensional).
+
+### 12.1. Tổng Quan So Sánh
+
+| Metric | Genbase | Medical |
+|---|---|---|
+| **Samples (n)** | 662 | 978 |
+| **Features (d)** | 1,186 | 1,449 |
+| **Labels (q)** | 27 | 45 |
+| **Tỷ lệ n/d** | 0.558 | 0.675 |
+| **Matrix rank** | **104** | **829** |
+| **Rank deficiency (min(n,d) − rank)** | 558 | 149 |
+| **Constant features (1 giá trị duy nhất)** | **1,073** (90.5%) | 0 (0%) |
+| **Binary features (≤2 giá trị)** | 1,185 (99.9%) | 1,449 (100%) |
+| **Duplicate features (thừa, có thể loại bỏ)** | **1,080** | **361** |
+| **Effective dimensionality** | **7** | **811** |
+| **Sparsity (tỷ lệ giá trị = 0)** | 99.7% | 99.1% |
+| **Condition number** | **2.25 × 10¹⁵** | **1.33 × 10³** |
+
+> ⚠ **Kết luận tổng quan:** Cả hai tập đều có **vấn đề nghiêm trọng về phụ thuộc tuyến tính** giữa các features, nhưng Genbase **đặc biệt nghiêm trọng** — gần như suy biến (degenerate) với 90.5% features là hằng số và rank thực tế chỉ bằng **8.8%** tổng số features.
+
+---
+
+### 12.2. Phân Tích Chi Tiết: GENBASE
+
+#### 12.2.1. Đặc Điểm Dữ Liệu
+- **Domain:** Genomic sequence classification — mỗi feature là một PROSITE protein pattern (mã PS00xxx, PS50xxx)
+- **Kiểu dữ liệu:** Gần như toàn bộ binary (0/1), ngoại trừ 1 feature có 662 giá trị unique (có thể là ID)
+- **Sparsity cực cao:** 99.7% giá trị bằng 0 → đa số protein patterns không xuất hiện trong đa số sequences
+
+#### 12.2.2. Vấn Đề Constant Features
+```
+Constant features: 1,073 / 1,186 (90.5%)
+```
+- **1,073 features** chỉ có **1 giá trị duy nhất** (luôn = 0 trên toàn bộ 662 samples)
+- Các features này **hoàn toàn không chứa thông tin** → variance = 0
+- Chúng KHÔNG phân biệt được bất kỳ hai mẫu nào → **vô dụng cho phân loại**
+- Đây là nhóm features trùng lặp lớn nhất: tất cả 1,073 features này tạo thành 1 nhóm duplicate (cùng vector toàn 0)
+
+#### 12.2.3. Duplicate Features
+```
+Total duplicate groups: 6
+Total redundant features (can be removed): 1,080
+```
+
+| Nhóm | Số features trùng | Ví dụ |
+|---|---|---|
+| Group 1 (toàn 0) | **1,073** features | PS00010, PS00011, ..., PS60000 |
+| Group 2 | 5 features | PS00832, PS50152, PS50153, PS50154, PS50804 |
+| Group 3 | 2 features | PS00845, PS50245 |
+| Group 4 | 2 features | PS50005, PS50293 |
+| Group 5 | 2 features | PS50043, PS50069 |
+| Group 6 | 2 features | (2 features còn lại) |
+
+→ Sau khi loại bỏ duplicates, chỉ còn: **1,186 − 1,080 = 106 features** thực sự khác biệt.
+
+#### 12.2.4. SVD & Rank Analysis
+```
+Matrix rank:           104  (so với n_features = 1,186)
+Rank deficiency:       1,082 features là tổ hợp tuyến tính của các features khác
+Null space dimension:  1,082
+```
+
+- **Chỉ 104/1,186 features** (8.8%) là **độc lập tuyến tính** (linearly independent)
+- 1,082 features còn lại có thể **biểu diễn chính xác** bằng tổ hợp tuyến tính của 104 features kia
+- Singular values bằng **chính xác 0** cho 558/662 thành phần → không phải near-zero mà là **exact zero**
+
+#### 12.2.5. Explained Variance (PCA)
+```
+Components cho 90.0% variance:  1 / 1,186  (reduction: 99.9%)
+Components cho 95.0% variance:  1 / 1,186  (reduction: 99.9%)
+Components cho 99.0% variance:  1 / 1,186  (reduction: 99.9%)
+Components cho 99.9% variance:  1 / 1,186  (reduction: 99.9%)
+```
+
+- **1 thành phần chính duy nhất** giải thích >99.9% tổng variance
+- Singular value lớn nhất σ₁ = 9,822.78, trong khi σ₂ = 14.58 → σ₁ chiếm ưu thế tuyệt đối
+- Nguyên nhân: Feature đầu tiên (hoặc một feature đặc biệt) có giá trị rất lớn so với các features binary còn lại
+- **Effective dimensionality** (σ²/Σσ² > 1e-6) = **7** → chỉ cần 7 chiều để giữ gần như toàn bộ thông tin
+
+#### 12.2.6. Condition Number
+```
+Condition number (σ_max / σ_min): 2.25 × 10¹⁵
+log10(condition number): 15.35
+→ EXTREMELY ILL-CONDITIONED
+```
+
+- Condition number > 10¹⁵ → ma trận **gần suy biến hoàn toàn** (near-singular)
+- Khi giải hệ phương trình X·w = y, **sai số số học (floating-point errors)** có thể khuếch đại lên 10¹⁵ lần
+- LinearSVC giải bài toán tối ưu SVM bằng phương pháp dual — condition number cực cao có thể khiến **hội tụ chậm hoặc không ổn định**
+
+#### 12.2.7. X^T X Eigenvalue Analysis
+```
+Max eigenvalue:          96,486,951.77
+Min eigenvalue:          ≈ 0 (−5.55 × 10⁻¹⁴, noise số học)
+Near-zero eigenvalues:   1,082 / 1,186
+```
+- 1,082 eigenvalues ≈ 0 → **1,082 hướng trong feature space không có variance** → tương ứng chính xác với null space dimension
+- Ma trận Gram X^T X gần suy biến → nghịch đảo (X^T X)⁻¹ **không tồn tại** (cần regularization)
+
+---
+
+### 12.3. Phân Tích Chi Tiết: MEDICAL
+
+#### 12.3.1. Đặc Điểm Dữ Liệu
+- **Domain:** Medical clinical text categorization — mỗi feature là một từ (word/token) trích xuất từ văn bản y tế
+- **Kiểu dữ liệu:** 100% binary (0/1) — bag-of-words representation (term presence/absence)
+- **Sparsity cao:** 99.1% giá trị bằng 0 → đa số từ không xuất hiện trong đa số tài liệu (typical cho text data)
+- **Không có constant features:** Mọi feature đều xuất hiện ít nhất 1 lần trong dataset
+
+#### 12.3.2. Duplicate Features
+```
+Total duplicate groups: 159
+Total redundant features (can be removed): 361
+```
+
+| Nhóm | Số features | Ví dụ features |
+|---|---|---|
+| Group 1 | 4 | 0, based, consultation, nephrology |
+| Group 2 | 7 | 00, afternoon, catheterized, cystourethrograms, exams, jet, refill |
+| Group 3 | 8 | 04, bactrim, basis, daily, failure, grown, intrinsically, spring |
+| Group 4 | 4 | 0;, flattening, l=10, r=10 |
+| Group 5 | 5 | 0cm, foster, l10, parents, r9 |
+| ... | ... | (tổng cộng 159 nhóm) |
+
+→ 361 features **trùng lặp hoàn toàn** với features khác (cùng vector binary) → có thể loại bỏ mà không mất thông tin
+
+**Giải thích ngữ nghĩa:** Các từ trong cùng nhóm duplicate luôn **đồng xuất hiện** (co-occur) trong cùng các tài liệu. Ví dụ: "bactrim", "daily", "basis" luôn xuất hiện cùng nhau → nhiều khả năng chúng đến từ cùng một cụm từ lâm sàng cố định (fixed clinical phrase).
+
+#### 12.3.3. Feature Correlation Analysis
+```
+Feature pairs with |corr| > 0.99:  858 cặp
+Feature pairs with |corr| > 0.95:  860 cặp
+Feature pairs with |corr| > 0.90:  866 cặp
+Feature pairs with |corr| > 0.80:  892 cặp
+```
+
+Top 10 cặp features tương quan cao nhất (corr = 1.000000):
+
+| # | Feature A | Feature B | Correlation |
+|---|---|---|---|
+| 1 | spinal | variable | 1.000 |
+| 2 | crowding | tube | 1.000 |
+| 3 | crowding | web | 1.000 |
+| 4 | acquired | paratracheal | 1.000 |
+| 5 | phone | repeat | 1.000 |
+| 6 | real | unclear | 1.000 |
+| 7 | real | visible | 1.000 |
+| 8 | palatine | tracheitis | 1.000 |
+| 9 | sixteen | wrestling | 1.000 |
+| 10 | 28 | kilograms | 1.000 |
+
+→ 858 cặp có tương quan **gần như hoàn hảo** → multicollinearity nghiêm trọng trong không gian features
+
+#### 12.3.4. SVD & Rank Analysis
+```
+Matrix rank:           829  (so với n_features = 1,449)
+Rank deficiency:       149 singular values = 0
+Null space dimension:  620
+```
+
+- **829/1,449 features** (57.2%) là **độc lập tuyến tính** — tốt hơn nhiều so với Genbase
+- Tuy nhiên, vẫn có **620 features** là tổ hợp tuyến tính của các features khác
+- Rank deficiency 149 (so với theoretical max = min(978, 1449) = 978) → **149 singular values = exact zero**
+
+#### 12.3.5. Explained Variance (PCA)
+```
+Components cho 90.0% variance:  231 / 1,449  (reduction: 84.1%)
+Components cho 95.0% variance:  332 / 1,449  (reduction: 77.1%)
+Components cho 99.0% variance:  537 / 1,449  (reduction: 62.9%)
+Components cho 99.9% variance:  702 / 1,449  (reduction: 51.6%)
+```
+
+- Variance phân bố **đều hơn nhiều** so với Genbase — không có 1 thành phần nào chiếm ưu thế
+- Cần **231 thành phần** để giữ 90% variance (vs 1 ở Genbase)
+- **Effective dimensionality** = 811 → không gian thông tin thực sự phong phú hơn
+
+#### 12.3.6. Condition Number
+```
+Condition number (σ_max / σ_min): 1.33 × 10³
+log10(condition number): 3.12
+→ MODERATELY CONDITIONED
+```
+
+- Condition number ≈ 10³ → **chấp nhận được** cho phần lớn các thuật toán tối ưu
+- LinearSVC/LogisticRegression sẽ hội tụ **ổn định hơn nhiều** so với Genbase
+- Tuy nhiên vẫn cần regularization do n_features > n_samples
+
+#### 12.3.7. X^T X Eigenvalue Analysis
+```
+Max eigenvalue:          1,733.11
+Min eigenvalue:          ≈ 0 (−2.22 × 10⁻¹³, noise số học)
+Near-zero eigenvalues:   620 / 1,449
+```
+- Eigenvalue lớn nhất chỉ ~1,733 (vs ~96.5 triệu ở Genbase) → dữ liệu **cân bằng hơn** về scale
+- 620 eigenvalues ≈ 0 → 620 hướng phụ thuộc tuyến tính, nhưng ít nghiêm trọng hơn Genbase
+
+---
+
+### 12.4. Tác Động Đến Mô Hình Linear (LinearSVC & Logistic Regression)
+
+#### 12.4.1. Vấn Đề Chung: n_features > n_samples (High-dimensional)
+
+Cả hai tập đều có **n_features > n_samples**:
+
+| Dataset | n_features | n_samples | Tỷ lệ d/n |
+|---|---|---|---|
+| Genbase | 1,186 | 662 | 1.79 |
+| Medical | 1,449 | 978 | 1.48 |
+
+Khi `d > n`, hệ phương trình `X·w = y` là **underdetermined** (vô số nghiệm):
+- Tồn tại **vô số vector trọng số w** cho cùng kết quả phân loại trên tập huấn luyện
+- Mô hình phải dựa hoàn toàn vào **regularization** (tham số C) để chọn nghiệm ổn định
+- Null space dimension = d − rank(X) → bất kỳ vector w' nào trong null space đều thỏa X·w' = 0
+
+#### 12.4.2. Tác Động Cụ Thể Đến LinearSVC
+
+LinearSVC giải bài toán tối ưu:
+$$\min_{w,b} \frac{1}{2}\|w\|^2 + C \sum_{i=1}^{n} \max(0, 1 - y_i(w^T x_i + b))$$
+
+- **Genbase:** Null space dimension = 1,082 → SVM tìm hyperplane phân tách trong không gian 104 chiều hiệu quả, nhưng trọng số w ∈ ℝ¹¹⁸⁶ **không duy nhất**. Regularization ‖w‖² giúp chọn w có norm nhỏ nhất, nhưng sự suy biến gần hoàn toàn (condition number = 10¹⁵) có thể gây **bất ổn số học**.
+- **Medical:** Null space dimension = 620 → ít nghiêm trọng hơn, condition number = 10³ → hội tụ ổn định hơn.
+
+#### 12.4.3. Tác Động Cụ Thể Đến Logistic Regression
+
+Logistic Regression giải:
+$$\min_{w,b} \frac{1}{2C}\|w\|^2 + \sum_{i=1}^{n} \log(1 + e^{-y_i(w^T x_i + b)})$$
+
+- **Ma trận Hessian** (∇²L) phụ thuộc vào X^T · diag(π(1−π)) · X → khi X có rank deficiency, Hessian **singular** → gradient descent/Newton method có thể **dao động** hoặc hội tụ chậm
+- Regularization term (1/2C)‖w‖² **đảm bảo Hessian positive definite** → vẫn hội tụ, nhưng nghiệm phụ thuộc mạnh vào C
+
+#### 12.4.4. Vai Trò Của MaxAbsScaler
+
+Pipeline hiện tại sử dụng `MaxAbsScaler`:
+```python
+scaler = MaxAbsScaler()
+X_train = scaler.fit_transform(X[train_idx])
+X_test = scaler.transform(X[test_idx])
+```
+
+- MaxAbsScaler chia mỗi feature cho |max| → scale về [-1, 1]
+- Với binary data (0/1), giá trị max = 1 → **không thay đổi gì** cho đa số features
+- **KHÔNG giải quyết** vấn đề phụ thuộc tuyến tính — chỉ thay đổi scale, không thay đổi rank
+
+---
+
+### 12.5. Tiềm Năng Giảm Chiều & Khuyến Nghị
+
+#### 12.5.1. Bảng Tóm Tắt Tiềm Năng Giảm Chiều
+
+| Phương pháp | Genbase (1,186 → ?) | Medical (1,449 → ?) | Ghi chú |
+|---|---|---|---|
+| **Loại constant features** | 1,186 → 113 (−90.5%) | 1,449 → 1,449 (−0%) | Chỉ hiệu quả với Genbase |
+| **Loại duplicate features** | 1,186 → 106 (−91.1%) | 1,449 → 1,088 (−24.9%) | An toàn, không mất thông tin |
+| **PCA 95% variance** | 1,186 → 1 (−99.9%) | 1,449 → 332 (−77.1%) | Mất interpretability |
+| **PCA 99% variance** | 1,186 → 1 (−99.9%) | 1,449 → 537 (−62.9%) | Mất interpretability |
+| **Full rank (loại phụ thuộc tuyến tính)** | 1,186 → 104 (−91.2%) | 1,449 → 829 (−42.8%) | Tối ưu toán học |
+
+#### 12.5.2. Khuyến Nghị
+
+1. **Bước tiền xử lý an toàn (không mất thông tin):**
+   - Loại bỏ **constant features** (variance = 0): Giảm mạnh cho Genbase (1,186 → 113)
+   - Loại bỏ **duplicate features** (giữ lại 1 đại diện mỗi nhóm): Giảm thêm cho cả hai tập
+
+2. **Hiện trạng pipeline:**
+   - Pipeline hiện tại **KHÔNG thực hiện** loại constant/duplicate features
+   - LinearSVC vẫn hoạt động nhờ regularization, nhưng **lãng phí tính toán** trên 1,073 features toàn-0 (Genbase)
+   - Kết quả phân loại **không bị ảnh hưởng nghiêm trọng** vì regularization L2 tự động giảm trọng số cho features dư thừa
+
+3. **Nếu muốn cải thiện:**
+   - Thêm bước `VarianceThreshold(threshold=0.0)` trước khi huấn luyện → loại constant features
+   - Sử dụng `sklearn.feature_selection.VarianceThreshold` hoặc tự viết duplicate removal
+   - Cân nhắc `TruncatedSVD` cho giảm chiều có kiểm soát (phù hợp với sparse data)
+
+> **Lưu ý quan trọng:** Trong đặc tả thí nghiệm hiện tại, chúng ta **KHÔNG thực hiện** giảm chiều hay loại features — nhằm tuân thủ setup gốc trong paper benchmark. Phân tích này nhằm mục đích **giải thích** tại sao một số metrics có thể bất thường và hiểu sâu hơn về bản chất dữ liệu.

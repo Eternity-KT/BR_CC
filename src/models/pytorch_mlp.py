@@ -47,15 +47,17 @@ class MultiLabelMLPClassifier(BaseEstimator, ClassifierMixin):
     def __init__(
         self,
         hidden_layer_sizes=(128, 64),
-        lr=3e-3,
+        lr=1e-3,
         weight_decay=1e-3,
-        epochs=150,
+        epochs=30,
         dropout=0.15,
         pos_weight_clamp=15.0,
         device=None,
         random_state=42,
         **kwargs
     ):
+        if "max_iter" in kwargs:
+            epochs = kwargs.pop("max_iter")
         self.hidden_layer_sizes = hidden_layer_sizes
         self.lr = lr
         self.weight_decay = weight_decay
@@ -107,6 +109,15 @@ class MultiLabelMLPClassifier(BaseEstimator, ClassifierMixin):
         n_samples, in_features = X_arr.shape
         self.n_labels_ = Y_arr.shape[1]
 
+        # Detect constant (degenerate) labels in training set
+        self.constant_labels_ = {}
+        for j in range(self.n_labels_):
+            col = Y_arr[:, j]
+            if np.all(col == 0):
+                self.constant_labels_[j] = 0
+            elif np.all(col == 1):
+                self.constant_labels_[j] = 1
+
         # Build network
         self.model_ = self._build_network(in_features, self.n_labels_).to(self.device_)
 
@@ -148,6 +159,10 @@ class MultiLabelMLPClassifier(BaseEstimator, ClassifierMixin):
             logits = self.model_(X_tensor)
             scores = logits.cpu().numpy()
 
+        if hasattr(self, 'constant_labels_') and self.constant_labels_:
+            for j, val in self.constant_labels_.items():
+                scores[:, j] = 50.0 if val == 1 else -50.0
+
         return scores
 
     def predict_proba(self, X):
@@ -159,6 +174,10 @@ class MultiLabelMLPClassifier(BaseEstimator, ClassifierMixin):
         with torch.no_grad():
             logits = self.model_(X_tensor)
             probs = torch.sigmoid(logits).cpu().numpy()
+
+        if hasattr(self, 'constant_labels_') and self.constant_labels_:
+            for j, val in self.constant_labels_.items():
+                probs[:, j] = float(val)
 
         return probs
 
@@ -176,13 +195,15 @@ class FastPyTorchBinaryMLP(BaseEstimator, ClassifierMixin):
     def __init__(
         self,
         hidden_layer_sizes=(64,),
-        lr=3e-3,
+        lr=1e-3,
         weight_decay=1e-3,
-        epochs=80,
+        epochs=30,
         device=None,
         random_state=42,
         **kwargs
     ):
+        if "max_iter" in kwargs:
+            epochs = kwargs.pop("max_iter")
         self.hidden_layer_sizes = hidden_layer_sizes
         self.lr = lr
         self.weight_decay = weight_decay

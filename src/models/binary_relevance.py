@@ -54,9 +54,9 @@ def _get_base_estimator(base_estimator, random_state=42):
             from .pytorch_mlp import FastPyTorchBinaryMLP
             return FastPyTorchBinaryMLP(
                 hidden_layer_sizes=(64,),
-                lr=3e-3,
+                lr=1e-3,
                 weight_decay=1e-3,
-                epochs=80,
+                epochs=30,
                 random_state=random_state
             )
         except Exception:
@@ -313,9 +313,9 @@ class BinaryRelevanceMLP(BaseEstimator, ClassifierMixin):
     def __init__(
         self,
         hidden_layer_sizes=(128, 64),
-        lr=3e-3,
+        lr=1e-3,
         weight_decay=1e-3,
-        epochs=150,
+        epochs=30,
         dropout=0.15,
         device=None,
         random_state=42,
