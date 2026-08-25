@@ -1,229 +1,741 @@
-"""
-Main Experiment Pipeline for Multi-Label Classification:
-- Binary Relevance with LinearSVC (BR)
-- Binary Relevance with Logistic Regression (BR_Logistic)
-- Classifier Chains with LinearSVC (CC)
+"""Resumable benchmark pipeline for BR, CC, MLC-PA, and GSI-MLC-PA."""
 
-Evaluates models across benchmark multi-label datasets using 5-Fold Cross Validation.
-Generates all comparison charts, heatmaps, and summary tables.
-"""
-
-import os
-import sys
-import time
-import json
 import argparse
-import numpy as np
-import pandas as pd
+import os
+import time
+import warnings
 from datetime import datetime
 
-import warnings
+import numpy as np
+import pandas as pd
 from sklearn.exceptions import ConvergenceWarning
-warnings.filterwarnings("ignore", category=ConvergenceWarning)
-warnings.filterwarnings("ignore", category=UserWarning)
-
 from sklearn.preprocessing import MaxAbsScaler
-from src.data.loader import load_dataset, DATASET_CONFIG
+
+from src.data.loader import DATASET_CONFIG, load_dataset
+from src.evaluation.cache import (
+    backup_model_cache,
+    import_legacy_model_results,
+    load_legacy_results,
+    load_model_cache,
+    save_legacy_results,
+    save_model_cache,
+)
+from src.evaluation.cv import get_multilabel_cv
+from src.evaluation.metrics import (
+    compute_all_metrics,
+    compute_partial_abstention_metrics,
+)
 from src.models.binary_relevance import (
     BinaryRelevanceClassifier,
     BinaryRelevanceLogisticRegression,
-    BinaryRelevanceMLP
+    BinaryRelevanceMLP,
 )
 from src.models.classifier_chain import ClassifierChainClassifier
-from src.evaluation.metrics import compute_all_metrics
-from src.evaluation.cv import get_multilabel_cv
-from src.visualization.plots import generate_all_plots
+from src.models.gsi_mlc_pa import GSIMLCPartialAbstentionClassifier
+from src.models.mlc_pa import MLCPartialAbstentionClassifier
+from src.visualization.plots import generate_pa_plots
 
 
-def _create_model(model_name, random_state=42):
-    """
-    Factory function to create model instance by name.
-    """
-    m = model_name.upper()
-    if m in ("BR", "BR_SVC", "BR_LINEARSVC"):
-        return BinaryRelevanceClassifier(base_estimator="svm", random_state=random_state)
-    elif m in ("BR_LOGISTIC", "BR_LR", "BR_LOGREG"):
-        return BinaryRelevanceLogisticRegression(random_state=random_state)
-    elif m in ("BR_MLP", "BR_NEURAL_NETWORK", "BR_NN"):
-        return BinaryRelevanceMLP(random_state=random_state)
-    elif m in ("CC", "CC_SVC", "CC_LINEARSVC"):
-        return ClassifierChainClassifier(base_estimator="svm", random_state=random_state)
-    elif m in ("CC_LOGISTIC", "CC_LR", "CC_LOGREG"):
-        return ClassifierChainClassifier(base_estimator="logistic", random_state=random_state)
-    elif m in ("CC_MLP", "CC_NEURAL_NETWORK", "CC_NN"):
-        return ClassifierChainClassifier(base_estimator="mlp", random_state=random_state)
-    else:
-        raise ValueError(
-            f"Unknown model name: {model_name}. "
-            f"Supported: BR, BR_Logistic, BR_MLP, CC, CC_Logistic, CC_MLP"
+warnings.filterwarnings("ignore", category=ConvergenceWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
+
+
+DEFAULT_ABSTENTION_COSTS = (0.20, 0.25, 0.30, 0.35, 0.40)
+SELECTIVE_MODELS = {"MLC_PA", "GSI_MLC_PA"}
+
+
+def _cost_key(cost):
+    return f"{float(cost):.2f}"
+
+
+def _create_model(
+    model_name,
+    random_state=42,
+    abstention_cost=0.3,
+    abstention_penalty="linear",
+    mlc_pa_base="mlp",
+    gsi_validation_size=0.2,
+):
+    """Create a supported model from its standardized name."""
+    model_key = model_name.upper()
+    if model_key in ("BR", "BR_SVC", "BR_LINEARSVC"):
+        return BinaryRelevanceClassifier(
+            base_estimator="svm", random_state=random_state
         )
+    if model_key in ("BR_LOGISTIC", "BR_LR", "BR_LOGREG"):
+        return BinaryRelevanceLogisticRegression(random_state=random_state)
+    if model_key in ("BR_MLP", "BR_NEURAL_NETWORK", "BR_NN"):
+        return BinaryRelevanceMLP(random_state=random_state)
+    if model_key in ("CC", "CC_SVC", "CC_LINEARSVC"):
+        return ClassifierChainClassifier(
+            base_estimator="svm", random_state=random_state
+        )
+    if model_key in ("CC_LOGISTIC", "CC_LR", "CC_LOGREG"):
+        return ClassifierChainClassifier(
+            base_estimator="logistic", random_state=random_state
+        )
+    if model_key in ("CC_MLP", "CC_NEURAL_NETWORK", "CC_NN"):
+        return ClassifierChainClassifier(
+            base_estimator="mlp", random_state=random_state
+        )
+    if model_key in ("MLC_PA", "MLCPA", "MLC_PARTIAL_ABSTENTION"):
+        return MLCPartialAbstentionClassifier(
+            base_estimator=mlc_pa_base,
+            cost=abstention_cost,
+            penalty=abstention_penalty,
+            random_state=random_state,
+        )
+    if model_key in (
+        "GSI_MLC_PA",
+        "GSIMLCPA",
+        "GSI_MLC_PARTIAL_ABSTENTION",
+    ):
+        return GSIMLCPartialAbstentionClassifier(
+            cost=abstention_cost,
+            validation_size=gsi_validation_size,
+            random_state=random_state,
+        )
+    raise ValueError(
+        f"Unknown model name: {model_name}. Supported: BR, BR_Logistic, "
+        "BR_MLP, CC, CC_Logistic, CC_MLP, MLC_PA, GSI_MLC_PA"
+    )
 
 
 def _standardize_model_name(name):
-    m = name.upper()
-    if m in ("BR", "BR_SVC", "BR_LINEARSVC"):
+    model_key = name.upper()
+    if model_key in ("BR", "BR_SVC", "BR_LINEARSVC"):
         return "BR"
-    elif m in ("BR_LOGISTIC", "BR_LR", "BR_LOGREG"):
+    if model_key in ("BR_LOGISTIC", "BR_LR", "BR_LOGREG"):
         return "BR_Logistic"
-    elif m in ("BR_MLP", "BR_NEURAL_NETWORK", "BR_NN"):
+    if model_key in ("BR_MLP", "BR_NEURAL_NETWORK", "BR_NN"):
         return "BR_MLP"
-    elif m in ("CC", "CC_SVC", "CC_LINEARSVC"):
+    if model_key in ("CC", "CC_SVC", "CC_LINEARSVC"):
         return "CC"
-    elif m in ("CC_LOGISTIC", "CC_LR", "CC_LOGREG"):
+    if model_key in ("CC_LOGISTIC", "CC_LR", "CC_LOGREG"):
         return "CC_Logistic"
-    elif m in ("CC_MLP", "CC_NEURAL_NETWORK", "CC_NN"):
+    if model_key in ("CC_MLP", "CC_NEURAL_NETWORK", "CC_NN"):
         return "CC_MLP"
+    if model_key in ("MLC_PA", "MLCPA", "MLC_PARTIAL_ABSTENTION"):
+        return "MLC_PA"
+    if model_key in (
+        "GSI_MLC_PA",
+        "GSIMLCPA",
+        "GSI_MLC_PARTIAL_ABSTENTION",
+    ):
+        return "GSI_MLC_PA"
     return name
 
 
-def run_experiment(datasets=None, models=None, n_splits=5, random_state=42, output_dir="results"):
-    """
-    Run complete experiment pipeline across specified datasets and models.
+def _canonicalize_dataset_name(name):
+    """Normalize CLI spelling/case and a known Genbase transposition typo."""
+    normalized = str(name).strip().lower().replace("_", "-")
+    aliases = {
+        "gengase": "genbase",
+        "reuters_k500": "reuters-k500",
+    }
+    return aliases.get(normalized, normalized)
 
-    Parameters:
-        datasets (list, optional): List of dataset names to evaluate. Defaults to all 10 datasets.
-        models (list, optional): List of models to evaluate ('BR', 'BR_Logistic', 'BR_MLP', 'CC', 'CC_MLP').
-        n_splits (int, default=5): Number of cross-validation folds.
-        random_state (int, default=42): Seed for reproducibility.
-        output_dir (str, default='results'): Directory to save figures and tables.
+
+def _cache_settings(
+    model_name,
+    n_splits,
+    random_state,
+    abstention_costs,
+    report_cost,
+    abstention_penalty,
+    mlc_pa_base,
+    gsi_validation_size,
+):
+    settings = {
+        "n_splits": int(n_splits),
+        "random_state": int(random_state),
+    }
+    if model_name == "MLC_PA":
+        settings.update({
+            "abstention_costs": [float(cost) for cost in abstention_costs],
+            "report_cost": float(report_cost),
+            "abstention_penalty": abstention_penalty,
+            "base_estimator": mlc_pa_base,
+            "target_loss": "generalized_hamming",
+            "f1_abstention_policy": "full_separate_selective_ignore",
+        })
+    elif model_name == "GSI_MLC_PA":
+        settings.update({
+            "abstention_costs": [float(cost) for cost in abstention_costs],
+            "report_cost": float(report_cost),
+            "base_estimators": "BR_MLP+CC_MLP",
+            "validation_size": float(gsi_validation_size),
+            "selection_objective": "complete_macro_f1",
+            "selection_strategy": "sequential_single_pass",
+            "correlation_timing": "after_il_dl_selection",
+            "correlation_measure": "phi_pearson_binary",
+            "f1_abstention_policy": "full_separate_selective_ignore",
+            "marginalization": "two_state_single_parent+mean_field_multi_parent",
+            "chain_order": "post_selection_correlation",
+            "refit_after_selection": True,
+        })
+    return settings
+
+
+def _selective_cache_is_compatible(cached_settings, expected_settings):
+    """Validate caches whose predictions depend on selection/loss settings."""
+    if not cached_settings:
+        return False
+    return all(
+        cached_settings.get(key) == value
+        for key, value in expected_settings.items()
+    )
+
+
+def _evaluate_model(
+    model_name,
+    classifier,
+    x_test,
+    y_test,
+    abstention_costs,
+):
+    """Evaluate one fitted model, applying rejection only after training."""
+    if model_name not in SELECTIVE_MODELS:
+        return {
+            "full": compute_all_metrics(y_test, classifier.predict(x_test)),
+            "costs": {},
+        }
+
+    # One probability pass feeds both the complete output and every operating
+    # cost.  No cost can affect fit(), IL/DL selection, or correlation.
+    test_probabilities = classifier.predict_proba(x_test)
+    full_prediction = classifier.predict_full_from_proba(test_probabilities)
+    full_metrics = compute_all_metrics(y_test, full_prediction)
+    if model_name == "GSI_MLC_PA":
+        full_metrics.update({
+            "Independent Label Count": float(len(classifier.independent_labels_)),
+            "Dependent Label Count": float(len(classifier.dependent_labels_)),
+            "Validation Full Macro-F1": float(classifier.validation_objective_),
+        })
+
+    cost_metrics = {}
+    for cost in abstention_costs:
+        partial_prediction = classifier.predict_from_proba(
+            test_probabilities, cost=cost
+        )
+        cost_metrics[_cost_key(cost)] = compute_partial_abstention_metrics(
+            y_test,
+            partial_prediction,
+            cost=cost,
+            abstain_value=classifier.abstain_value,
+            penalty=getattr(classifier, "penalty", "linear"),
+        )
+    return {"full": full_metrics, "costs": cost_metrics}
+
+
+def _validated_costs(abstention_costs, report_cost):
+    costs = (
+        list(DEFAULT_ABSTENTION_COSTS)
+        if abstention_costs is None
+        else [float(cost) for cost in abstention_costs]
+    )
+    if not costs:
+        raise ValueError("abstention_costs must contain at least one value.")
+    if any(not 0.0 <= cost <= 0.5 for cost in costs):
+        raise ValueError("Every abstention cost must lie in [0, 0.5].")
+    costs = sorted(set(costs))
+    report_cost = float(report_cost)
+    if not any(np.isclose(report_cost, cost) for cost in costs):
+        raise ValueError("report_cost must be included in abstention_costs.")
+    return costs, report_cost
+
+
+def _normalize_cached_dataset_result(result):
+    """Wrap a legacy mean/std/raw_folds result in the schema-v2 shape."""
+    if not isinstance(result, dict):
+        return result
+    if "full" in result and "costs" in result:
+        return result
+    if "mean" in result and "std" in result:
+        return {"full": result, "costs": {}}
+    return result
+
+
+def _summarize_fold_results(fold_results, abstention_costs):
+    full_frame = pd.DataFrame([fold_result["full"] for fold_result in fold_results])
+    summary = {
+        "full": {
+            "mean": full_frame.mean(numeric_only=True).to_dict(),
+            "std": full_frame.std(numeric_only=True).fillna(0.0).to_dict(),
+            "raw_folds": [fold_result["full"] for fold_result in fold_results],
+        },
+        "costs": {},
+    }
+    for cost in abstention_costs:
+        key = _cost_key(cost)
+        rows = [
+            fold_result["costs"][key]
+            for fold_result in fold_results
+            if key in fold_result["costs"]
+        ]
+        if not rows:
+            continue
+        frame = pd.DataFrame(rows)
+        summary["costs"][key] = {
+            "mean": frame.mean(numeric_only=True).to_dict(),
+            "std": frame.std(numeric_only=True).fillna(0.0).to_dict(),
+            "raw_folds": rows,
+        }
+    return summary
+
+
+def run_experiment(
+    datasets=None,
+    models=None,
+    n_splits=5,
+    random_state=42,
+    output_dir="results_pa",
+    abstention_costs=None,
+    report_cost=0.3,
+    abstention_penalty="linear",
+    mlc_pa_base="mlp",
+    gsi_validation_size=0.2,
+):
+    """Run only missing model/dataset pairs and then rebuild all plots.
+
+    Results are checkpointed as ``results_pa/tables/<MODEL>.json``.  Existing
+    BR_MLP and CC_MLP entries are imported from the legacy combined
+    ``raw_results.json`` and are not trained again.
     """
     if datasets is None:
         datasets = list(DATASET_CONFIG.keys())
-
+    else:
+        datasets = [_canonicalize_dataset_name(name) for name in datasets]
     if models is None:
-        models = ["BR", "BR_Logistic", "BR_MLP", "CC", "CC_MLP"]
+        models = ["BR_MLP", "CC_MLP", "MLC_PA", "GSI_MLC_PA"]
+    abstention_costs, report_cost = _validated_costs(
+        abstention_costs, report_cost
+    )
 
-    std_models = [_standardize_model_name(m) for m in models]
+    standardized_models = [_standardize_model_name(model) for model in models]
+    if len(standardized_models) != len(set(standardized_models)):
+        raise ValueError("The model list contains duplicate aliases.")
+    unknown_datasets = sorted(set(datasets) - set(DATASET_CONFIG))
+    if unknown_datasets:
+        raise ValueError(f"Unknown datasets: {unknown_datasets}")
 
-    print("=" * 90, flush=True)
-    print(" MULTI-LABEL CLASSIFICATION BENCHMARK EXPERIMENT", flush=True)
-    print(f" Models ({len(std_models)}):    {', '.join(std_models)}", flush=True)
-    print(f" Datasets ({len(datasets)}):  {', '.join(datasets)}", flush=True)
-    print(f" Evaluation:    {n_splits}-Fold Multilabel Stratified Cross-Validation", flush=True)
-    print(f" Output Dir:    {output_dir}", flush=True)
-    print(f" Start Time:    {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
-    print("=" * 90, flush=True)
-
-    all_results = {}
-    total_start_time = time.time()
-
-    for idx, d_name in enumerate(datasets, 1):
-        d_start = time.time()
-        print(f"\n[{idx}/{len(datasets)}] Processing dataset: {d_name.upper()}...", flush=True)
-
-        # 1. Load data
-        X, Y, f_names, l_names = load_dataset(d_name)
-        n_samples, n_features = X.shape
-        n_labels = Y.shape[1]
-        cardinality = float(Y.sum(axis=1).mean())
-        density = float(Y.mean())
-
-        print(f"  -> Samples: {n_samples:,} | Features: {n_features:,} | Labels: {n_labels} | "
-              f"Cardinality: {cardinality:.2f} | Density: {density:.4f}", flush=True)
-
-        # 2. Setup 5-fold cross-validation
-        cv = get_multilabel_cv(n_splits=n_splits, random_state=random_state)
-        splits = list(cv.split(X, Y))
-
-        fold_metrics = {m: [] for m in std_models}
-
-        # 3. Cross-validation loop
-        for fold_i, (train_idx, test_idx) in enumerate(splits, 1):
-            scaler = MaxAbsScaler()
-            X_train = scaler.fit_transform(X[train_idx])
-            X_test = scaler.transform(X[test_idx])
-            Y_train, Y_test = Y[train_idx], Y[test_idx]
-
-            for m_name in std_models:
-                t0 = time.time()
-                clf = _create_model(m_name, random_state=random_state)
-                clf.fit(X_train, Y_train)
-                Y_pred = clf.predict(X_test)
-                metrics = compute_all_metrics(Y_test, Y_pred)
-                metrics["train_time"] = time.time() - t0
-                fold_metrics[m_name].append(metrics)
-
-        # 4. Aggregate results across folds
-        all_results[d_name] = {}
-        for m_name in std_models:
-            df_m = pd.DataFrame(fold_metrics[m_name])
-            all_results[d_name][m_name] = {
-                "mean": df_m.mean().to_dict(),
-                "std": df_m.std().to_dict(),
-                "raw_folds": fold_metrics[m_name]
-            }
-
-        d_elapsed = time.time() - d_start
-        f1_summary = " | ".join([
-            f"{m} Macro-F1: {all_results[d_name][m]['mean']['Macro-F1']:.4f}±{all_results[d_name][m]['std']['Macro-F1']:.3f}"
-            for m in std_models
-        ])
-        print(f"  -> Done in {d_elapsed:.2f}s | {f1_summary}", flush=True)
-
-    total_elapsed = time.time() - total_start_time
-    print("\n" + "=" * 90, flush=True)
-    print(f" ALL EXPERIMENTS COMPLETED in {total_elapsed:.2f} seconds ({total_elapsed/60:.1f} mins)", flush=True)
-    print("=" * 90, flush=True)
-
-    # 5. Generate plots and tables
-    figures_dir = os.path.join(output_dir, "figures")
+    figures_dir = os.path.join(output_dir, "plots_pa")
     tables_dir = os.path.join(output_dir, "tables")
-    print(f"\nGenerating figures and summary tables in '{output_dir}'...", flush=True)
+    legacy_json_path = os.path.join(tables_dir, "raw_results.json")
+    legacy_results = load_legacy_results(legacy_json_path)
+    if not legacy_results:
+        shared_legacy_path = os.path.join("results", "tables", "raw_results.json")
+        if (
+            os.path.abspath(shared_legacy_path) != os.path.abspath(legacy_json_path)
+            and os.path.exists(shared_legacy_path)
+        ):
+            legacy_results = load_legacy_results(shared_legacy_path)
+            print(
+                f"Using shared legacy cache: {shared_legacy_path}",
+                flush=True,
+            )
 
-    gen_files, csv_path = generate_all_plots(all_results, output_dir=figures_dir, tables_dir=tables_dir)
+    model_caches = {}
+    for model_name in standardized_models:
+        expected_settings = _cache_settings(
+            model_name,
+            n_splits,
+            random_state,
+            abstention_costs,
+            report_cost,
+            abstention_penalty,
+            mlc_pa_base,
+            gsi_validation_size,
+        )
+        cache = load_model_cache(tables_dir, model_name)
+        legacy_dataset_shape = any(
+            isinstance(result, dict)
+            and "mean" in result
+            and "full" not in result
+            for result in cache.get("datasets", {}).values()
+        )
+        cache["datasets"] = {
+            dataset_name: _normalize_cached_dataset_result(result)
+            for dataset_name, result in cache.get("datasets", {}).items()
+        }
+        if (
+            model_name in ("MLC_PA", "GSI_MLC_PA")
+            and cache["datasets"]
+            and not _selective_cache_is_compatible(
+                cache.get("settings", {}), expected_settings
+            )
+        ):
+            backup_path = backup_model_cache(
+                tables_dir, model_name, reason="pre_cost_sweep_schema"
+            )
+            print(
+                f"{model_name} cache settings differ; recomputing it. "
+                f"Backup: {backup_path}",
+                flush=True,
+            )
+            cache["datasets"] = {}
 
-    # Save raw json results
-    json_path = os.path.join(tables_dir, "raw_results.json")
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(all_results, f, indent=2)
+        # The legacy file has no selective-model cost/selection metadata, so
+        # importing such rows could silently reuse an incompatible decision
+        # configuration. BR/CC complete predictions do not have this ambiguity.
+        imported = (
+            import_legacy_model_results(
+                legacy_results, model_name, source_model=model_name
+            )
+            if model_name not in ("MLC_PA", "GSI_MLC_PA")
+            else {}
+        )
+        imported_any = False
+        for dataset_name, result in imported.items():
+            if dataset_name not in cache["datasets"]:
+                cache["datasets"][dataset_name] = _normalize_cached_dataset_result(
+                    result
+                )
+                imported_any = True
 
+        if imported_any or (
+            legacy_dataset_shape and model_name not in SELECTIVE_MODELS
+        ):
+            if legacy_dataset_shape and model_name not in SELECTIVE_MODELS:
+                backup_model_cache(
+                    tables_dir, model_name, reason="pre_schema_v2"
+                )
+            cache["settings"] = {
+                **expected_settings,
+                "source": "legacy_cache_or_raw_results",
+            }
+            cache_path = save_model_cache(
+                tables_dir,
+                model_name,
+                cache["datasets"],
+                settings=cache["settings"],
+            )
+            print(
+                f"Migrated/imported cached {model_name} results -> {cache_path}",
+                flush=True,
+            )
+        model_caches[model_name] = cache
+
+    print("=" * 90, flush=True)
+    print(" RESUMABLE MULTI-LABEL CLASSIFICATION BENCHMARK", flush=True)
+    print(
+        f" Models ({len(standardized_models)}): "
+        f"{', '.join(standardized_models)}",
+        flush=True,
+    )
+    print(f" Datasets ({len(datasets)}): {', '.join(datasets)}", flush=True)
+    print(
+        f" Evaluation: {n_splits}-Fold Multilabel Stratified Cross-Validation",
+        flush=True,
+    )
+    print(f" Output Dir: {output_dir}", flush=True)
+    print(f" Start Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
+    print("=" * 90, flush=True)
+
+    total_start_time = time.time()
+    for dataset_index, dataset_name in enumerate(datasets, 1):
+        dataset_start_time = time.time()
+        missing_models = [
+            model_name
+            for model_name in standardized_models
+            if dataset_name not in model_caches[model_name]["datasets"]
+        ]
+        cached_models = [
+            model_name
+            for model_name in standardized_models
+            if model_name not in missing_models
+        ]
+        print(
+            f"\n[{dataset_index}/{len(datasets)}] Dataset: {dataset_name.upper()}",
+            flush=True,
+        )
+        if cached_models:
+            print(f"  -> Cached: {', '.join(cached_models)}", flush=True)
+        if not missing_models:
+            print("  -> All requested results are cached; skipping CV.", flush=True)
+            continue
+        print(f"  -> Running: {', '.join(missing_models)}", flush=True)
+
+        try:
+            x_data, y_data, _, _ = load_dataset(dataset_name)
+        except FileNotFoundError as exc:
+            raise FileNotFoundError(
+                f"Cannot compute missing results for {dataset_name}: {exc}. "
+                "Existing caches were preserved; add the dataset files and rerun."
+            ) from exc
+
+        n_samples, n_features = x_data.shape
+        n_labels = y_data.shape[1]
+        cardinality = float(y_data.sum(axis=1).mean())
+        density = float(y_data.mean())
+        print(
+            f"  -> Samples: {n_samples:,} | Features: {n_features:,} | "
+            f"Labels: {n_labels} | Cardinality: {cardinality:.2f} | "
+            f"Density: {density:.4f}",
+            flush=True,
+        )
+
+        cv = get_multilabel_cv(
+            n_splits=n_splits, random_state=random_state
+        )
+        splits = list(cv.split(x_data, y_data))
+        fold_metrics = {model_name: [] for model_name in missing_models}
+        fold_metadata = {model_name: [] for model_name in missing_models}
+
+        for fold_index, (train_indices, test_indices) in enumerate(splits, 1):
+            scaler = MaxAbsScaler()
+            x_train = scaler.fit_transform(x_data[train_indices])
+            x_test = scaler.transform(x_data[test_indices])
+            y_train = y_data[train_indices]
+            y_test = y_data[test_indices]
+
+            for model_name in missing_models:
+                started = time.time()
+                classifier = _create_model(
+                    model_name,
+                    random_state=random_state,
+                    abstention_cost=report_cost,
+                    abstention_penalty=abstention_penalty,
+                    mlc_pa_base=mlc_pa_base,
+                    gsi_validation_size=gsi_validation_size,
+                )
+                classifier.fit(x_train, y_train)
+                metrics = _evaluate_model(
+                    model_name,
+                    classifier,
+                    x_test,
+                    y_test,
+                    abstention_costs,
+                )
+                metrics["full"]["train_time"] = time.time() - started
+                fold_metrics[model_name].append(metrics)
+                if model_name == "GSI_MLC_PA":
+                    fold_metadata[model_name].append({
+                        "fold": int(fold_index),
+                        "independent_labels": [
+                            int(label)
+                            for label in classifier.independent_labels_
+                        ],
+                        "dependent_labels": [
+                            int(label)
+                            for label in classifier.dependent_labels_
+                        ],
+                        "selection_history": classifier.selection_history_,
+                        "selection_order": [
+                            int(label) for label in classifier.selection_order_
+                        ],
+                        "correlation_order": [
+                            int(label) for label in classifier.correlation_order_
+                        ],
+                        "final_order": [
+                            int(label) for label in classifier.order_
+                        ],
+                        "dependent_parent_map": {
+                            str(label): (
+                                None if parent is None else int(parent)
+                            )
+                            for label, parent in classifier.dependent_parent_map_.items()
+                        },
+                        "label_correlation": (
+                            classifier.label_correlation_.tolist()
+                        ),
+                        "selection_train_size": int(
+                            classifier.selection_train_size_
+                        ),
+                        "validation_size": int(classifier.validation_size_),
+                        "refit_train_size": int(classifier.refit_train_size_),
+                        "evaluated_configurations": int(
+                            classifier.evaluated_configurations_
+                        ),
+                    })
+                print(
+                    f"  -> Fold {fold_index}/{n_splits} {model_name} done",
+                    flush=True,
+                )
+
+        for model_name in missing_models:
+            dataset_result = _summarize_fold_results(
+                fold_metrics[model_name], abstention_costs
+            )
+            if fold_metadata[model_name]:
+                dataset_result["fold_metadata"] = fold_metadata[model_name]
+            model_caches[model_name]["datasets"][dataset_name] = dataset_result
+            settings = _cache_settings(
+                model_name,
+                n_splits,
+                random_state,
+                abstention_costs,
+                report_cost,
+                abstention_penalty,
+                mlc_pa_base,
+                gsi_validation_size,
+            )
+            model_caches[model_name]["settings"] = settings
+            cache_path = save_model_cache(
+                tables_dir,
+                model_name,
+                model_caches[model_name]["datasets"],
+                settings=settings,
+            )
+            print(f"  -> Saved cache: {cache_path}", flush=True)
+
+        elapsed = time.time() - dataset_start_time
+        summary = " | ".join(
+            f"{model_name} Macro-F1: "
+            f"{model_caches[model_name]['datasets'][dataset_name]['full']['mean']['Macro-F1']:.4f}"
+            for model_name in missing_models
+        )
+        print(f"  -> Done in {elapsed:.2f}s | {summary}", flush=True)
+
+    all_results = {
+        dataset_name: {
+            model_name: model_caches[model_name]["datasets"][dataset_name]
+            for model_name in standardized_models
+        }
+        for dataset_name in datasets
+    }
+
+    # Preserve every legacy result, including models/datasets not selected now.
+    combined_results = dict(legacy_results)
+    for dataset_name, dataset_results in all_results.items():
+        combined_results.setdefault(dataset_name, {}).update(dataset_results)
+    save_legacy_results(legacy_json_path, combined_results)
+
+    elapsed_total = time.time() - total_start_time
+    print("\n" + "=" * 90, flush=True)
+    print(
+        f" EXPERIMENTS COMPLETED in {elapsed_total:.2f}s "
+        f"({elapsed_total / 60:.1f} min)",
+        flush=True,
+    )
+    print("=" * 90, flush=True)
+
+    print(f"\nGenerating plots and summary tables in '{output_dir}'...", flush=True)
+    generated_files, csv_path = generate_pa_plots(
+        all_results,
+        abstention_costs=abstention_costs,
+        report_cost=report_cost,
+        output_dir=figures_dir,
+        tables_dir=tables_dir,
+    )
     print(f"\nSaved CSV Results: {csv_path}", flush=True)
-    print(f"Saved Raw JSON:    {json_path}", flush=True)
-    print(f"Generated Figures ({len(gen_files)} files):", flush=True)
-    for f in gen_files:
-        print(f"  - {f}", flush=True)
+    print(f"Saved Raw JSON:    {legacy_json_path}", flush=True)
+    print(f"Generated Figures ({len(generated_files)} files):", flush=True)
+    for generated_file in generated_files:
+        print(f"  - {generated_file}", flush=True)
 
-    # Print summary table in console
     print("\n" + "=" * 110, flush=True)
-    print(f"{'DATASET':<15} {'MODEL':<14} {'MACRO-F1':<18} {'MICRO-F1':<18} {'HAMMING LOSS':<18} {'SUBSET ACC':<18}", flush=True)
+    print(
+        f"{'DATASET':<15} {'MODEL':<14} {'MACRO-F1':<18} "
+        f"{'MICRO-F1':<18} {'HAMMING LOSS':<18} {'SUBSET ACC':<18}",
+        flush=True,
+    )
     print("-" * 110, flush=True)
-    for d_name in datasets:
-        for m in std_models:
-            macro = f"{all_results[d_name][m]['mean']['Macro-F1']:.3f} ± {all_results[d_name][m]['std']['Macro-F1']:.3f}"
-            micro = f"{all_results[d_name][m]['mean']['Micro-F1']:.3f} ± {all_results[d_name][m]['std']['Micro-F1']:.3f}"
-            hl = f"{all_results[d_name][m]['mean']['Hamming Loss']:.3f} ± {all_results[d_name][m]['std']['Hamming Loss']:.3f}"
-            acc = f"{all_results[d_name][m]['mean']['Subset Accuracy']:.3f} ± {all_results[d_name][m]['std']['Subset Accuracy']:.3f}"
-            print(f"{d_name.upper():<15} {m:<14} {macro:<18} {micro:<18} {hl:<18} {acc:<18}", flush=True)
+    for dataset_name in datasets:
+        for model_name in standardized_models:
+            mean = all_results[dataset_name][model_name]["full"]["mean"]
+            std = all_results[dataset_name][model_name]["full"]["std"]
+            macro = f"{mean['Macro-F1']:.3f} +/- {std['Macro-F1']:.3f}"
+            micro = f"{mean['Micro-F1']:.3f} +/- {std['Micro-F1']:.3f}"
+            hamming = f"{mean['Hamming Loss']:.3f} +/- {std['Hamming Loss']:.3f}"
+            subset = f"{mean['Subset Accuracy']:.3f} +/- {std['Subset Accuracy']:.3f}"
+            print(
+                f"{dataset_name.upper():<15} {model_name:<14} {macro:<18} "
+                f"{micro:<18} {hamming:<18} {subset:<18}",
+                flush=True,
+            )
         print("-" * 110, flush=True)
-
     return all_results
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Multi-Label Classification Benchmark Pipeline (BR, BR_Logistic, BR_MLP, CC, CC_MLP)")
-    parser.add_argument("--datasets", nargs="+", default=None,
-                        help="List of datasets to evaluate (e.g., emotions music scene). Defaults to all 10 datasets.")
-    parser.add_argument("--models", nargs="+", default=["BR", "BR_Logistic", "BR_MLP", "CC", "CC_MLP"],
-                        help="List of models to evaluate (e.g., BR BR_Logistic BR_MLP CC CC_MLP). Defaults to all 5.")
-    parser.add_argument("--n_splits", type=int, default=5,
-                        help="Number of cross-validation folds (default: 5).")
-    parser.add_argument("--random_state", type=int, default=42,
-                        help="Random seed for reproducibility (default: 42).")
-    parser.add_argument("--output_dir", type=str, default="results",
-                        help="Output directory for figures and tables (default: results).")
-
+    parser = argparse.ArgumentParser(
+        description=(
+            "Resumable BR/CC/MLC-PA/GSI-MLC-PA multi-label benchmark pipeline"
+        )
+    )
+    parser.add_argument(
+        "--datasets",
+        nargs="+",
+        default=None,
+        help="Datasets to evaluate; defaults to all configured datasets.",
+    )
+    parser.add_argument(
+        "--models",
+        nargs="+",
+        default=["BR_MLP", "CC_MLP", "MLC_PA", "GSI_MLC_PA"],
+        help=(
+            "Models to evaluate. Existing per-model or raw_results.json "
+            "entries are reused. Default: BR_MLP CC_MLP MLC_PA GSI_MLC_PA."
+        ),
+    )
+    parser.add_argument(
+        "--n_splits", type=int, default=5, help="CV folds (default: 5)."
+    )
+    parser.add_argument(
+        "--random_state", type=int, default=42, help="Random seed (default: 42)."
+    )
+    parser.add_argument(
+        "--output_dir", type=str, default="results_pa", help="Output directory."
+    )
+    parser.add_argument(
+        "--abstention_costs",
+        nargs="+",
+        type=float,
+        default=list(DEFAULT_ABSTENTION_COSTS),
+        help="Decision-time costs (default: 0.20 0.25 0.30 0.35 0.40).",
+    )
+    parser.add_argument(
+        "--report_cost",
+        type=float,
+        default=0.3,
+        help="Cost used in the three per-dataset comparison figures.",
+    )
+    parser.add_argument(
+        "--abstention_cost",
+        type=float,
+        default=None,
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--abstention_penalty",
+        choices=["linear", "concave"],
+        default="linear",
+        help="MLC-PA penalty: linear=SEP or concave=PAR.",
+    )
+    parser.add_argument(
+        "--mlc_pa_base",
+        choices=["mlp", "logistic", "svm"],
+        default="logistic",
+        help="Marginal probability estimator below MLC-PA (default: mlp).",
+    )
+    parser.add_argument(
+        "--gsi_validation_size",
+        type=float,
+        default=0.2,
+        help="Internal outer-train fraction for GSI IL/DL selection (default: 0.2).",
+    )
     args = parser.parse_args()
+
+    resolved_costs = args.abstention_costs
+    resolved_report_cost = args.report_cost
+    if args.abstention_cost is not None:
+        resolved_costs = [args.abstention_cost]
+        resolved_report_cost = args.abstention_cost
 
     run_experiment(
         datasets=args.datasets,
         models=args.models,
         n_splits=args.n_splits,
         random_state=args.random_state,
-        output_dir=args.output_dir
+        output_dir=args.output_dir,
+        abstention_costs=resolved_costs,
+        report_cost=resolved_report_cost,
+        abstention_penalty=args.abstention_penalty,
+        mlc_pa_base=args.mlc_pa_base,
+        gsi_validation_size=args.gsi_validation_size,
     )
 
 
 if __name__ == "__main__":
     main()
-
-

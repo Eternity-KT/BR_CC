@@ -1,4 +1,4 @@
-# Multi-Label Classification: Binary Relevance (BR) vs Classifier Chains (CC)
+# Multi-Label Classification: BR, CC, MLC-PA, and GSI-MLC-PA
 
 Dự án triển khai và đánh giá thực nghiệm so sánh các thuật toán phân loại đa nhãn (Multi-Label Classification) kinh điển: **Binary Relevance (BR)** (LinearSVC & Logistic Regression) và **Classifier Chains (CC)** trên **10 tập dữ liệu benchmark** với quy trình **5-Fold Stratified Cross-Validation**, tuân thủ nghiêm ngặt các chuẩn được công bố trong các bài báo gốc.
 
@@ -71,15 +71,13 @@ Hệ thống hỗ trợ 2 thuật toán bộ phân loại cơ sở (base binary 
 
 ## 4. Bộ Chỉ Số Đánh Giá (Evaluation Metrics)
 
-Hệ thống tính toán đầy đủ 7 chỉ số chuẩn:
+Hệ thống lưu 5 chỉ số dự đoán đầy đủ vào kết quả:
 
 1. **Macro-F1 (⭐ Bắt buộc):** Trung bình điểm F1 trên từng nhãn ($F1_{macro} = \frac{1}{q}\sum_{j=1}^q F1_j$).
 2. **Micro-F1:** Tính F1 gộp toàn bộ các cặp instance-label.
 3. **Hamming Loss (↓ thấp = tốt):** Tỷ lệ dự đoán sai nhãn trên toàn bộ nhãn ($HL = \frac{1}{n \cdot q}\sum_{i=1}^n \sum_{j=1}^q \mathbb{I}(y_{ij} \neq \hat{y}_{ij})$).
 4. **Subset Accuracy (Exact Match):** Tỷ lệ mẫu có vector nhãn dự đoán khớp hoàn toàn 100% với ground truth.
 5. **Example-based F1:** F1 tính trung bình trên từng mẫu dữ liệu.
-6. **Macro Precision:** Trung bình Precision trên tất cả các nhãn.
-7. **Macro Recall:** Trung bình Recall trên tất cả các nhãn.
 
 ---
 
@@ -137,13 +135,20 @@ BR_CC/
 pip install -r requirements.txt
 ```
 
+`requirements.txt` installs the PyTorch CUDA 13.0 wheel used by the MLP
+backend. Verify the installation and GPU access with:
+
+```bash
+python -c "import torch; print(torch.__version__, torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU')"
+```
+
 ### 6.2. Chạy Unit Tests
 
 ```bash
 python tests_unit.py
 ```
 
-### 6.3. Chạy Thực Nghiệm Đầy Đủ (10 Datasets, 3 Mô Hình: BR, BR_Logistic, CC)
+### 6.3. Chạy thực nghiệm resumable trên toàn bộ dataset
 
 Chạy lệnh sau trên terminal:
 
@@ -181,3 +186,105 @@ clf.fit(X, Y)
 y_pred = clf.predict(X)
 y_proba = clf.predict_proba(X)  # P(Y_j = 1 | X)
 ```
+
+---
+
+## 7. Resumable CV and MLC-PA
+
+The benchmark now checkpoints each model independently in
+`results_pa/tables/<MODEL>.json` (for example, `MLC_PA.json`). Before loading a
+dataset, the runner checks every requested model/dataset pair:
+
+- completed pairs are read from their model cache;
+- missing BR/CC-style caches are imported from the existing
+  `raw_results.json` when available (including `BR_MLP` and `CC_MLP`);
+- only missing pairs enter k-fold CV;
+- plots and CSV tables are rebuilt from cached plus newly computed results.
+
+`MLC_PA.json` also records the number of folds, random seed, base probability
+estimator, the complete rejection-cost grid, reporting cost, and penalty. A
+cache with different decision-loss settings is not reused because its partial
+predictions are not comparable. One fitted probability model is reused across
+all rejection costs.
+
+`MLCPartialAbstentionClassifier` implements the Bayes-optimal generalized
+Hamming-loss rules from Nguyen and Huellermeier (JAIR 2021). It is a decision
+layer over marginal label probabilities:
+
+- SEP / linear penalty: `g(a) = a*c`; decide label `k` exactly when
+  `min(p_k, 1-p_k) <= c`;
+- PAR / concave penalty: `g(a) = a*K*c/(K+a)`; sort marginal decision risks
+  and choose the globally risk-minimizing number of decided labels;
+- `predict()` returns `{0, -1, 1}`, where `-1` means abstain;
+- `predict_full()` returns the corresponding complete binary prediction.
+
+Partial predictions are reported with Generalized Loss, Selective Hamming
+Loss, Selective Macro-F1, Selective Micro-F1, coverage, ABS (fraction of samples
+with at least one abstention), and AABS (fraction of all label positions that
+are abstained). Selective metrics discard abstained (`-1`) positions. Complete
+Macro-F1 and Micro-F1 are retained separately and always come from
+`predict_full()`; partial metrics never overwrite them.
+
+In each selective-model JSON cache, the full metrics are stored under
+`datasets.<dataset>.full`, while the rejection-dependent metrics are stored
+separately for every operating cost under
+`datasets.<dataset>.costs.<cost>.mean/std/raw_folds`. Therefore Selective
+Macro-F1 and Selective Micro-F1 appear in `MLC_PA.json` and `GSI_MLC_PA.json`,
+but not in the rejection-free BR/CC caches.
+
+```bash
+# Default: reuse cached BR_MLP/CC_MLP and run only missing selective models
+python main.py
+
+# SEP with BR-MLP marginal probabilities
+python main.py --models BR_MLP CC_MLP MLC_PA \
+  --abstention_penalty linear \
+  --abstention_costs 0.2 0.25 0.3 0.35 0.4 --mlc_pa_base mlp
+
+# PAR with logistic marginal probabilities
+python main.py --models MLC_PA \
+  --abstention_penalty concave \
+  --abstention_costs 0.2 0.25 0.3 0.35 0.4 --mlc_pa_base logistic
+```
+
+### 7.1. GSI-MLC-PA
+
+`GSI_MLC_PA` uses the same MLP mechanisms as `BR_MLP` and `CC_MLP`. Training,
+IL/DL selection, and correlation are independent of the rejection cost:
+
+1. Each outer CV training fold is split internally into selection-train and
+   validation subsets. The outer test fold is not used during selection.
+2. BR-MLP predicts direct marginal probabilities for every label without
+   abstention. CC-MLP learns each label from the original features plus its
+   ground-truth predecessors on selection-train.
+3. A one-parent DL probability uses exact two-state marginalization:
+   `(1-p_parent)*P(y=1|parent=0) + p_parent*P(y=1|parent=1)`.
+4. Multiple parents use a factorized mean-field approximation by replacing
+   their binary values with their already-finalized soft probabilities under
+   the candidate IL/DL configuration.
+5. Starting with `IL={}` and `DL=all labels`, labels are tested sequentially.
+   A label remains in IL only when complete validation Macro-F1 (threshold
+   `0.5`, no abstention) strictly increases; otherwise it remains in DL.
+6. Only after IL/DL is frozen, Phi/Pearson label correlation is computed from
+   outer-training labels and used to derive the final correlation chain order.
+7. Both probability models are refit on the complete outer-training fold. The
+   test probabilities are computed once.
+8. BOP is then applied at each requested decision-time cost. For linear SEP,
+   `p<=c -> 0`, `c<p<1-c -> abstain`, and `p>=1-c -> 1`.
+
+The cache is `results_pa/tables/GSI_MLC_PA.json` and includes the internal
+validation fraction and selection/marginalization settings. A mismatched cache
+is recomputed rather than silently reused.
+
+```bash
+python main.py --models BR_MLP CC_MLP MLC_PA GSI_MLC_PA \
+  --abstention_costs 0.2 0.25 0.3 0.35 0.4 \
+  --report_cost 0.3 --gsi_validation_size 0.2
+```
+
+The four requested figures are written to `results_pa/plots_pa/`:
+
+- `rejection_cost_comparison.png`;
+- `selective_macro_f1_comparison.png`;
+- `selective_micro_f1_comparison.png`;
+- `generalized_loss_comparison.png`.

@@ -329,17 +329,34 @@ class BinaryRelevanceMLP(BaseEstimator, ClassifierMixin):
         self.device = device
         self.random_state = random_state
         self.kwargs = kwargs
-        from .pytorch_mlp import MultiLabelMLPClassifier
-        self.model_ = MultiLabelMLPClassifier(
-            hidden_layer_sizes=self.hidden_layer_sizes,
-            lr=self.lr,
-            weight_decay=self.weight_decay,
-            epochs=self.epochs,
-            dropout=self.dropout,
-            device=self.device,
-            random_state=self.random_state,
-            **kwargs
-        )
+        try:
+            from .pytorch_mlp import MultiLabelMLPClassifier
+            self.model_ = MultiLabelMLPClassifier(
+                hidden_layer_sizes=self.hidden_layer_sizes,
+                lr=self.lr,
+                weight_decay=self.weight_decay,
+                epochs=self.epochs,
+                dropout=self.dropout,
+                device=self.device,
+                random_state=self.random_state,
+                **kwargs
+            )
+            self.backend_ = "pytorch"
+        except ImportError:
+            # Keep a CPU fallback for environments where PyTorch cannot be
+            # imported. The sklearn MLP supports the same 2D multilabel target
+            # and fit/predict/predict_proba contract as the accelerated model.
+            self.model_ = MLPClassifier(
+                hidden_layer_sizes=self.hidden_layer_sizes,
+                activation=kwargs.get("activation", "relu"),
+                solver=kwargs.get("solver", "adam"),
+                alpha=kwargs.get("alpha", self.weight_decay),
+                learning_rate_init=kwargs.get("learning_rate_init", self.lr),
+                max_iter=kwargs.get("max_iter", self.epochs),
+                early_stopping=kwargs.get("early_stopping", False),
+                random_state=self.random_state,
+            )
+            self.backend_ = "sklearn"
 
     def fit(self, X, Y):
         self.model_.fit(X, Y)
@@ -352,7 +369,8 @@ class BinaryRelevanceMLP(BaseEstimator, ClassifierMixin):
         return self.model_.predict_proba(X)
 
     def decision_function(self, X):
-        return self.model_.decision_function(X)
-
-
+        if hasattr(self.model_, "decision_function"):
+            return self.model_.decision_function(X)
+        probabilities = np.clip(self.predict_proba(X), 1e-7, 1.0 - 1e-7)
+        return np.log(probabilities / (1.0 - probabilities))
 
