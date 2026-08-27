@@ -1,1094 +1,659 @@
-# Đặc Tả Cài Đặt Bộ Phân Loại Binary Relevance (BR) và Classifier Chains (CC)
+# Đặc tả cải tiến sau buổi họp với giảng viên hướng dẫn
 
-> **Tài liệu tham khảo:**
-> 1. Zhang, M.-L., Li, Y.-K., Liu, X.-Y., & Geng, X. (2018). *Binary relevance for multi-label learning: an overview.* Frontiers of Computer Science, 12(2), 191–202. (`FCS'17.pdf`)
-> 2. Read, J., Pfahringer, B., Holmes, G., & Frank, E. (2011). *Classifier chains for multi-label classification.* Machine Learning, 85(3), 333–359. (`s10994-011-5256-5.pdf`)
+> Nguồn yêu cầu: [`tmp.md`](tmp.md)
+>
+> Phạm vi: đặc tả công việc cần làm, chưa phải kết quả thực nghiệm.
+> Nguyên tắc chính: **giữ nguyên core BR, CC và cơ chế sinh xác suất của GSI-MLC-PA; các decision rule, objective, metric, calibration và phân tích mới phải được bổ sung dưới dạng module có thể bật/tắt.**
 
----
+## 1. Mục tiêu và tiêu chí thành công
 
-## 1. Tổng Quan
+Sau cải tiến, thí nghiệm phải trả lời được bốn câu hỏi khác nhau, không dùng riêng Macro-F1 để thay cho cả bốn:
 
-Dự án này triển khai và so sánh 2 phương pháp phân loại đa nhãn (multi-label classification) kinh điển:
+1. Mô hình dự đoán đầy đủ tốt đến đâu khi **bắt buộc phải quyết định ngay**?
+2. Trên các vị trí mô hình chấp nhận dự đoán, chất lượng tăng bao nhiêu và đổi lại phải từ chối bao nhiêu?
+3. Các vị trí bị từ chối có thật sự tập trung lỗi và các nhãn quan trọng hay không?
+4. Việc chia nhãn thành IL/DL có tạo ra lợi ích riêng, sau khi đã kiểm soát base learner, fold, siêu tham số, chain order và decision policy hay không?
 
-| Phương pháp | Viết tắt | Paper gốc |
+Chỉ được kết luận mô hình có tiềm năng ứng dụng thực tế khi đồng thời có bằng chứng về chất lượng, coverage/khối lượng cần duyệt, khả năng bắt lỗi, nhãn quan trọng và chi phí. Việc Selective Macro-F1 tăng trong khi coverage giảm **không đủ** để đưa ra kết luận này.
+
+## 2. Kết luận nghiên cứu dùng để chốt thiết kế
+
+### 2.1. BOP, quy hoạch động và MDP là ba khái niệm khác nhau
+
+- MLC với partial abstention hiện tại là một bài toán quyết định Bayes: mô hình sinh xác suất, sau đó decision rule chọn `0`, `1` hoặc `abstain` để tối ưu expected utility/loss. Đây là kiến trúc hai tầng đúng với Nguyen và Hüllermeier ([paper trong repo](TaiLieuThamKhao/sminton,+12610-Article+(PDF)-28712-1-11-20211029.pdf), [DOI](https://doi.org/10.1613/jair.1.12610)).
+- BOP cho generalized Hamming loss có thể dùng threshold như code hiện tại. BOP cho instance-based F-measure và Jaccard **không tương đương** với threshold `0.5` hoặc BOP Hamming; paper đưa ra thuật toán quy hoạch động độ phức tạp `O(K^3)` dưới giả định conditional label independence.
+- “Quy hoạch động” trong các thuật toán F1/Jaccard không phải “Markov Decision Process”. MDP cần có state, action, transition và reward qua nhiều bước. Pipeline hiện tại chỉ ra quyết định một lần, không quan sát phản hồi mới giữa các nhãn, vì vậy chưa có transition thực tế để biện minh cho MDP.
+- MDP chỉ trở nên phù hợp nếu quy trình triển khai là tuần tự, ví dụ: mô hình chọn một nhãn để dự đoán/yêu cầu người duyệt, nhận nhãn thật, cập nhật posterior của các nhãn còn lại rồi tiếp tục. Các nghiên cứu dùng reinforcement learning cho thứ tự nhãn động cũng giả định một quá trình tuần tự như vậy ([Nam et al., ICML 2019](https://proceedings.mlr.press/v97/nam19a.html)).
+- Với bài toán biên hóa xác suất trong classifier chain, lựa chọn đúng để nghiên cứu trước là: exact enumeration ở số cha nhỏ, mean-field hiện tại và Monte Carlo/beam search. PCC biểu diễn joint probability bằng chain rule; exact inference tăng theo `2^K`, còn Monte Carlo là hướng xấp xỉ đã được nghiên cứu cho classifier chain ([Read, Martino và Luengo](https://arxiv.org/abs/1211.2190)).
+
+**Quyết định thiết kế:** triển khai BOP F1/Jaccard dưới dạng decision-policy module ở P1. MDP chỉ là research spike P2 và không được nối vào core model trước khi thỏa gate ở mục 7.
+
+### 2.2. “Instant base F1” cần được chuẩn hóa thuật ngữ
+
+Thuật ngữ chuẩn trong multi-label classification là **instance-based F1** (còn gọi example-based F1), không phải “instant-based F1”. `Example-F1` hiện có trong repo chính là metric này.
+
+Để vẫn bao phủ cách hiểu “cần quyết định ngay lập tức”, báo cáo sẽ dùng hai chế độ rõ ràng:
+
+- **Immediate/automatic mode:** dùng complete prediction, không cho phép `-1`; metric chính là `Instance-F1 (Immediate)`.
+- **Human-assisted mode:** cho phép từ chối và điền nhãn bị từ chối bằng reviewer/oracle; metric là `Optimistic Instance-F1` cùng coverage và review load.
+
+Trước khi nộp báo cáo cần xác nhận lại với giảng viên rằng cụm trong note đúng là “instance-based F1”. Trong code và bảng kết quả chỉ dùng tên chuẩn; có thể giữ `Example-F1` làm alias tương thích ngược.
+
+### 2.3. Không được tối ưu Selective Hamming Accuracy một cách không ràng buộc
+
+Với complete prediction, tối đa hóa Hamming Accuracy tương đương tối thiểu hóa Hamming Loss. Với partial prediction, tối đa hóa accuracy chỉ trên phần đã quyết định có nghiệm suy biến là từ chối gần như tất cả. Vì vậy:
+
+- báo cáo dùng Hamming Accuracy để dễ đọc;
+- code vẫn giữ Hamming Loss/Generalized Loss ở tầng decision vì công thức BOP được định nghĩa theo loss;
+- mọi tối ưu selective accuracy phải đi kèm `coverage >= gamma`, review budget, hoặc abstention cost;
+- phải báo cáo risk–coverage curve, không chọn mô hình bằng một điểm selective metric đơn lẻ. Đây là cách đánh giá chuẩn của selective classification ([Geifman và El-Yaniv, NeurIPS 2017](https://proceedings.neurips.cc/paper/2017/hash/4a8423d5e91fda00bb7e46540e2b0cf1-Abstract.html)).
+
+### 2.4. Macro-F1 phải khóa đúng định nghĩa
+
+Trong toàn bộ code và báo cáo, Macro-F1 được định nghĩa là **trung bình số học của F1 dương trên từng nhãn**:
+
+```text
+F1_k = 2 TP_k / (2 TP_k + FP_k + FN_k)
+Macro-F1 = (1/K) * sum_k F1_k
+```
+
+Không tính bằng harmonic mean của Macro-Precision và Macro-Recall vì hai cách có thể cho kết quả và thứ hạng mô hình khác nhau ([Opitz và Burst](https://arxiv.org/abs/1911.03347)). Quy ước `zero_division=0` phải được ghi rõ.
+
+## 3. Audit hiện trạng và khoảng trống cần sửa
+
+| Hạng mục | Hiện trạng | Khoảng trống/rủi ro |
 |---|---|---|
-| Binary Relevance | **BR** | Zhang et al. (FCS 2018) |
-| Classifier Chains | **CC** | Read et al. (ML 2011) |
+| Complete metrics | Có Macro-F1, Micro-F1, Hamming Loss, Subset Accuracy, Example-F1 | Thiếu Hamming Accuracy, Jaccard, Macro Precision/Recall và per-label metrics |
+| Partial metrics | Có generalized loss, selective F1, coverage, ABS/AABS | Chưa có optimistic/oracle completion, rejected-set audit, error capture, critical-label metrics |
+| GSI IL/DL selection | Hard-code complete Macro-F1 sau threshold `0.5` | Chưa áp dụng BOP instance-F1/Jaccard trong bước chọn IL/DL; chưa ablation objective |
+| Baseline | Runner mặc định chỉ chạy BR-MLP, CC-MLP, MLC-PA và GSI-MLC-PA | Chưa có ma trận đầy đủ cùng base learner; MLC-PA CLI mặc định logistic nhưng GSI cố định MLP |
+| Hyperparameter | BR và CC có factory trùng lặp | Dễ lệch cấu hình; fallback MLP im lặng có thể thay backend/kiến trúc |
+| SVM probability | Dùng sigmoid trực tiếp trên `decision_function` | Không phải xác suất đã calibration; không đủ tin cậy cho abstention threshold |
+| Cache | Schema v2; cố ý loại Macro Precision/Recall | Metric mới có thể bị mất hoặc dùng nhầm cache cũ |
+| Plot/report | Dùng Hamming Loss, so selective F1 ở một số cost | Chưa thể hiện trade-off coverage, optimistic upper bound, IL/DL contribution và nhãn quan trọng |
+| Báo cáo cuộc họp | Chỉ có note thô `tmp.md` | Chưa có file tóm tắt cuộc họp theo yêu cầu |
 
-Mục tiêu: Đánh giá hiệu năng trên **10 tập dữ liệu benchmark** sử dụng **5-fold Stratified Cross-Validation**, sau đó trực quan hóa kết quả bằng các biểu đồ chi tiết.
+## 4. Quy ước metric bắt buộc
 
----
+Ký hiệu: `Y` là ground truth, `Y_full` là complete prediction, `Y_pa` thuộc `{0, -1, 1}`, `D` là mask đã quyết định và `A = not D` là mask từ chối.
 
-## 2. Mô Tả Thuật Toán
+### 4.1. Complete/immediate metrics
 
-### 2.1. Binary Relevance (BR)
+| Tên output chuẩn | Công thức/diễn giải | Mục đích |
+|---|---|---|
+| `Macro-F1` | Trung bình F1 trên từng nhãn | Cân bằng ảnh hưởng giữa nhãn phổ biến và nhãn hiếm |
+| `Micro-F1` | Gộp TP/FP/FN trên toàn ma trận | Hiệu suất tổng thể theo label-position |
+| `Hamming Accuracy` | `1 - Hamming Loss` | Tỷ lệ label-position đúng, dễ đọc hơn loss |
+| `Subset Accuracy` | Tỷ lệ instance có toàn bộ vector nhãn đúng | Đánh giá yêu cầu exact match, rất nghiêm ngặt |
+| `Instance-F1` | Trung bình `2TP_i/(2TP_i+FP_i+FN_i)` theo instance | Chất lượng tập nhãn của từng quyết định ngay lập tức |
+| `Instance Jaccard` | Trung bình `TP_i/(TP_i+FP_i+FN_i)` theo instance | Mức giao/ hợp của hai tập nhãn |
+| `Macro Precision` | Trung bình precision từng nhãn | Kiểm soát false positive |
+| `Macro Recall` | Trung bình recall từng nhãn | Kiểm soát false negative |
 
-**Nguồn:** Zhang et al. (FCS 2018), Section 2 — "Basic settings for multi-label learning"
+Quy ước khi cả tập nhãn thật và dự đoán của một instance đều rỗng: `Instance-F1 = 1` và `Instance Jaccard = 1`. Mọi bảng phải có support/prevalence để tránh diễn giải Hamming Accuracy cao do quá nhiều nhãn âm.
 
-#### Ý tưởng cốt lõi
-BR phân rã bài toán phân loại đa nhãn thành `q` bài toán phân loại nhị phân độc lập, trong đó `q` là số lượng nhãn. Mỗi bộ phân loại nhị phân chỉ học cho một nhãn duy nhất, hoàn toàn **không xét quan hệ giữa các nhãn**.
+### 4.2. Partial/selective metrics
 
-#### Thuật toán
+| Tên output chuẩn | Định nghĩa | Quy ước biên |
+|---|---|---|
+| `Coverage` | `sum(D)/(N*K)` | `AABS = 1 - Coverage` |
+| `ABS` | Tỷ lệ instance có ít nhất một abstention | Giữ để đo số hồ sơ cần can thiệp |
+| `Selective Hamming Accuracy` | Số dự đoán đúng trên `D` chia `sum(D)` | `NaN` nếu không có quyết định; không trả `1.0` |
+| `Selective Macro-F1` | Tính F1 từng nhãn chỉ trên vị trí đã quyết định | Nhãn không có quyết định đóng góp `0`, đồng thời phải xuất per-label coverage |
+| `Selective Micro-F1` | Micro-F1 trên tất cả vị trí đã quyết định | Trả `0` nếu all-abstain để không thưởng nghiệm suy biến |
+| `Generalized Loss` | Lỗi trên phần quyết định + penalty abstention | Metric chính để đánh giá policy BOP Hamming |
+| `Risk at Coverage` | `1 - Selective Hamming Accuracy` tại coverage xác định | So sánh các policy ở cùng workload |
+| `AURC` | Diện tích dưới risk–coverage curve | Thấp hơn tốt hơn; không thay cho các operating point |
 
-```
-Algorithm: Binary Relevance (BR)
-────────────────────────────────────────────────
-Input:
-  - D = {(x_i, Y_i)} : tập huấn luyện, mỗi x_i ∈ ℝ^d, Y_i ⊆ L = {l_1, ..., l_q}
-  - x_new : mẫu cần dự đoán
+Selective metrics không được ghi đè complete metrics. Tên metric phải chứa `Full`, `Selective`, `Rejected` hoặc `Optimistic` khi xuất bảng để tránh so sánh sai mẫu số.
 
-Training Phase:
-  FOR j = 1 TO q:
-    1. Tạo tập huấn luyện nhị phân D_j:
-       - Với mỗi (x_i, Y_i) ∈ D:
-         - Nếu l_j ∈ Y_i → gán nhãn y_j = +1
-         - Nếu l_j ∉ Y_i → gán nhãn y_j = −1
-    2. Huấn luyện bộ phân loại nhị phân h_j trên D_j
+### 4.3. Optimistic/oracle metrics
 
-Prediction Phase:
-  FOR j = 1 TO q:
-    ŷ_j = h_j(x_new)
-  
-  Output: Ŷ = {l_j | ŷ_j = +1, j = 1, ..., q}
-────────────────────────────────────────────────
-```
+Giả định reviewer gán lại mọi nhãn bị từ chối và đúng 100%:
 
-#### Đặc điểm chính (theo Zhang et al.):
-- **Ưu điểm:** Đơn giản, dễ triển khai, mở rộng tốt với số lượng nhãn lớn, tối ưu tự nhiên cho macro-averaged metrics
-- **Nhược điểm:** Giả định nhãn độc lập → bỏ qua tương quan nhãn (label correlation)
-- **Phức tạp thời gian:** O(q × T_base), với T_base là thời gian huấn luyện base classifier
-
-#### Phiên bản Binary Relevance với Hồi Quy Logistic (Logistic Regression)
-- **Base Classifier:** `sklearn.linear_model.LogisticRegression(solver='liblinear', C=1.0, max_iter=1000, random_state=42)`
-- **Mô hình xác suất:** Với mỗi nhãn $j \in \{1, \dots, q\}$, mô hình học vector trọng số $w_j$ và bias $b_j$ sao cho:
-  $$P(Y_j = 1 \mid x) = \sigma(w_j^T x + b_j) = \frac{1}{1 + e^{-(w_j^T x + b_j)}}$$
-- **Hàm mất mát (Binary Cross-Entropy / Log Loss):**
-  $$\mathcal{L}(w_j, b_j) = -\sum_{i=1}^n \left[ y_{ij} \log P(Y_j=1 \mid x_i) + (1 - y_{ij}) \log (1 - P(Y_j=1 \mid x_i)) \right] + \frac{1}{2C} \|w_j\|_2^2$$
-- **Quy tắc ra quyết định:** $\hat{y}_j = \mathbb{I}(P(Y_j = 1 \mid x) \ge 0.5) = \mathbb{I}(w_j^T x + b_j \ge 0)$.
-- **Ưu điểm so với SVM:** Cung cấp xác suất hậu nghiệm $P(Y_j = 1 \mid X)$ được hiệu chuẩn (calibrated), trực tiếp phục vụ các tác vụ xếp hạng (ranking) và threshold tuning.
-
-### 2.2. Classifier Chains (CC)
-
-**Nguồn:** Read et al. (ML 2011), Section 3 — "Classifier Chains"
-
-#### Ý tưởng cốt lõi
-CC mở rộng BR bằng cách **xâu chuỗi (chain)** các bộ phân loại nhị phân theo một thứ tự cố định. Mỗi bộ phân loại nhận thêm **dự đoán của các nhãn trước đó trong chuỗi** làm feature bổ sung, từ đó mô hình hóa **tương quan giữa các nhãn**.
-
-#### Thuật toán
-
-```
-Algorithm: Classifier Chains (CC)
-────────────────────────────────────────────────
-Input:
-  - D = {(x_i, Y_i)} : tập huấn luyện
-  - L = {l_1, ..., l_q} : tập nhãn theo thứ tự chuỗi
-  - x_new : mẫu cần dự đoán
-
-Training Phase:
-  FOR j = 1 TO q:
-    1. Tạo tập huấn luyện mở rộng D_j:
-       - Với mỗi (x_i, Y_i) ∈ D:
-         - Feature mở rộng: x_i^(j) = [x_i, y_i^1, y_i^2, ..., y_i^(j-1)]
-           (nối thêm giá trị thực {0,1} của j-1 nhãn trước đó)
-         - Nhãn: y_j = 1 nếu l_j ∈ Y_i, ngược lại y_j = 0
-    2. Huấn luyện bộ phân loại nhị phân h_j trên D_j
-
-Prediction Phase (greedy inference):
-  FOR j = 1 TO q:
-    ŷ_j = h_j([x_new, ŷ_1, ŷ_2, ..., ŷ_{j-1}])
-    (sử dụng dự đoán ŷ của các nhãn trước, KHÔNG phải giá trị thực)
-
-  Output: Ŷ = {l_j | ŷ_j = +1, j = 1, ..., q}
-────────────────────────────────────────────────
+```text
+Y_oracle[i,k] = Y[i,k]       nếu Y_pa[i,k] == -1
+                Y_pa[i,k]    nếu mô hình đã quyết định
 ```
 
-#### Đặc điểm chính (theo Read et al.):
-- **Ưu điểm:** Mô hình hóa tương quan nhãn, cải thiện đáng kể trên Subset Accuracy & Macro-F1 so với BR
-- **Nhược điểm:** Phụ thuộc vào thứ tự chuỗi, lỗi lan truyền (error propagation) theo chuỗi
-- **Thứ tự nhãn trong chuỗi:** Sử dụng **thứ tự mặc định** (default order) như trong dataset — đúng với thiết lập gốc trong paper Read et al. (2011)
-- **Phức tạp thời gian:** O(q × T_base), tương đương BR (feature space tăng dần từ d đến d+q-1)
+Từ `Y_oracle`, tính lại toàn bộ complete metrics, ít nhất gồm:
 
----
+- `Optimistic Macro-F1`;
+- `Optimistic Micro-F1`;
+- `Optimistic Hamming Accuracy`;
+- `Optimistic Instance-F1`;
+- `Optimistic Instance Jaccard`.
 
-## 3. Thiết Lập Thí Nghiệm
+Đây là **upper bound của hệ human-in-the-loop**, không phải điểm tự động của mô hình. All-abstain sẽ trở thành perfect oracle completion; phần lớn accuracy/set metrics bằng `1`. Riêng positive-class Macro-F1 có thể nhỏ hơn `1` nếu một fold có nhãn không xuất hiện dương và quy ước `zero_division=0`. Vì vậy mỗi optimistic score bắt buộc đi cùng `Coverage`, `AABS`, `ABS`, support và generalized cost. Không dùng optimistic score làm objective duy nhất hoặc để xếp hạng mô hình.
 
-### 3.1. Base Classifier
+Các delta cần xuất:
 
-Theo chuẩn của cả hai paper:
-
-| Thuộc tính | Giá trị |
-|---|---|
-| **Base classifier** | **Support Vector Machine (SVM)** — SMO (Sequential Minimal Optimization) |
-| **Kernel** | Linear kernel (tương ứng `LinearSVC` hoặc `SVC(kernel='linear')` trong scikit-learn) |
-| **Lý do chọn** | Cả 2 paper đều sử dụng SVM/SMO làm base classifier chính trong thí nghiệm. SVM được Zhang et al. liệt kê là lựa chọn phổ biến nhất cho BR framework, và Read et al. sử dụng SMO trong các thí nghiệm benchmark. |
-| **Thư viện** | `scikit-learn` (Python) |
-| **Tham số** | Mặc định (C=1.0), đúng theo chuẩn cài đặt trong paper |
-
-**Triển khai cụ thể:**
-```python
-from sklearn.svm import LinearSVC
-
-# Base classifier cho mỗi nhãn
-base_classifier = LinearSVC(
-    C=1.0,           # Regularization parameter mặc định
-    max_iter=10000,  # Đảm bảo hội tụ cho datasets lớn
-    random_state=42  # Reproducibility
-)
+```text
+Oracle gain       = Optimistic complete metric - Full complete metric
+Errors avoided    = số lỗi của Y_full nằm trong tập abstain
+Review load       = AABS
 ```
 
-### 3.2. Chiến Lược Đánh Giá: 5-Fold Stratified Cross-Validation
+Không lấy hiệu giữa optimistic complete metric và selective metric vì hai đại lượng dùng mẫu số khác nhau.
 
-| Thuộc tính | Giá trị |
-|---|---|
-| **Số folds** | **5** |
-| **Stratification** | Sử dụng **Iterative Stratification** cho multi-label (thư viện `scikit-multilearn`) để đảm bảo phân bố nhãn đồng đều giữa các fold |
-| **Seed/Random state** | `random_state=42` cho reproducibility |
-| **Report** | Mean ± Std trên 5 folds cho mỗi metric |
+### 4.4. Hai tập decided/rejected và hai nhóm IL/DL
 
-**Lý do chọn Iterative Stratification:**
-- Standard `StratifiedKFold` chỉ hỗ trợ single-label
-- Iterative Stratification (Sechidis et al., 2011) giữ cân bằng phân bố label trên tất cả folds — chuẩn trong multi-label research
+Cụm “tính Macro-F1 trên cả hai tập” trong note chưa xác định rõ đối tượng. Để không bỏ sót ý, đặc tả yêu cầu cả hai lát cắt sau:
 
-```python
-from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
+1. **Decided/rejected:**
+   - `Decided Macro-F1` chính là Selective Macro-F1.
+   - `Rejected Counterfactual Macro-F1` dùng `Y_full` tại các vị trí bị từ chối để đo mức khó nếu hệ thống buộc phải tự quyết định.
+   - Xuất thêm `Rejected Error Rate` và `Error Capture Rate`.
+2. **IL/DL:**
+   - `IL Full Macro-F1` là trung bình F1 của các nhãn thuộc IL.
+   - `DL Full Macro-F1` tương tự cho DL.
+   - Tính thêm group-level coverage, precision, recall, F1 và Jaccard khi phù hợp.
 
-cv = MultilabelStratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+Nếu một fold không có nhãn trong IL hoặc DL, group metric là `NaN` và phải kèm `group_label_count=0`; không thay bằng `0`. Nếu một nhãn không có rejected position, rejected diagnostic của nhãn đó là `NaN` và không được giả là hoàn hảo.
+
+Hai metric đo khả năng triage:
+
+```text
+Rejected Error Rate = số lỗi của Y_full nằm trong A / số vị trí trong A
+Error Capture Rate   = số lỗi của Y_full nằm trong A / tổng số lỗi của Y_full
 ```
 
----
+Mẫu số bằng `0` thì metric tương ứng là `NaN` và phải xuất count gốc.
 
-## 4. Tập Dữ Liệu
+Ở cùng AABS, một rejector hữu ích phải có Error Capture Rate cao hơn baseline từ chối ngẫu nhiên; baseline ngẫu nhiên được lặp tối thiểu 1.000 lần với seed cố định để tạo khoảng tin cậy.
 
-### 4.1. Tổng Quan 10 Datasets
+### 4.5. Nhãn quan trọng
 
-| # | Dataset | Domain | Samples | Features | Labels | Label Cardinality | File format |
-|---|---|---|---|---|---|---|---|
-| 1 | **Emotions** | Music | 593 | 72 | 6 | 1.87 | MULAN (XML + ARFF) |
-| 2 | **Music** | Music | 593 | 72 | 6 | 1.87 | Single ARFF (labels ở đầu) |
-| 3 | **Scene** | Image | 2,407 | 294 | 6 | 1.07 | Single ARFF |
-| 4 | **Yeast** | Biology | 2,417 | 103 | 14 | 4.24 | Single ARFF |
-| 5 | **CAL500** | Music | 502 | 68 | 174 | 26.04 | Single ARFF |
-| 6 | **Bibtex** | Text | 7,395 | 1,836 | 159 | 2.40 | MULAN (XML + ARFF) |
-| 7 | **Enron** | Text | 1,702 | 1,001 | 53 | 3.38 | MULAN (XML + ARFF) |
-| 8 | **Genbase** | Biology | 662 | 1,186 | 27 | 1.25 | MULAN (XML + ARFF) |
-| 9 | **Medical** | Text | 978 | 1,449 | 45 | 1.25 | MULAN (XML + ARFF) |
-| 10 | **REUTERS-K500** | Text | 6,000 | 500 | 103 | ~1.46 | Single ARFF (labels ở đầu) |
+Không được đồng nhất “nhãn hiếm” với “nhãn quan trọng”. Importance phải đến từ domain/user config, không suy ra từ test set.
 
-> **Lưu ý:** Cột "Label Cardinality" = trung bình số nhãn mỗi mẫu — giá trị tham khảo, sẽ được tính tự động bởi data loader.
+Tạo file cấu hình `configs/label_policy.json` theo dataset, hỗ trợ:
 
-### 4.2. Vị Trí File Dữ Liệu
-
-```
-data/
-├── emotions/
-│   ├── emotions.arff          ← Dữ liệu chính (labels ở cuối, 6 nhãn cuối)
-│   └── emotions.xml           ← MULAN label descriptor
-├── Music.arff                 ← Labels ở ĐẦU file (6 nhãn đầu)
-├── Scene.arff                 ← Labels ở CUỐI file (6 nhãn cuối)
-├── Yeast.arff                 ← Labels ở CUỐI file (14 nhãn cuối)
-├── CAL500.arff                ← Labels ở CUỐI file (174 nhãn cuối)
-├── bibtex/
-│   ├── bibtex.arff
-│   └── bibtex.xml
-├── enron/
-│   ├── enron.arff
-│   └── enron.xml
-├── genbase/
-│   ├── genbase.arff
-│   └── genbase.xml
-├── medical/
-│   ├── medical.arff
-│   └── medical.xml
-└── REUTERS-K500-EX2.arff      ← Labels ở ĐẦU file (103 nhãn đầu)
-```
-
-### 4.3. Data Loading Logic
-
-Do các dataset có **vị trí nhãn khác nhau** (đầu vs cuối file), cần một data loader linh hoạt:
-
-```python
-# Cấu hình cho mỗi dataset
-DATASET_CONFIG = {
-    "emotions": {
-        "path": "data/emotions/emotions.arff",
-        "xml_path": "data/emotions/emotions.xml",  # Dùng XML để xác định label
-        "label_location": "end",
-        "num_labels": 6
-    },
-    "music": {
-        "path": "data/Music.arff",
-        "xml_path": None,
-        "label_location": "start",    # Labels nằm ở 6 cột đầu
-        "num_labels": 6
-    },
-    "scene": {
-        "path": "data/Scene.arff",
-        "xml_path": None,
-        "label_location": "end",
-        "num_labels": 6
-    },
-    "yeast": {
-        "path": "data/Yeast.arff",
-        "xml_path": None,
-        "label_location": "end",
-        "num_labels": 14
-    },
-    "cal500": {
-        "path": "data/CAL500.arff",
-        "xml_path": None,
-        "label_location": "end",
-        "num_labels": 174
-    },
-    "bibtex": {
-        "path": "data/bibtex/bibtex.arff",
-        "xml_path": "data/bibtex/bibtex.xml",
-        "label_location": "end",
-        "num_labels": 159
-    },
-    "enron": {
-        "path": "data/enron/enron.arff",
-        "xml_path": "data/enron/enron.xml",
-        "label_location": "end",
-        "num_labels": 53
-    },
-    "genbase": {
-        "path": "data/genbase/genbase.arff",
-        "xml_path": "data/genbase/genbase.xml",
-        "label_location": "end",
-        "num_labels": 27
-    },
-    "medical": {
-        "path": "data/medical/medical.arff",
-        "xml_path": "data/medical/medical.xml",
-        "label_location": "end",
-        "num_labels": 45
-    },
-    "reuters-k500": {
-        "path": "data/REUTERS-K500-EX2.arff",
-        "xml_path": None,
-        "label_location": "start",   # Labels nằm ở 103 cột đầu
-        "num_labels": 103
-    }
+```json
+{
+  "dataset_name": {
+    "critical_labels": ["label_a", "label_b"],
+    "weights": {"label_a": 3.0, "label_b": 2.0},
+    "false_negative_cost": {"label_a": 10.0},
+    "false_positive_cost": {"label_a": 2.0},
+    "review_cost": 0.25
+  }
 }
 ```
 
-#### Quy trình load dữ liệu:
-1. **Parse ARFF** → Đọc attributes và data
-2. **Xác định nhãn:**
-   - Nếu có file `.xml` (MULAN format) → parse XML để lấy tên nhãn → tìm vị trí tương ứng trong ARFF
-   - Nếu không có XML → dựa vào `label_location` và `num_labels` để tách feature/label
-3. **Tách X (features) và Y (labels):**
-   - `label_location="end"` → `Y = data[:, -num_labels:]`, `X = data[:, :-num_labels]`
-   - `label_location="start"` → `Y = data[:, :num_labels]`, `X = data[:, num_labels:]`
-4. **Xử lý missing values:** Thay NaN bằng 0 (nếu có)
-5. **Đảm bảo Y ∈ {0, 1}** (binary matrix)
+Khi có config, xuất `Critical-label Recall/F1/Coverage`, `Critical Error Capture Rate`, `Optimistic Critical-label F1` và cost-sensitive utility. Khi không có config, đánh dấu `N/A`; chỉ được phân tích theo strata rare/medium/common và gọi đó là phân tích theo prevalence, không gọi là importance.
 
----
+## 5. Phần cần sửa trong code
 
-## 5. Metrics Đánh Giá
+### C0. Ranh giới thay đổi core
 
-### 5.1. Bảng Metrics
+Giữ nguyên mặc định và regression-test các phần sau:
 
-Dựa trên chuẩn đánh giá trong cả hai paper, sử dụng bộ metrics sau:
+- công thức huấn luyện BR trong `src/models/binary_relevance.py`;
+- công thức huấn luyện/greedy inference CC trong `src/models/classifier_chain.py`;
+- cách GSI sinh direct probability, conditional probability, mean-field probability và greedy IL/DL mặc định;
+- external API hiện có của `predict`, `predict_proba`, `predict_full_from_proba`.
 
-| # | Metric | Loại | Hướng | Ký hiệu trong paper | Mô tả |
-|---|---|---|---|---|---|
-| 1 | **Macro-F1** ⭐ | Label-based | ↑ cao = tốt | Macro F-measure | Trung bình F1 trên tất cả nhãn (bắt buộc) |
-| 2 | **Micro-F1** | Label-based | ↑ cao = tốt | Micro F-measure | F1 tính gộp trên tất cả nhãn |
-| 3 | **Hamming Loss** | Example-based | ↓ thấp = tốt | HL | Tỷ lệ nhãn bị dự đoán sai |
-| 4 | **Subset Accuracy** | Example-based | ↑ cao = tốt | Accuracy / 0-1 Loss | Tỷ lệ mẫu có tập nhãn dự đoán khớp hoàn toàn |
-| 5 | **Example-based F1** | Example-based | ↑ cao = tốt | — | F1 tính trung bình trên từng mẫu |
-| 6 | **Macro Precision** | Label-based | ↑ cao = tốt | — | Trung bình precision trên tất cả nhãn |
-| 7 | **Macro Recall** | Label-based | ↑ cao = tốt | — | Trung bình recall trên tất cả nhãn |
+Chỉ thêm injection point cho `base_learner`, `decision_policy`, `partition_objective`, `partition_provider` và `metric_registry`. Default phải tái tạo hành vi hiện tại. Không sửa trực tiếp core để nhúng công thức F1/Jaccard/MDP.
 
-> ⭐ **Macro-F1 là metric bắt buộc** theo yêu cầu.
+### C1. Tạo decision-policy layer độc lập
 
-### 5.2. Công Thức Chi Tiết
+Tạo package mới:
 
-#### Macro-F1 (Bắt buộc)
-```
-Cho mỗi nhãn j (j = 1, ..., q):
-  TP_j = số mẫu có y_j = 1 VÀ ŷ_j = 1
-  FP_j = số mẫu có y_j = 0 VÀ ŷ_j = 1
-  FN_j = số mẫu có y_j = 1 VÀ ŷ_j = 0
-
-  Precision_j = TP_j / (TP_j + FP_j)
-  Recall_j    = TP_j / (TP_j + FN_j)
-  F1_j        = 2 × Precision_j × Recall_j / (Precision_j + Recall_j)
-
-  Macro-F1 = (1/q) × Σ_{j=1}^{q} F1_j
+```text
+src/decision/
+├── __init__.py
+├── base.py              # protocol/interface chung
+├── hamming.py           # wrap SEP/PAR hiện tại
+├── fbeta.py             # complete và partial BOP cho instance F-beta
+└── jaccard.py           # complete và partial BOP cho instance Jaccard
 ```
 
-#### Micro-F1
-```
-TP_total = Σ_{j=1}^{q} TP_j
-FP_total = Σ_{j=1}^{q} FP_j
-FN_total = Σ_{j=1}^{q} FN_j
-
-Precision_micro = TP_total / (TP_total + FP_total)
-Recall_micro    = TP_total / (TP_total + FN_total)
-Micro-F1        = 2 × Precision_micro × Recall_micro / (Precision_micro + Recall_micro)
-```
-
-#### Hamming Loss
-```
-Hamming Loss = (1 / (n × q)) × Σ_{i=1}^{n} Σ_{j=1}^{q} I(y_ij ≠ ŷ_ij)
-```
-
-#### Subset Accuracy (Exact Match Ratio)
-```
-Subset Accuracy = (1/n) × Σ_{i=1}^{n} I(Y_i = Ŷ_i)
-```
-
-#### Example-based F1
-```
-Cho mỗi mẫu i:
-  F1_i = 2 × |Y_i ∩ Ŷ_i| / (|Y_i| + |Ŷ_i|)
-
-Example-F1 = (1/n) × Σ_{i=1}^{n} F1_i
-```
-
-### 5.3. Triển Khai Metrics (scikit-learn)
+Interface tối thiểu:
 
 ```python
-from sklearn.metrics import (
-    f1_score,
-    hamming_loss,
-    accuracy_score,
-    precision_score,
-    recall_score
-)
-import numpy as np
-
-def compute_all_metrics(y_true, y_pred):
-    """
-    Tính toàn bộ metrics cho multi-label classification.
-    
-    Parameters:
-        y_true: np.ndarray, shape (n_samples, n_labels), ground truth
-        y_pred: np.ndarray, shape (n_samples, n_labels), predictions
-    
-    Returns:
-        dict: Tên metric → giá trị
-    """
-    results = {}
-    
-    # 1. Macro-F1 (BẮT BUỘC)
-    results["Macro-F1"] = f1_score(y_true, y_pred, average="macro", zero_division=0)
-    
-    # 2. Micro-F1
-    results["Micro-F1"] = f1_score(y_true, y_pred, average="micro", zero_division=0)
-    
-    # 3. Hamming Loss
-    results["Hamming Loss"] = hamming_loss(y_true, y_pred)
-    
-    # 4. Subset Accuracy (Exact Match)
-    results["Subset Accuracy"] = accuracy_score(y_true, y_pred)
-    
-    # 5. Example-based F1
-    n_samples = y_true.shape[0]
-    example_f1s = []
-    for i in range(n_samples):
-        if y_true[i].sum() == 0 and y_pred[i].sum() == 0:
-            example_f1s.append(1.0)
-        elif y_true[i].sum() == 0 or y_pred[i].sum() == 0:
-            example_f1s.append(0.0)
-        else:
-            intersection = np.logical_and(y_true[i], y_pred[i]).sum()
-            example_f1s.append(
-                2 * intersection / (y_true[i].sum() + y_pred[i].sum())
-            )
-    results["Example-F1"] = np.mean(example_f1s)
-    
-    # 6. Macro Precision
-    results["Macro Precision"] = precision_score(
-        y_true, y_pred, average="macro", zero_division=0
-    )
-    
-    # 7. Macro Recall
-    results["Macro Recall"] = recall_score(
-        y_true, y_pred, average="macro", zero_division=0
-    )
-    
-    return results
+class DecisionPolicy:
+    def predict(self, probabilities, *, cost=None, penalty=None): ...
+    def expected_utility(self, probabilities, *, cost=None, penalty=None): ...
+    def get_config(self): ...
 ```
 
----
+Yêu cầu:
 
-## 6. Quy Trình Thí Nghiệm (Pipeline)
+- `HammingBOPPolicy` tái sử dụng đúng SEP/PAR hiện có; model cũ chỉ delegate sang module này.
+- `FbetaBOPPolicy(beta=1)` cài Algorithm 2 của Nguyen–Hüllermeier, cho output `{0,-1,1}` và generalized utility `F_beta(Y_D, Yhat_D) - g(|A|)`.
+- `JaccardBOPPolicy` cài Algorithm 3.
+- Có chế độ `allow_abstention=False` cho BOP complete dùng trong immediate mode.
+- Tie-breaking xác định và ghi rõ: ưu tiên nhiều quyết định hơn, sau đó thứ tự label index để reproducible.
+- Với `K` lớn, vector hóa/cache các bảng xác suất count-distribution; ghi train/inference time riêng.
+- Tính Bayes-optimal của Algorithm 2/3 dựa trên CLI. Khi đưa các dependent marginal của GSI vào policy này, phải ghi rõ đây là **BOP dưới xấp xỉ CLI**, không phải exact BOP của joint distribution phụ thuộc; chỉ marginal probability là chưa đủ cho exact non-CLI F1-BOP.
+- Không gọi threshold `0.5` là F1-BOP. Tối ưu Hamming không được trình bày như tối ưu F1; hai loss có thể có Bayes action khác nhau ([Waegeman et al., JMLR 2014](https://www.jmlr.org/papers/v15/waegeman14a.html)).
 
-### 6.1. Workflow Tổng Thể
+### C2. Module hóa objective chọn IL/DL
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│                         MAIN PIPELINE                                │
-│                                                                      │
-│  FOR each dataset in [emotions, music, scene, yeast, cal500,         │
-│                        bibtex, enron, genbase, medical, reuters]:     │
-│    ┌──────────────────────────────────────────────────────────────┐   │
-│    │ 1. Load data (X, Y) từ ARFF (+XML nếu có)                  │   │
-│    │ 2. Print dataset stats (samples, features, labels)          │   │
-│    │ 3. Create 5-fold MultilabelStratifiedKFold                  │   │
-│    │                                                              │   │
-│    │ FOR each fold k = 1..5:                                      │   │
-│    │   ┌──────────────────────────────────────────────────────┐   │   │
-│    │   │ a. Split: X_train, X_test, Y_train, Y_test           │   │   │
-│    │   │ b. Train BR classifier → predict → compute metrics   │   │   │
-│    │   │ c. Train CC classifier → predict → compute metrics   │   │   │
-│    │   │ d. Store results per fold                             │   │   │
-│    │   └──────────────────────────────────────────────────────┘   │   │
-│    │                                                              │   │
-│    │ 4. Aggregate: Mean ± Std across 5 folds                     │   │
-│    │ 5. Store aggregated results for this dataset                 │   │
-│    └──────────────────────────────────────────────────────────────┘   │
-│                                                                      │
-│  Generate comparison charts & tables                                 │
-└──────────────────────────────────────────────────────────────────────┘
+Tạo `src/selection/objectives.py` và `src/selection/partition.py`.
+
+`GSIMLCPartialAbstentionClassifier` nhận thêm tham số nhưng giữ default tương thích:
+
+```text
+selection_objective="full_macro_f1"
+decision_policy="hamming"
+partition_mode="learned"   # learned | all_il | all_dl | fixed | random_matched
 ```
 
-### 6.2. Chi Tiết Triển Khai BR
+Quy trình đánh giá một candidate partition phải là:
 
-```python
-from sklearn.multioutput import MultiOutputClassifier
-from sklearn.svm import LinearSVC
-
-class BinaryRelevanceClassifier:
-    """
-    Binary Relevance: q bộ phân loại nhị phân độc lập.
-    Tuân thủ: Zhang et al. (FCS 2018)
-    """
-    def __init__(self, base_classifier=None):
-        if base_classifier is None:
-            base_classifier = LinearSVC(C=1.0, max_iter=10000, random_state=42)
-        self.model = MultiOutputClassifier(base_classifier)
-    
-    def fit(self, X, Y):
-        self.model.fit(X, Y)
-        return self
-    
-    def predict(self, X):
-        return self.model.predict(X)
+```text
+candidate partition
+  -> candidate probability matrix trên inner validation
+  -> decision policy tương ứng
+  -> objective score
+  -> accept/reject việc chuyển nhãn IL/DL
 ```
 
-### 6.3. Chi Tiết Triển Khai CC
+Các objective bắt buộc:
 
-```python
-import numpy as np
-from sklearn.svm import LinearSVC
-from sklearn.base import clone
-
-class ClassifierChainClassifier:
-    """
-    Classifier Chains: chuỗi bộ phân loại nhị phân có truyền dự đoán.
-    Tuân thủ: Read et al. (ML 2011), Section 3
-    
-    - Thứ tự chuỗi: default order (theo thứ tự cột label trong dataset)
-    - Inference: greedy (dùng hard prediction ŷ, không dùng probability)
-    """
-    def __init__(self, base_classifier=None, order=None):
-        if base_classifier is None:
-            base_classifier = LinearSVC(C=1.0, max_iter=10000, random_state=42)
-        self.base_classifier = base_classifier
-        self.order = order  # None → default order
-        self.classifiers = []
-    
-    def fit(self, X, Y):
-        n_labels = Y.shape[1]
-        if self.order is None:
-            self.order = list(range(n_labels))
-        
-        self.classifiers = []
-        for i, label_idx in enumerate(self.order):
-            clf = clone(self.base_classifier)
-            
-            # Nối features gốc + dự đoán các nhãn trước đó trong chuỗi
-            if i == 0:
-                X_extended = X
-            else:
-                # Dùng giá trị THỰC (ground truth) trong training
-                prev_labels = Y[:, self.order[:i]]
-                X_extended = np.hstack([X, prev_labels])
-            
-            clf.fit(X_extended, Y[:, label_idx])
-            self.classifiers.append(clf)
-        
-        return self
-    
-    def predict(self, X):
-        n_samples = X.shape[0]
-        n_labels = len(self.order)
-        predictions = np.zeros((n_samples, n_labels))
-        
-        for i, (label_idx, clf) in enumerate(zip(self.order, self.classifiers)):
-            if i == 0:
-                X_extended = X
-            else:
-                # Dùng DỰ ĐOÁN (predicted) của các nhãn trước trong inference
-                prev_preds = predictions[:, self.order[:i]]
-                X_extended = np.hstack([X, prev_preds])
-            
-            predictions[:, label_idx] = clf.predict(X_extended)
-        
-        return predictions
-```
-
-### 6.4. Main Experiment Loop
-
-```python
-import pandas as pd
-
-def run_experiment():
-    all_results = {}
-    
-    for dataset_name, config in DATASET_CONFIG.items():
-        print(f"\n{'='*60}")
-        print(f"Dataset: {dataset_name}")
-        print(f"{'='*60}")
-        
-        # 1. Load data
-        X, Y = load_dataset(config)
-        print(f"  Samples: {X.shape[0]}, Features: {X.shape[1]}, Labels: {Y.shape[1]}")
-        
-        # 2. Setup CV
-        cv = MultilabelStratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-        
-        fold_results = {"BR": [], "CC": []}
-        
-        for fold_idx, (train_idx, test_idx) in enumerate(cv.split(X, Y)):
-            print(f"  Fold {fold_idx + 1}/5...")
-            
-            X_train, X_test = X[train_idx], X[test_idx]
-            Y_train, Y_test = Y[train_idx], Y[test_idx]
-            
-            # 3a. BR
-            br = BinaryRelevanceClassifier()
-            br.fit(X_train, Y_train)
-            y_pred_br = br.predict(X_test)
-            metrics_br = compute_all_metrics(Y_test, y_pred_br)
-            fold_results["BR"].append(metrics_br)
-            
-            # 3b. CC
-            cc = ClassifierChainClassifier()
-            cc.fit(X_train, Y_train)
-            y_pred_cc = cc.predict(X_test)
-            metrics_cc = compute_all_metrics(Y_test, y_pred_cc)
-            fold_results["CC"].append(metrics_cc)
-        
-        # 4. Aggregate results
-        all_results[dataset_name] = {}
-        for method in ["BR", "CC"]:
-            df_folds = pd.DataFrame(fold_results[method])
-            all_results[dataset_name][method] = {
-                "mean": df_folds.mean().to_dict(),
-                "std": df_folds.std().to_dict()
-            }
-    
-    return all_results
-```
-
----
-
-## 7. Trực Quan Hóa (Visualization)
-
-### 7.1. Danh Sách Biểu Đồ Bắt Buộc
-
-| # | Loại biểu đồ | Mô tả | Tên file |
-|---|---|---|---|
-| 1 | **Grouped Bar Chart** | So sánh BR vs CC trên Macro-F1 cho 10 datasets | `macro_f1_comparison.png` |
-| 2 | **Grouped Bar Chart** | So sánh BR vs CC trên Micro-F1 cho 10 datasets | `micro_f1_comparison.png` |
-| 3 | **Grouped Bar Chart** | So sánh BR vs CC trên Hamming Loss cho 10 datasets | `hamming_loss_comparison.png` |
-| 4 | **Grouped Bar Chart** | So sánh BR vs CC trên Subset Accuracy cho 10 datasets | `subset_accuracy_comparison.png` |
-| 5 | **Grouped Bar Chart** | So sánh BR vs CC trên Example-F1 cho 10 datasets | `example_f1_comparison.png` |
-| 6 | **Grouped Bar Chart** | So sánh BR vs CC trên Macro Precision cho 10 datasets | `macro_precision_comparison.png` |
-| 7 | **Grouped Bar Chart** | So sánh BR vs CC trên Macro Recall cho 10 datasets | `macro_recall_comparison.png` |
-| 8 | **Radar/Spider Chart** | So sánh tổng thể BR vs CC trên tất cả metrics (trung bình qua 10 datasets) | `radar_overall.png` |
-| 9 | **Heatmap** | Ma trận metrics × datasets cho BR | `heatmap_br.png` |
-| 10 | **Heatmap** | Ma trận metrics × datasets cho CC | `heatmap_cc.png` |
-| 11 | **Summary Table** | Bảng tổng hợp Mean±Std cho tất cả metrics trên tất cả datasets | `summary_table.png` |
-
-### 7.2. Yêu Cầu Thiết Kế Biểu Đồ
-
-#### Grouped Bar Chart (Biểu đồ 1–7):
-```
-- Trục X: 10 dataset names (xoay 45° nếu cần)
-- Trục Y: Giá trị metric
-- 2 bars cho mỗi dataset: BR (màu xanh dương) vs CC (màu cam)
-- Error bars: ±1 standard deviation (5 folds)
-- Title: tên metric
-- Legend: "BR", "CC"
-- Grid: bật trên trục Y
-- Ghi giá trị trung bình lên đỉnh mỗi bar (font nhỏ)
-- DPI: 300
-- Size: 14×6 inches
-```
-
-#### Radar Chart (Biểu đồ 8):
-```
-- Các trục: 7 metrics
-- 2 đường: BR (xanh dương, nét liền) vs CC (cam, nét đứt)
-- Fill alpha: 0.25
-- Normalize tất cả metrics về [0, 1] (đảo Hamming Loss vì lower = better)
-```
-
-#### Heatmap (Biểu đồ 9–10):
-```
-- Rows: 10 datasets
-- Columns: 7 metrics
-- Color: viridis colormap
-- Annotate: giá trị mean (2 chữ số thập phân)
-- Title: "BR Performance Heatmap" / "CC Performance Heatmap"
-```
-
-### 7.3. Code Template Trực Quan Hóa
-
-```python
-import matplotlib.pyplot as plt
-import numpy as np
-
-def plot_grouped_bar(all_results, metric_name, output_path):
-    """
-    Vẽ grouped bar chart so sánh BR vs CC trên một metric cụ thể.
-    """
-    datasets = list(all_results.keys())
-    br_means = [all_results[d]["BR"]["mean"][metric_name] for d in datasets]
-    cc_means = [all_results[d]["CC"]["mean"][metric_name] for d in datasets]
-    br_stds = [all_results[d]["BR"]["std"][metric_name] for d in datasets]
-    cc_stds = [all_results[d]["CC"]["std"][metric_name] for d in datasets]
-    
-    x = np.arange(len(datasets))
-    width = 0.35
-    
-    fig, ax = plt.subplots(figsize=(14, 6))
-    bars1 = ax.bar(x - width/2, br_means, width, yerr=br_stds,
-                   label='BR', color='#4A90D9', capsize=3, edgecolor='white')
-    bars2 = ax.bar(x + width/2, cc_means, width, yerr=cc_stds,
-                   label='CC', color='#E8854A', capsize=3, edgecolor='white')
-    
-    ax.set_xlabel('Dataset', fontsize=12)
-    ax.set_ylabel(metric_name, fontsize=12)
-    ax.set_title(f'{metric_name}: BR vs CC Comparison', fontsize=14, fontweight='bold')
-    ax.set_xticks(x)
-    ax.set_xticklabels(datasets, rotation=45, ha='right')
-    ax.legend()
-    ax.grid(axis='y', alpha=0.3)
-    
-    # Ghi giá trị lên bar
-    for bar, mean_val in zip(bars1, br_means):
-        ax.text(bar.get_x() + bar.get_width()/2., bar.get_height(),
-                f'{mean_val:.3f}', ha='center', va='bottom', fontsize=7)
-    for bar, mean_val in zip(bars2, cc_means):
-        ax.text(bar.get_x() + bar.get_width()/2., bar.get_height(),
-                f'{mean_val:.3f}', ha='center', va='bottom', fontsize=7)
-    
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    plt.close()
-
-# Gọi cho từng metric
-METRICS = [
-    "Macro-F1", "Micro-F1", "Hamming Loss", "Subset Accuracy",
-    "Example-F1", "Macro Precision", "Macro Recall"
-]
-
-for metric in METRICS:
-    filename = metric.lower().replace("-", "_").replace(" ", "_")
-    plot_grouped_bar(all_results, metric, f"results/{filename}_comparison.png")
-```
-
----
-
-## 8. Cấu Trúc Thư Mục Dự Án
-
-```
-BR_CC/
-├── README.md
-├── specify.md                      ← Tài liệu đặc tả này
-├── requirements.txt                ← Dependencies
-├── TaiLieuThamKhao/
-│   ├── FCS'17.pdf                  ← Paper BR (Zhang et al.)
-│   └── s10994-011-5256-5.pdf       ← Paper CC (Read et al.)
-├── data/                           ← 10 datasets
-│   ├── emotions/
-│   ├── Music.arff
-│   ├── Scene.arff
-│   ├── Yeast.arff
-│   ├── CAL500.arff
-│   ├── bibtex/
-│   ├── enron/
-│   ├── genbase/
-│   ├── medical/
-│   └── REUTERS-K500-EX2.arff
-├── src/
-│   ├── __init__.py
-│   ├── data/
-│   │   ├── __init__.py
-│   │   └── loader.py               ← Data loader (ARFF + XML parser)
-│   ├── models/
-│   │   ├── __init__.py
-│   │   ├── binary_relevance.py     ← BR implementation
-│   │   └── classifier_chain.py     ← CC implementation
-│   ├── evaluation/
-│   │   ├── __init__.py
-│   │   └── metrics.py              ← Tất cả metrics
-│   └── visualization/
-│       ├── __init__.py
-│       └── plots.py                ← Tất cả biểu đồ
-├── main.py                         ← Entry point: chạy toàn bộ pipeline
-└── results/                        ← Output directory
-    ├── tables/
-    │   └── summary_results.csv     ← Bảng tổng hợp kết quả
-    └── figures/
-        ├── macro_f1_comparison.png
-        ├── micro_f1_comparison.png
-        ├── hamming_loss_comparison.png
-        ├── subset_accuracy_comparison.png
-        ├── example_f1_comparison.png
-        ├── macro_precision_comparison.png
-        ├── macro_recall_comparison.png
-        ├── radar_overall.png
-        ├── heatmap_br.png
-        ├── heatmap_cc.png
-        └── summary_table.png
-```
-
----
-
-## 9. Dependencies (requirements.txt)
-
-```
-scikit-learn>=1.3.0
-scikit-multilearn>=0.2.0
-iterative-stratification>=0.1.7
-numpy>=1.24.0
-pandas>=2.0.0
-scipy>=1.10.0
-matplotlib>=3.7.0
-seaborn>=0.12.0
-liac-arff>=2.5.0
-```
-
----
-
-## 10. Bảng Tóm Tắt Thiết Lập Thí Nghiệm
-
-| Thuộc tính | Giá trị |
-|---|---|
-| Phương pháp so sánh | BR, CC |
-| Base classifier | LinearSVC (C=1.0, linear kernel) |
-| Cross-validation | 5-fold Iterative Stratified |
-| Random seed | 42 |
-| Số datasets | 10 |
-| Số metrics | 7 (Macro-F1 bắt buộc) |
-| Số biểu đồ | 11 |
-| Ngôn ngữ | Python 3.10+ |
-| Thư viện chính | scikit-learn, matplotlib, seaborn |
-| Format dữ liệu | ARFF (MULAN compatible) |
-| Output format | PNG (300 DPI) + CSV |
-
----
-
-## 11. Ghi Chú Quan Trọng
-
-### 11.1. Khác biệt giữa Training và Prediction trong CC
-- **Training:** Sử dụng **giá trị thực** (ground truth labels) của các nhãn trước → đảm bảo không bị ảnh hưởng bởi lỗi dự đoán
-- **Prediction:** Sử dụng **dự đoán** (predicted labels) của các nhãn trước → phản ánh hoạt động thực tế của mô hình (greedy inference)
-
-### 11.2. Xử Lý Zero Division
-- Khi tính F1 cho nhãn hiếm (rare label), có thể xảy ra TP=FP=FN=0 → F1 = 0 (zero_division=0)
-- Đặc biệt quan trọng với CAL500 (174 labels) và REUTERS-K500 (103 labels)
-
-### 11.3. Reproducibility
-- Cố định `random_state=42` cho:
-  - Base classifier (LinearSVC)
-  - Cross-validation splitter (MultilabelStratifiedKFold)
-- Ghi lại phiên bản thư viện trong `requirements.txt`
-
-### 11.4. Thứ Tự Chuỗi trong CC
-- Paper gốc (Read et al. 2011) sử dụng **default order** (thứ tự tự nhiên của nhãn trong dataset)
-- Trong đặc tả này, chúng ta tuân thủ đúng paper gốc → dùng default order
-- Không sử dụng random order hay heuristic order
-
-### 11.5. Hiệu Năng Tính Toán
-- Datasets lớn (bibtex: 7,395 samples × 1,836 features × 159 labels) có thể mất thời gian đáng kể
-- LinearSVC nhanh hơn nhiều so với SVC(kernel='rbf') → phù hợp cho thí nghiệm quy mô lớn
-- Cân nhắc thêm progress bar (`tqdm`) để theo dõi tiến trình
-
----
-
-## 12. Phân Tích Giảm Chiều Dữ Liệu & Phụ Thuộc Tuyến Tính: Genbase và Medical
-
-> **Mục đích:** Phân tích chi tiết vấn đề **phụ thuộc tuyến tính giữa các features** (linear dependency / multicollinearity) và tiềm năng **giảm chiều dữ liệu** (dimensionality reduction) trong 2 tập dữ liệu **Genbase** và **Medical** — hai tập có tỷ lệ `n_features > n_samples` (high-dimensional).
-
-### 12.1. Tổng Quan So Sánh
-
-| Metric | Genbase | Medical |
+| ID | Decision output dùng để score | Score |
 |---|---|---|
-| **Samples (n)** | 662 | 978 |
-| **Features (d)** | 1,186 | 1,449 |
-| **Labels (q)** | 27 | 45 |
-| **Tỷ lệ n/d** | 0.558 | 0.675 |
-| **Matrix rank** | **104** | **829** |
-| **Rank deficiency (min(n,d) − rank)** | 558 | 149 |
-| **Constant features (1 giá trị duy nhất)** | **1,073** (90.5%) | 0 (0%) |
-| **Binary features (≤2 giá trị)** | 1,185 (99.9%) | 1,449 (100%) |
-| **Duplicate features (thừa, có thể loại bỏ)** | **1,080** | **361** |
-| **Effective dimensionality** | **7** | **811** |
-| **Sparsity (tỷ lệ giá trị = 0)** | 99.7% | 99.1% |
-| **Condition number** | **2.25 × 10¹⁵** | **1.33 × 10³** |
+| `full_macro_f1` | threshold `0.5`, complete | Macro-F1 hiện tại; baseline tương thích |
+| `immediate_instance_f1` | complete F1-BOP | Mean instance-F1 khi phải quyết định ngay |
+| `bop_instance_f1` | partial F1-BOP | Mean generalized F1 utility, đã trừ abstention penalty |
+| `bop_jaccard` | partial Jaccard-BOP | Mean generalized Jaccard utility |
+| `macro_precision` | complete policy cố định | Ablation thiên về FP; kèm predicted-positive rate |
+| `macro_recall` | complete policy cố định | Ablation thiên về FN; kèm predicted-positive rate |
+| `f_beta_0_5` | F-beta BOP | Precision-oriented nhưng tránh objective precision thuần |
+| `f_beta_2` | F-beta BOP | Recall-oriented nhưng tránh objective recall thuần |
 
-> ⚠ **Kết luận tổng quan:** Cả hai tập đều có **vấn đề nghiêm trọng về phụ thuộc tuyến tính** giữa các features, nhưng Genbase **đặc biệt nghiêm trọng** — gần như suy biến (degenerate) với 90.5% features là hằng số và rank thực tế chỉ bằng **8.8%** tổng số features.
+Precision/Recall thuần chỉ dùng ablation vì dễ tạo nghiệm cực đoan. Objective chính để kết luận là Macro-F1, generalized instance-F1, Jaccard hoặc cost-sensitive utility.
 
----
+Không dùng outer test fold để chọn objective, cost, threshold, partition hoặc label importance. Mọi lựa chọn nằm trong outer-train/inner-validation. Cache phải ghi toàn bộ `selection_history`, objective, policy, cost và inner split seed.
 
-### 12.2. Phân Tích Chi Tiết: GENBASE
+### C3. Bổ sung metric mà không làm `metrics.py` phình thêm
 
-#### 12.2.1. Đặc Điểm Dữ Liệu
-- **Domain:** Genomic sequence classification — mỗi feature là một PROSITE protein pattern (mã PS00xxx, PS50xxx)
-- **Kiểu dữ liệu:** Gần như toàn bộ binary (0/1), ngoại trừ 1 feature có 662 giá trị unique (có thể là ID)
-- **Sparsity cực cao:** 99.7% giá trị bằng 0 → đa số protein patterns không xuất hiện trong đa số sequences
+Tách thành:
 
-#### 12.2.2. Vấn Đề Constant Features
-```
-Constant features: 1,073 / 1,186 (90.5%)
-```
-- **1,073 features** chỉ có **1 giá trị duy nhất** (luôn = 0 trên toàn bộ 662 samples)
-- Các features này **hoàn toàn không chứa thông tin** → variance = 0
-- Chúng KHÔNG phân biệt được bất kỳ hai mẫu nào → **vô dụng cho phân loại**
-- Đây là nhóm features trùng lặp lớn nhất: tất cả 1,073 features này tạo thành 1 nhóm duplicate (cùng vector toàn 0)
-
-#### 12.2.3. Duplicate Features
-```
-Total duplicate groups: 6
-Total redundant features (can be removed): 1,080
+```text
+src/evaluation/
+├── metrics.py             # facade tương thích ngược
+├── complete_metrics.py
+├── abstention_metrics.py
+├── group_metrics.py       # decided/rejected, IL/DL, critical labels
+└── calibration_metrics.py
 ```
 
-| Nhóm | Số features trùng | Ví dụ |
-|---|---|---|
-| Group 1 (toàn 0) | **1,073** features | PS00010, PS00011, ..., PS60000 |
-| Group 2 | 5 features | PS00832, PS50152, PS50153, PS50154, PS50804 |
-| Group 3 | 2 features | PS00845, PS50245 |
-| Group 4 | 2 features | PS50005, PS50293 |
-| Group 5 | 2 features | PS50043, PS50069 |
-| Group 6 | 2 features | (2 features còn lại) |
+API dự kiến:
 
-→ Sau khi loại bỏ duplicates, chỉ còn: **1,186 − 1,080 = 106 features** thực sự khác biệt.
-
-#### 12.2.4. SVD & Rank Analysis
-```
-Matrix rank:           104  (so với n_features = 1,186)
-Rank deficiency:       1,082 features là tổ hợp tuyến tính của các features khác
-Null space dimension:  1,082
-```
-
-- **Chỉ 104/1,186 features** (8.8%) là **độc lập tuyến tính** (linearly independent)
-- 1,082 features còn lại có thể **biểu diễn chính xác** bằng tổ hợp tuyến tính của 104 features kia
-- Singular values bằng **chính xác 0** cho 558/662 thành phần → không phải near-zero mà là **exact zero**
-
-#### 12.2.5. Explained Variance (PCA)
-```
-Components cho 90.0% variance:  1 / 1,186  (reduction: 99.9%)
-Components cho 95.0% variance:  1 / 1,186  (reduction: 99.9%)
-Components cho 99.0% variance:  1 / 1,186  (reduction: 99.9%)
-Components cho 99.9% variance:  1 / 1,186  (reduction: 99.9%)
-```
-
-- **1 thành phần chính duy nhất** giải thích >99.9% tổng variance
-- Singular value lớn nhất σ₁ = 9,822.78, trong khi σ₂ = 14.58 → σ₁ chiếm ưu thế tuyệt đối
-- Nguyên nhân: Feature đầu tiên (hoặc một feature đặc biệt) có giá trị rất lớn so với các features binary còn lại
-- **Effective dimensionality** (σ²/Σσ² > 1e-6) = **7** → chỉ cần 7 chiều để giữ gần như toàn bộ thông tin
-
-#### 12.2.6. Condition Number
-```
-Condition number (σ_max / σ_min): 2.25 × 10¹⁵
-log10(condition number): 15.35
-→ EXTREMELY ILL-CONDITIONED
-```
-
-- Condition number > 10¹⁵ → ma trận **gần suy biến hoàn toàn** (near-singular)
-- Khi giải hệ phương trình X·w = y, **sai số số học (floating-point errors)** có thể khuếch đại lên 10¹⁵ lần
-- LinearSVC giải bài toán tối ưu SVM bằng phương pháp dual — condition number cực cao có thể khiến **hội tụ chậm hoặc không ổn định**
-
-#### 12.2.7. X^T X Eigenvalue Analysis
-```
-Max eigenvalue:          96,486,951.77
-Min eigenvalue:          ≈ 0 (−5.55 × 10⁻¹⁴, noise số học)
-Near-zero eigenvalues:   1,082 / 1,186
-```
-- 1,082 eigenvalues ≈ 0 → **1,082 hướng trong feature space không có variance** → tương ứng chính xác với null space dimension
-- Ma trận Gram X^T X gần suy biến → nghịch đảo (X^T X)⁻¹ **không tồn tại** (cần regularization)
-
----
-
-### 12.3. Phân Tích Chi Tiết: MEDICAL
-
-#### 12.3.1. Đặc Điểm Dữ Liệu
-- **Domain:** Medical clinical text categorization — mỗi feature là một từ (word/token) trích xuất từ văn bản y tế
-- **Kiểu dữ liệu:** 100% binary (0/1) — bag-of-words representation (term presence/absence)
-- **Sparsity cao:** 99.1% giá trị bằng 0 → đa số từ không xuất hiện trong đa số tài liệu (typical cho text data)
-- **Không có constant features:** Mọi feature đều xuất hiện ít nhất 1 lần trong dataset
-
-#### 12.3.2. Duplicate Features
-```
-Total duplicate groups: 159
-Total redundant features (can be removed): 361
-```
-
-| Nhóm | Số features | Ví dụ features |
-|---|---|---|
-| Group 1 | 4 | 0, based, consultation, nephrology |
-| Group 2 | 7 | 00, afternoon, catheterized, cystourethrograms, exams, jet, refill |
-| Group 3 | 8 | 04, bactrim, basis, daily, failure, grown, intrinsically, spring |
-| Group 4 | 4 | 0;, flattening, l=10, r=10 |
-| Group 5 | 5 | 0cm, foster, l10, parents, r9 |
-| ... | ... | (tổng cộng 159 nhóm) |
-
-→ 361 features **trùng lặp hoàn toàn** với features khác (cùng vector binary) → có thể loại bỏ mà không mất thông tin
-
-**Giải thích ngữ nghĩa:** Các từ trong cùng nhóm duplicate luôn **đồng xuất hiện** (co-occur) trong cùng các tài liệu. Ví dụ: "bactrim", "daily", "basis" luôn xuất hiện cùng nhau → nhiều khả năng chúng đến từ cùng một cụm từ lâm sàng cố định (fixed clinical phrase).
-
-#### 12.3.3. Feature Correlation Analysis
-```
-Feature pairs with |corr| > 0.99:  858 cặp
-Feature pairs with |corr| > 0.95:  860 cặp
-Feature pairs with |corr| > 0.90:  866 cặp
-Feature pairs with |corr| > 0.80:  892 cặp
-```
-
-Top 10 cặp features tương quan cao nhất (corr = 1.000000):
-
-| # | Feature A | Feature B | Correlation |
-|---|---|---|---|
-| 1 | spinal | variable | 1.000 |
-| 2 | crowding | tube | 1.000 |
-| 3 | crowding | web | 1.000 |
-| 4 | acquired | paratracheal | 1.000 |
-| 5 | phone | repeat | 1.000 |
-| 6 | real | unclear | 1.000 |
-| 7 | real | visible | 1.000 |
-| 8 | palatine | tracheitis | 1.000 |
-| 9 | sixteen | wrestling | 1.000 |
-| 10 | 28 | kilograms | 1.000 |
-
-→ 858 cặp có tương quan **gần như hoàn hảo** → multicollinearity nghiêm trọng trong không gian features
-
-#### 12.3.4. SVD & Rank Analysis
-```
-Matrix rank:           829  (so với n_features = 1,449)
-Rank deficiency:       149 singular values = 0
-Null space dimension:  620
-```
-
-- **829/1,449 features** (57.2%) là **độc lập tuyến tính** — tốt hơn nhiều so với Genbase
-- Tuy nhiên, vẫn có **620 features** là tổ hợp tuyến tính của các features khác
-- Rank deficiency 149 (so với theoretical max = min(978, 1449) = 978) → **149 singular values = exact zero**
-
-#### 12.3.5. Explained Variance (PCA)
-```
-Components cho 90.0% variance:  231 / 1,449  (reduction: 84.1%)
-Components cho 95.0% variance:  332 / 1,449  (reduction: 77.1%)
-Components cho 99.0% variance:  537 / 1,449  (reduction: 62.9%)
-Components cho 99.9% variance:  702 / 1,449  (reduction: 51.6%)
-```
-
-- Variance phân bố **đều hơn nhiều** so với Genbase — không có 1 thành phần nào chiếm ưu thế
-- Cần **231 thành phần** để giữ 90% variance (vs 1 ở Genbase)
-- **Effective dimensionality** = 811 → không gian thông tin thực sự phong phú hơn
-
-#### 12.3.6. Condition Number
-```
-Condition number (σ_max / σ_min): 1.33 × 10³
-log10(condition number): 3.12
-→ MODERATELY CONDITIONED
-```
-
-- Condition number ≈ 10³ → **chấp nhận được** cho phần lớn các thuật toán tối ưu
-- LinearSVC/LogisticRegression sẽ hội tụ **ổn định hơn nhiều** so với Genbase
-- Tuy nhiên vẫn cần regularization do n_features > n_samples
-
-#### 12.3.7. X^T X Eigenvalue Analysis
-```
-Max eigenvalue:          1,733.11
-Min eigenvalue:          ≈ 0 (−2.22 × 10⁻¹³, noise số học)
-Near-zero eigenvalues:   620 / 1,449
-```
-- Eigenvalue lớn nhất chỉ ~1,733 (vs ~96.5 triệu ở Genbase) → dữ liệu **cân bằng hơn** về scale
-- 620 eigenvalues ≈ 0 → 620 hướng phụ thuộc tuyến tính, nhưng ít nghiêm trọng hơn Genbase
-
----
-
-### 12.4. Tác Động Đến Mô Hình Linear (LinearSVC & Logistic Regression)
-
-#### 12.4.1. Vấn Đề Chung: n_features > n_samples (High-dimensional)
-
-Cả hai tập đều có **n_features > n_samples**:
-
-| Dataset | n_features | n_samples | Tỷ lệ d/n |
-|---|---|---|---|
-| Genbase | 1,186 | 662 | 1.79 |
-| Medical | 1,449 | 978 | 1.48 |
-
-Khi `d > n`, hệ phương trình `X·w = y` là **underdetermined** (vô số nghiệm):
-- Tồn tại **vô số vector trọng số w** cho cùng kết quả phân loại trên tập huấn luyện
-- Mô hình phải dựa hoàn toàn vào **regularization** (tham số C) để chọn nghiệm ổn định
-- Null space dimension = d − rank(X) → bất kỳ vector w' nào trong null space đều thỏa X·w' = 0
-
-#### 12.4.2. Tác Động Cụ Thể Đến LinearSVC
-
-LinearSVC giải bài toán tối ưu:
-$$\min_{w,b} \frac{1}{2}\|w\|^2 + C \sum_{i=1}^{n} \max(0, 1 - y_i(w^T x_i + b))$$
-
-- **Genbase:** Null space dimension = 1,082 → SVM tìm hyperplane phân tách trong không gian 104 chiều hiệu quả, nhưng trọng số w ∈ ℝ¹¹⁸⁶ **không duy nhất**. Regularization ‖w‖² giúp chọn w có norm nhỏ nhất, nhưng sự suy biến gần hoàn toàn (condition number = 10¹⁵) có thể gây **bất ổn số học**.
-- **Medical:** Null space dimension = 620 → ít nghiêm trọng hơn, condition number = 10³ → hội tụ ổn định hơn.
-
-#### 12.4.3. Tác Động Cụ Thể Đến Logistic Regression
-
-Logistic Regression giải:
-$$\min_{w,b} \frac{1}{2C}\|w\|^2 + \sum_{i=1}^{n} \log(1 + e^{-y_i(w^T x_i + b)})$$
-
-- **Ma trận Hessian** (∇²L) phụ thuộc vào X^T · diag(π(1−π)) · X → khi X có rank deficiency, Hessian **singular** → gradient descent/Newton method có thể **dao động** hoặc hội tụ chậm
-- Regularization term (1/2C)‖w‖² **đảm bảo Hessian positive definite** → vẫn hội tụ, nhưng nghiệm phụ thuộc mạnh vào C
-
-#### 12.4.4. Vai Trò Của MaxAbsScaler
-
-Pipeline hiện tại sử dụng `MaxAbsScaler`:
 ```python
-scaler = MaxAbsScaler()
-X_train = scaler.fit_transform(X[train_idx])
-X_test = scaler.transform(X[test_idx])
+compute_complete_metrics(y_true, y_full)
+compute_abstention_metrics(y_true, y_partial, y_full, cost, penalty)
+compute_group_metrics(y_true, y_full, y_partial, label_groups)
+compute_per_label_metrics(y_true, y_full, y_partial)
+compute_calibration_metrics(y_true, y_proba)
 ```
 
-- MaxAbsScaler chia mỗi feature cho |max| → scale về [-1, 1]
-- Với binary data (0/1), giá trị max = 1 → **không thay đổi gì** cho đa số features
-- **KHÔNG giải quyết** vấn đề phụ thuộc tuyến tính — chỉ thay đổi scale, không thay đổi rank
+Thay đổi bắt buộc:
 
----
+- thêm `Hamming Accuracy`, `Instance Jaccard`, `Macro Precision`, `Macro Recall`;
+- đổi canonical name `Example-F1` thành `Instance-F1`, giữ alias ở lớp facade;
+- thêm optimistic/oracle metrics và triage metrics ở mục 4;
+- bỏ `UNPERSISTED_METRICS = {"Macro Precision", "Macro Recall"}`;
+- không lưu hai alias thành hai cột trong bảng mới;
+- validate shape, giá trị `{0,1}`/`{0,-1,1}`, empty-set convention và `NaN` convention thống nhất.
 
-### 12.5. Tiềm Năng Giảm Chiều & Khuyến Nghị
+### C4. Đầy đủ baseline và công bằng hyperparameter
 
-#### 12.5.1. Bảng Tóm Tắt Tiềm Năng Giảm Chiều
+Tạo một registry duy nhất, ví dụ `src/experiments/model_registry.py`, và cấu hình `configs/experiment.json`. Không để BR/CC tự định nghĩa hai bản `_get_base_estimator` có thể lệch nhau.
 
-| Phương pháp | Genbase (1,186 → ?) | Medical (1,449 → ?) | Ghi chú |
-|---|---|---|---|
-| **Loại constant features** | 1,186 → 113 (−90.5%) | 1,449 → 1,449 (−0%) | Chỉ hiệu quả với Genbase |
-| **Loại duplicate features** | 1,186 → 106 (−91.1%) | 1,449 → 1,088 (−24.9%) | An toàn, không mất thông tin |
-| **PCA 95% variance** | 1,186 → 1 (−99.9%) | 1,449 → 332 (−77.1%) | Mất interpretability |
-| **PCA 99% variance** | 1,186 → 1 (−99.9%) | 1,449 → 537 (−62.9%) | Mất interpretability |
-| **Full rank (loại phụ thuộc tuyến tính)** | 1,186 → 104 (−91.2%) | 1,449 → 829 (−42.8%) | Tối ưu toán học |
+Ma trận baseline tối thiểu:
 
-#### 12.5.2. Khuyến Nghị
+| Model family | Linear SVM | Logistic Regression | MLP |
+|---|---:|---:|---:|
+| BR complete | Có | Có | Có |
+| CC complete | Có | Có | Có |
+| MLC-PA | Có, phải calibration | Có | Có |
+| GSI-MLC-PA | Có, phải calibration | Có | Có |
 
-1. **Bước tiền xử lý an toàn (không mất thông tin):**
-   - Loại bỏ **constant features** (variance = 0): Giảm mạnh cho Genbase (1,186 → 113)
-   - Loại bỏ **duplicate features** (giữ lại 1 đại diện mỗi nhóm): Giảm thêm cho cả hai tập
+Canonical model ID phải chứa đủ family/base/policy, ví dụ:
 
-2. **Hiện trạng pipeline:**
-   - Pipeline hiện tại **KHÔNG thực hiện** loại constant/duplicate features
-   - LinearSVC vẫn hoạt động nhờ regularization, nhưng **lãng phí tính toán** trên 1,073 features toàn-0 (Genbase)
-   - Kết quả phân loại **không bị ảnh hưởng nghiêm trọng** vì regularization L2 tự động giảm trọng số cho features dư thừa
+```text
+BR__logistic
+CC__logistic
+MLC_PA__logistic__hamming
+GSI_MLC_PA__logistic__hamming
+GSI_MLC_PA__logistic__f1
+```
 
-3. **Nếu muốn cải thiện:**
-   - Thêm bước `VarianceThreshold(threshold=0.0)` trước khi huấn luyện → loại constant features
-   - Sử dụng `sklearn.feature_selection.VarianceThreshold` hoặc tự viết duplicate removal
-   - Cân nhắc `TruncatedSVD` cho giảm chiều có kiểm soát (phù hợp với sparse data)
+Quy tắc công bằng:
 
-> **Lưu ý quan trọng:** Trong đặc tả thí nghiệm hiện tại, chúng ta **KHÔNG thực hiện** giảm chiều hay loại features — nhằm tuân thủ setup gốc trong paper benchmark. Phân tích này nhằm mục đích **giải thích** tại sao một số metrics có thể bất thường và hiểu sâu hơn về bản chất dữ liệu.
+- cùng outer folds, scaler, seed và dataset version;
+- cùng base-learner factory và mọi hyperparameter có cùng ý nghĩa;
+- cùng tuning budget; nếu không tuning thì cố định cấu hình cho tất cả family;
+- cùng probability calibration và threshold/decision policy khi so kiến trúc;
+- CC được phép có thêm previous-label features vì đó là định nghĩa mô hình, nhưng không được có training budget lớn hơn mà không ghi rõ;
+- MLC-PA và BR cùng base phải có `Y_full` giống nhau; đây là invariant để phát hiện cấu hình lệch;
+- mọi khác biệt bất khả kháng phải xuất trong `run_manifest.json`.
+
+MLP benchmark phải **fail fast** nếu backend PyTorch không dùng được; không được im lặng fallback sang `sklearn.MLPClassifier` vì cấu trúc `(64,)`, epoch và optimizer sẽ thay đổi. Nếu cần CPU backend, đặt ID/config riêng và không trộn kết quả.
+
+### C5. Calibration xác suất
+
+Abstention phụ thuộc trực tiếp vào độ tin cậy của `p(y_k=1|x)`, vì vậy sigmoid thủ công trên LinearSVC margin không đủ để gọi là calibrated probability.
+
+- Thêm `ProbabilityAdapter` module.
+- Logistic và MLP dùng native probability nhưng vẫn phải đánh giá calibration.
+- LinearSVC dùng sigmoid/Platt calibration chỉ trên outer-train, có inner CV; tuyệt đối không fit calibrator trên outer test. `CalibratedClassifierCV` hỗ trợ CV calibration ([tài liệu scikit-learn](https://scikit-learn.org/stable/modules/generated/sklearn.calibration.CalibratedClassifierCV.html)).
+- Với nhãn quá hiếm không đủ mẫu cho calibration folds, giảm số fold theo support hoặc dùng constant classifier; ghi fallback theo từng nhãn.
+- Xuất Macro Brier score, log loss và ECE kèm reliability plot. Brier vừa phản ánh calibration vừa phản ánh discrimination nên không được diễn giải như calibration-only.
+- Tách `svm_raw` legacy baseline và `svm_calibrated` probability baseline nếu cần giữ kết quả cũ.
+
+### C6. Ablation chứng minh lợi ích IL/DL
+
+Trên cùng outer fold, base learner và decision policy, chạy:
+
+1. `all_il`: mọi nhãn dùng direct/BR probability;
+2. `all_dl`: mọi nhãn dùng conditional-chain probability;
+3. `learned`: partition do GSI chọn;
+4. `random_matched`: partition ngẫu nhiên có cùng số IL với learned, lặp tối thiểu 30 seed;
+5. `learned_no_correlation_order`: learned partition nhưng natural/fixed order, để tách lợi ích partition khỏi lợi ích reorder.
+
+Để ablation hợp lệ, các biến thể phải dùng cùng final order khi câu hỏi chỉ là partition; hoặc phải tách thêm factor `order`. Báo cáo:
+
+- delta learned so với `all_il`, `all_dl`, và mean/CI của `random_matched`;
+- IL/DL group metrics;
+- tỷ lệ nhãn vào IL/DL;
+- Jaccard similarity của tập IL giữa các folds để đo stability;
+- thời gian selection và inference.
+
+Chỉ được kết luận “chia IL/DL giúp tăng hiệu quả” khi learned vượt ít nhất hai endpoint `all_il` và `all_dl` trên metric mục tiêu, không đánh đổi coverage/utility quá ngưỡng đã định và có kết quả nhất quán qua datasets/folds.
+
+### C7. Đánh giá lợi ích ứng dụng thực tế
+
+Tạo `src/evaluation/deployment.py` để tính ở từng operating point:
+
+- immediate complete quality;
+- selective quality ở coverage cố định;
+- optimistic human-assisted upper bound;
+- review load theo label-position (`AABS`) và theo case (`ABS`);
+- error capture/review efficiency;
+- critical-label quality nếu có policy config;
+- utility với FP cost, FN cost và review cost;
+- sensitivity analysis reviewer accuracy `h in {0.80, 0.90, 0.95, 1.00}` nếu có đủ giả định domain.
+
+Operating point phải được chọn trên inner validation theo một trong ba rule đã khai báo trước:
+
+```text
+min Generalized Loss
+max utility subject to Coverage >= gamma
+max Coverage subject to selective risk <= epsilon
+```
+
+Không chọn cost tốt nhất trên test rồi báo lại cùng test. Với grid cost hiện tại, thêm `c=0.5` làm no-abstention sanity point.
+
+### C8. Output schema, cache và biểu đồ
+
+Nâng cache lên schema v3 hoặc dùng output directory mới `results_pa_v3/`; không ghi đè kết quả v2. Cache key/hash phải gồm:
+
+```text
+dataset + fold + seed + scaler
+model family + base learner + all hyperparameters + backend
+calibration method
+partition mode + selection objective + chain order
+decision policy + beta + penalty + cost grid
+metric version + label-policy hash
+```
+
+Output tối thiểu:
+
+```text
+results_pa_v3/
+├── run_manifest.json
+├── tables/
+│   ├── summary_complete.csv
+│   ├── summary_selective.csv
+│   ├── per_label_metrics.csv
+│   ├── il_dl_ablation.csv
+│   ├── objective_ablation.csv
+│   ├── calibration.csv
+│   └── raw_folds.json
+└── figures/
+    ├── risk_coverage.png
+    ├── optimistic_gain_vs_review_load.png
+    ├── error_capture_vs_review_load.png
+    ├── il_dl_ablation.png
+    ├── objective_comparison.png
+    ├── per_label_critical_metrics.png
+    └── calibration_reliability.png
+```
+
+Trong CSV, lưu số thực `[0,1]`; chỉ đổi sang phần trăm ở plot/report. Hamming Accuracy là cột hiển thị chính; vẫn lưu Hamming Loss nội bộ để audit `accuracy + loss = 1` trên complete prediction.
+
+### C9. Kiểm thử bắt buộc
+
+Bổ sung test nhỏ, deterministic trước khi chạy lại 10 datasets:
+
+1. `Hamming Accuracy == 1 - Hamming Loss` cho complete prediction.
+2. All-abstain: `Coverage=0`, `Selective Hamming Accuracy=NaN`, selective F1 không được thành `1`, oracle completion trùng `Y`, và generalized loss vẫn phản ánh abstention cost. Kiểm riêng rằng optimistic positive-class Macro-F1 tuân theo `zero_division=0` khi một nhãn không có positive support.
+3. Oracle completion chỉ thay đúng vị trí `-1`.
+4. Empty true/predicted label set cho Instance-F1 và Jaccard bằng `1`.
+5. Per-label Macro-F1 khớp `sklearn.f1_score(..., average="macro", zero_division=0)`.
+6. Group IL/DL rỗng trả `NaN` cùng count bằng `0`.
+7. F1/Jaccard BOP khớp exhaustive search trên mọi action `{0,-1,1}^K` với synthetic `K <= 6`.
+8. BOP F1 có ít nhất một counterexample mà output khác threshold `0.5`, chứng minh pipeline thật sự gọi đúng policy.
+9. Calibration và IL/DL selector không quan sát outer test bằng spy estimator/split indices.
+10. BR và MLC-PA cùng base có probability/full-prediction bằng nhau.
+11. Registry sinh đúng đủ `4 families x 3 base learners` và config tương ứng bằng nhau.
+12. Cache v2 không được dùng như v3; cache v3 đổi khi objective/policy/config đổi.
+13. Không silent MLP fallback.
+14. Mọi plot/table xử lý được `NaN`, nhãn/group rỗng và model chưa chạy đủ.
+
+Sau unit tests, chạy smoke test trên `emotions`, `2 folds`, một base learner; sau đó mới chạy full benchmark.
+
+## 6. Phần cần sửa trong báo cáo
+
+### R1. Tạo file tóm tắt cuộc họp
+
+Tạo `meeting_summary.md`, không dùng `tmp.md` làm tài liệu chính thức. Nội dung gồm:
+
+- ngày/bối cảnh cuộc họp;
+- vấn đề giảng viên chỉ ra;
+- quyết định đã chốt;
+- điểm còn phải xác nhận: “instance-based” hay “instant-based”, ý nghĩa “cả hai tập”, danh sách nhãn quan trọng và review cost;
+- backlog chia Code/Report, người phụ trách, trạng thái và bằng chứng hoàn thành.
+
+### R2. Sửa phần phương pháp và BOP
+
+Phải mô tả kiến trúc hai tầng:
+
+```text
+X -> probability estimator (BR/CC/GSI) -> decision policy -> {0, -1, 1}
+```
+
+Nêu rõ:
+
+- training/ước lượng xác suất độc lập với rejection cost;
+- Hamming-BOP, F1-BOP và Jaccard-BOP là các decision policy khác nhau;
+- F1/Jaccard BOP dùng dynamic programming dưới giả định conditional label independence;
+- mean-field nhiều parent trong GSI là xấp xỉ, không được gọi là exact marginalization;
+- calibration là điều kiện quan trọng khi threshold xác suất quyết định abstention.
+
+### R3. Sửa phần MDP và biên hóa xác suất
+
+Thêm một tiểu mục “MDP có cần thiết không?” với kết luận:
+
+- BOP hiện tại là one-step Bayes decision, không phải MDP.
+- Dynamic programming của Algorithm 2/3 chỉ là kỹ thuật tính expected F1/Jaccard.
+- Probability marginalization của classifier chain dựa trên chain rule; exact inference, mean-field và Monte Carlo là ba mức so sánh phù hợp.
+- MDP/POMDP chỉ là hướng mở rộng khi có quan sát tuần tự hoặc human feedback làm thay đổi state.
+
+Không được viết rằng mô hình hiện tại “dùng MDP”. Nếu chưa chạy research spike ở mục 7, ghi đây là hướng nghiên cứu tương lai.
+
+### R4. Viết lại phần metrics: công thức, ý nghĩa và lý do dùng
+
+Mỗi metric phải có: công thức, đơn vị/mẫu số, hướng tốt, câu hỏi nó trả lời và hạn chế.
+
+Các diễn giải bắt buộc:
+
+- Macro-F1 cho mỗi nhãn trọng số ngang nhau, phù hợp mất cân bằng nhãn nhưng có variance cao ở nhãn rất hiếm.
+- Micro-F1 phản ánh hiệu suất tổng thể nhưng bị nhãn phổ biến chi phối.
+- Hamming Accuracy dễ hiểu nhưng có thể cao do true negatives; luôn đọc cùng F1/Jaccard.
+- Subset Accuracy đánh giá toàn vector, rất nghiêm ngặt khi `K` lớn.
+- Instance-F1/Jaccard đánh giá chất lượng tập nhãn của từng case, phù hợp yêu cầu quyết định ngay.
+- Generalized Loss đo đúng trade-off lỗi–abstention của decision policy.
+- Coverage/ABS/AABS đo workload; selective F1 nếu thiếu coverage có thể gây hiểu nhầm.
+- Optimistic metrics là upper bound giả định reviewer đúng 100%, không phải khả năng tự động.
+- Per-label/critical metrics trả lời liệu mô hình đúng các nhãn quan trọng hay không.
+
+Trong phần thân báo cáo dùng `Hamming Accuracy`; Hamming Loss chỉ xuất hiện khi trình bày hàm mục tiêu/lý thuyết hoặc phụ lục đối chiếu.
+
+### R5. Sửa phần Macro-F1 và trình bày “cả hai tập”
+
+Bảng partial-abstention chính ở mỗi dataset/operating point phải có tối thiểu:
+
+| Model | Full Macro-F1 | Decided Macro-F1 | Rejected CF Macro-F1 | Optimistic Macro-F1 | Coverage | ABS | AABS |
+|---|---:|---:|---:|---:|---:|---:|---:|
+
+Thêm bảng IL/DL:
+
+| Model | #IL | #DL | IL Macro-F1 | DL Macro-F1 | IL Coverage | DL Coverage | Partition stability |
+|---|---:|---:|---:|---:|---:|---:|---:|
+
+Không đưa training Macro-F1 vào bảng kết quả chính. Nếu “cả hai tập” thực sự được xác nhận là train/test, training score chỉ để phân tích overfit ở phụ lục; mọi claim vẫn dựa trên outer test.
+
+### R6. Bổ sung baseline và bảng hyperparameter
+
+Báo cáo đầy đủ 12 tổ hợp family/base ở mục C4 hoặc ghi rõ tổ hợp nào không chạy được và lý do. Mỗi bảng so sánh phải nhóm theo base learner; không so GSI-MLP với MLC-PA-Logistic rồi quy chênh lệch cho kiến trúc.
+
+Bảng hyperparameter phải có:
+
+- estimator/backend;
+- preprocessing;
+- architecture/hidden units;
+- optimizer, learning rate, weight decay, epochs/early stopping;
+- SVM `C`, tolerance, calibration method/folds;
+- seed, CV folds, inner validation size;
+- chain order;
+- abstention penalty/cost grid;
+- objective và decision policy.
+
+Nêu rõ tham số nào giống nhau và tham số nào không thể đồng nhất vì bản chất learner khác nhau. “Giống hyperparameter” có nghĩa cùng cấu hình cho **cùng base learner qua các model family**, không phải ép SVM và MLP dùng tham số cùng tên.
+
+### R7. Bổ sung objective/IL-DL ablation
+
+Trình bày hai ablation riêng:
+
+1. **Selection objective:** Macro-F1, immediate instance-F1, partial F1-BOP, Jaccard-BOP, precision-oriented F0.5 và recall-oriented F2.
+2. **Partition:** all-IL, all-DL, learned, random-matched và learned không reorder.
+
+Với mỗi objective, báo cáo không chỉ objective đó mà toàn bộ guardrail metrics. Ví dụ objective recall phải kèm precision, predicted-positive rate, Hamming Accuracy, coverage và cost.
+
+### R8. Chứng minh giá trị thực tế bằng metric, không chỉ bằng nhận định
+
+Phần thảo luận ứng dụng phải trả lời:
+
+- Ở coverage/review budget thực tế, error rate trên phần tự động giảm bao nhiêu?
+- Bao nhiêu phần trăm tổng lỗi được đưa sang tập review?
+- Bao nhiêu case và label-position phải review?
+- Nhãn critical có recall/F1/error-capture tốt hơn không?
+- Optimistic gain có đủ lớn so với review cost không?
+- Nếu reviewer không hoàn hảo, kết luận còn giữ ở accuracy nào?
+- Lợi ích đến từ IL/DL partition, chain order, base learner hay chỉ do abstention?
+
+Ngôn ngữ claim:
+
+- Nếu chỉ có optimistic 100%: “tiềm năng/lợi ích tối đa giả định”.
+- Nếu có cost và reviewer sensitivity: “lợi ích kỳ vọng trong kịch bản đã giả định”.
+- Chỉ dùng “có thể áp dụng thực tế” khi có domain label priority, review budget/cost và operating constraint cụ thể.
+
+### R9. Thống kê và cách kết luận
+
+- Báo cáo mean ± std trên outer folds cho từng dataset.
+- So model bằng paired dataset-level results; không xem mọi fold của mọi dataset là mẫu độc lập.
+- Khi so nhiều model: Friedman test trên dataset ranks, sau đó post-hoc pairwise Wilcoxon với Holm correction; báo effect size và confidence interval, không chỉ p-value.
+- Tách kết quả “primary” đã đăng ký trước khỏi exploratory ablation.
+- Kết luận theo số dataset thắng/thua/hòa và magnitude, không chỉ grand average.
+
+## 7. Research spike MDP/marginalization — P2, có gate
+
+Tạo tài liệu `docs/research/mdp_probability_marginalization.md` trước khi viết code. Tài liệu phải trả lời:
+
+1. State tối thiểu có chứa đủ thông tin Markov không?
+2. Action là predict 0/1, abstain, chọn nhãn tiếp theo hay request review?
+3. Transition nào làm posterior thay đổi, và lấy dữ liệu transition ở đâu?
+4. Reward có FP/FN/review/time cost thật hay chỉ là metric tùy ý?
+5. Có feedback giữa episode không, hay chỉ có một batch prediction?
+6. MDP cải thiện gì so với F1/Jaccard DP, mean-field, exact-small-K hoặc Monte Carlo ở cùng budget?
+
+Chỉ tạo `src/sequential/mdp_policy.py` khi cả bốn điều kiện sau đúng:
+
+- có quy trình tuần tự và feedback làm thay đổi state;
+- xác định được transition/reward từ domain;
+- có simulator hoặc log tương tác để train/evaluate không dùng test leakage;
+- pilot trên synthetic/small dataset vượt decision-policy tĩnh ở cùng review budget.
+
+Nếu thiếu một điều kiện, kết luận research spike là “MDP chưa phù hợp với phạm vi hiện tại”; giữ ở future work. Đây không phải thất bại mà là kết luận mô hình hóa cần thiết để tránh thêm độ phức tạp không có bằng chứng.
+
+Song song, có thể tạo module ablation nhẹ hơn `src/inference/marginalization.py`:
+
+```text
+mean_field        # default hiện tại
+exact_small_k     # oracle kiểm tra đúng cho số parent nhỏ
+monte_carlo       # xấp xỉ scalable, seed và sample budget cố định
+```
+
+Module này chỉ thay strategy inference qua injection point, không sửa cách train BR/CC/GSI.
+
+## 8. Thứ tự triển khai đề xuất
+
+### P0 — bắt buộc trước khi chạy lại benchmark
+
+1. Tạo `meeting_summary.md`.
+2. Khóa định nghĩa/tên metric; thêm Hamming Accuracy, Jaccard, Macro Precision/Recall và per-label metrics.
+3. Sửa cache schema và output naming.
+4. Tạo shared base-learner registry; loại silent MLP fallback.
+5. Chạy đủ matched baselines và sửa mismatch MLC-PA Logistic/GSI MLP.
+6. Bổ sung calibration hợp lệ cho SVM.
+
+### P1 — trả lời trực tiếp các câu hỏi nghiên cứu của cuộc họp
+
+1. Optimistic/oracle, decided/rejected, error-capture và critical-label metrics.
+2. F1/Jaccard BOP module.
+3. BOP objective trong bước chia IL/DL.
+4. IL/DL và objective ablations.
+5. Risk–coverage, operating-point selection và deployment utility.
+6. Viết lại phần phương pháp, metric, thực nghiệm và thảo luận báo cáo.
+
+### P2 — hướng nghiên cứu mở rộng
+
+1. Exact/mean-field/Monte-Carlo marginalization ablation.
+2. Reviewer accuracy sensitivity nếu có giả định domain.
+3. MDP research spike và chỉ triển khai khi qua gate mục 7.
+
+## 9. Definition of Done
+
+Đợt cải tiến hoàn thành khi:
+
+- [ ] Tất cả unit/smoke tests ở C9 pass.
+- [ ] Kết quả cũ không bị ghi đè; mọi run có manifest và config hash.
+- [ ] Có đủ baseline theo base learner hoặc có log lý do thiếu.
+- [ ] Không có so sánh family bị confound bởi base learner/hyperparameter/calibration khác nhau.
+- [ ] Complete, selective, rejected và optimistic metrics có tên/mẫu số tách biệt.
+- [ ] Hamming Accuracy là metric hiển thị; generalized Hamming Loss vẫn được giữ cho BOP/audit.
+- [ ] Có Jaccard, Instance-F1, Macro Precision/Recall và per-label table.
+- [ ] Có error-capture/review-load và critical-label analysis hoặc ghi `N/A` vì thiếu domain config.
+- [ ] Có ablation chứng minh hoặc bác bỏ lợi ích IL/DL một cách độc lập với order/base/policy.
+- [ ] Có objective ablation, trong đó GSI thực sự gọi BOP instance-F1/Jaccard trên inner validation.
+- [ ] Không chọn cost/objective/threshold trên outer test.
+- [ ] Báo cáo mô tả đúng giới hạn của optimistic metrics và không suy diễn selective Macro-F1 thành hiệu quả thực tế.
+- [ ] `meeting_summary.md` tồn tại và các điểm chưa xác nhận đã được cập nhật.
+- [ ] MDP được ghi đúng là future/research direction, trừ khi đã qua gate và có kết quả pilot.
+
+## 10. Tài liệu tham khảo chính
+
+1. Nguyen, V.-L. và Hüllermeier, E. *Multilabel Classification with Partial Abstention: Bayes-Optimal Prediction under Label Independence*. JAIR 72 (2021), 613–665. [Bản local](TaiLieuThamKhao/sminton,+12610-Article+(PDF)-28712-1-11-20211029.pdf), [DOI](https://doi.org/10.1613/jair.1.12610).
+2. Read, J., Pfahringer, B., Holmes, G. và Frank, E. *Classifier Chains for Multi-label Classification*. Machine Learning 85 (2011). [Bản local](TaiLieuThamKhao/s10994-011-5256-5.pdf), [DOI](https://doi.org/10.1007/s10994-011-5256-5).
+3. Waegeman, W. et al. *On the Bayes-Optimality of F-Measure Maximizers*. JMLR 15 (2014). [JMLR](https://www.jmlr.org/papers/v15/waegeman14a.html).
+4. Dembczyński, K. et al. *Optimizing the F-Measure in Multi-Label Classification*. ICML 2013. [PMLR](https://proceedings.mlr.press/v28/dembczynski13.html).
+5. Geifman, Y. và El-Yaniv, R. *Selective Classification for Deep Neural Networks*. NeurIPS 2017. [Proceedings](https://proceedings.neurips.cc/paper/2017/hash/4a8423d5e91fda00bb7e46540e2b0cf1-Abstract.html).
+6. Nam, J. et al. *Learning Context-dependent Label Permutations for Multi-label Classification*. ICML 2019. [PMLR](https://proceedings.mlr.press/v97/nam19a.html).
+7. Read, J., Martino, L. và Luengo, D. *Efficient Monte Carlo Methods for Multi-Dimensional Learning with Classifier Chains*. [arXiv](https://arxiv.org/abs/1211.2190).
+8. Opitz, J. và Burst, S. *Macro F1 and Macro F1*. [arXiv](https://arxiv.org/abs/1911.03347).
+9. scikit-learn. *CalibratedClassifierCV*. [Official documentation](https://scikit-learn.org/stable/modules/generated/sklearn.calibration.CalibratedClassifierCV.html).
