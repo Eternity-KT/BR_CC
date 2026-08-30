@@ -601,33 +601,397 @@ monte_carlo       # xấp xỉ scalable, seed và sample budget cố định
 
 Module này chỉ thay strategy inference qua injection point, không sửa cách train BR/CC/GSI.
 
-## 8. Thứ tự triển khai đề xuất
+## 8. Kế hoạch thực hiện theo quota 5 giờ cho mỗi phase
 
-### P0 — bắt buộc trước khi chạy lại benchmark
+### 8.1. Quy ước quota
 
-1. Tạo `meeting_summary.md`.
-2. Khóa định nghĩa/tên metric; thêm Hamming Accuracy, Jaccard, Macro Precision/Recall và per-label metrics.
-3. Sửa cache schema và output naming.
-4. Tạo shared base-learner registry; loại silent MLP fallback.
-5. Chạy đủ matched baselines và sửa mismatch MLC-PA Logistic/GSI MLP.
-6. Bổ sung calibration hợp lệ cho SVM.
+- **Mỗi phase là một phiên độc lập, tối đa 5 giờ của model.** Toàn bộ đặc tả cần nhiều phase; không ép hoàn thành trong một quota.
+- Mỗi phase chỉ phân bổ khoảng `3h50` cho đọc handoff và implementation. `1h10` cuối bắt buộc dành cho test, sửa lỗi, rà diff và viết handoff; đây là phần dự phòng để phase không vượt quota.
+- Phase sau chỉ bắt đầu khi phase trước đạt exit criteria hoặc handoff ghi rõ phần chưa đạt và cách tiếp tục.
+- Không gộp một hạng mục đang dở sang phase mới mà không cập nhật phạm vi phase mới. Nếu task vượt quota, dừng ở checkpoint an toàn và chia nhỏ tiếp.
+- Thời gian GPU chạy dài được quản lý bằng cache/checkpoint, nhưng không được giả định một model-dataset pair sẽ hoàn tất ngoài quota mà không có khả năng resume.
 
-### P1 — trả lời trực tiếp các câu hỏi nghiên cứu của cuộc họp
+### 8.2. Mẫu vận hành chung của một phase
 
-1. Optimistic/oracle, decided/rejected, error-capture và critical-label metrics.
-2. F1/Jaccard BOP module.
-3. BOP objective trong bước chia IL/DL.
-4. IL/DL và objective ablations.
-5. Risk–coverage, operating-point selection và deployment utility.
-6. Viết lại phần phương pháp, metric, thực nghiệm và thảo luận báo cáo.
+| Khoảng thời gian | Việc bắt buộc |
+|---|---|
+| `00:00–00:20` | Đọc handoff phase trước, kiểm tra `git status`, chạy test nền liên quan và khóa phạm vi file |
+| `00:20–03:50` | Thực hiện mục tiêu chính; tạo checkpoint nhỏ sau từng hạng mục hoàn chỉnh |
+| `03:50–04:30` | Unit/integration/smoke tests và sửa lỗi blocker/high |
+| `04:30–05:00` | Buffer, `git diff --check`, kiểm tra thay đổi ngoài phạm vi và viết handoff phase sau |
 
-### P2 — hướng nghiên cứu mở rộng
+Tổng mỗi phase: `20 + 210 + 40 + 30 = 300 phút`.
 
-1. Exact/mean-field/Monte-Carlo marginalization ablation.
-2. Reviewer accuracy sensitivity nếu có giả định domain.
-3. MDP research spike và chỉ triển khai khi qua gate mục 7.
+Mỗi phase tạo `docs/progress/phase_<ID>.md` gồm:
+
+```text
+Objective đã hoàn thành
+Files đã sửa/tạo
+Quyết định kỹ thuật và giả định
+Test/lệnh đã chạy + kết quả
+Output/cache được tạo
+Việc chưa hoàn thành hoặc blocker
+Git status và thay đổi ngoài phạm vi
+Entry point/lệnh đầu tiên cho phase tiếp theo
+```
+
+### 8.3. Roadmap các phase, mỗi phase không quá 5 giờ
+
+#### Phase Q0 — Audit, hợp đồng metric và tài liệu cuộc họp
+
+**Mục tiêu:** khóa nền tảng trước khi sửa production code.
+
+Phạm vi:
+
+1. Chạy test hiện tại, audit source/cache/result schema và ghi baseline.
+2. Tạo `meeting_summary.md` từ `tmp.md`, đánh dấu thuật ngữ cần xác nhận.
+3. Khóa canonical names, công thức, `zero_division`, empty-set và `NaN` conventions ở mục 4.
+4. Tạo skeleton `complete_metrics.py`, `abstention_metrics.py`, `group_metrics.py`, facade và test fixtures.
+5. Viết test contract trước cho complete, all-abstain, group rỗng và zero support; chưa cần làm chúng pass trong Q0.
+
+Exit criteria:
+
+- baseline test log và audit hiện trạng tồn tại;
+- metric contract không còn tên/công thức mơ hồ;
+- module skeleton import được nhưng chưa thay production output;
+- `meeting_summary.md` và `docs/progress/phase_Q0.md` tồn tại.
+
+#### Phase Q1 — Complete, partial, optimistic và group metrics
+
+**Phụ thuộc:** Q0.
+
+Phạm vi:
+
+1. Cài complete metrics: Macro/Micro-F1, Hamming Accuracy, Instance-F1/Jaccard, Macro Precision/Recall.
+2. Cài selective và optimistic/oracle completion metrics.
+3. Cài decided/rejected error metrics, error capture, IL/DL groups và per-label coverage/support.
+4. Critical-label hook trả `N/A` khi chưa có domain config.
+5. Giữ `Example-F1` alias qua facade nhưng không tạo cột trùng.
+
+Exit criteria:
+
+- metric unit tests pass cho perfect, all-abstain, no-abstain, no-error, group rỗng, zero support và zero denominator;
+- complete metrics khớp scikit-learn ở trường hợp chuẩn;
+- Full/Selective/Rejected/Optimistic APIs có mẫu số và `NaN` convention rõ;
+- chưa thay cache/schema production.
+
+#### Phase Q2 — Pipeline integration, output schema v3 và resumability
+
+**Phụ thuộc:** Q1.
+
+Phạm vi:
+
+1. Nối metric mới vào `_evaluate_model` và summary pipeline.
+2. Nâng cache/output lên schema v3, thêm settings/config hash và migration guard.
+3. Thêm fold-level checkpoint để model-dataset pair có thể dừng/resume giữa quota.
+4. Xuất JSON/CSV cho complete, selective, per-label và group scopes.
+5. Chạy synthetic/tiny integration và interruption/resume test.
+
+Exit criteria:
+
+- tiny run sinh đủ scopes với canonical names;
+- cache v2 không bị ghi đè hoặc đọc nhầm như v3;
+- interruption sau một fold resume mà không chạy lại fold đã hoàn thành;
+- schema/audit tests pass và `docs/progress/phase_Q2.md` ghi migration rule.
+
+#### Phase Q3 — Decision-policy interface và Hamming regression
+
+**Phụ thuộc:** Q2.
+
+Phạm vi:
+
+1. Tạo `src/decision/base.py` và policy registry tối thiểu.
+2. Wrap Hamming SEP/PAR hiện tại vào `HammingBOPPolicy`.
+3. Giữ API `predict`, `predict_from_proba`, `decision_mask` tương thích.
+4. Thêm deterministic tie/threshold boundary tests và config serialization.
+5. Chạy regression trên fixture/cache nhỏ để chứng minh default output không đổi.
+
+Exit criteria:
+
+- mọi Hamming unit/regression test pass;
+- model cũ delegate sang policy module nhưng kết quả bitwise/numerically tương đương;
+- decision policy được ghi trong cache hash/manifest;
+- chưa cài F1/Jaccard trong cùng phase.
+
+#### Phase Q4 — F1-BOP hoàn chỉnh
+
+**Phụ thuộc:** Q3.
+
+Phạm vi:
+
+1. Cài complete/partial `FbetaBOPPolicy`, ưu tiên `beta=1`.
+2. Cài count-distribution dynamic programming và deterministic tie-breaking.
+3. Ghi CLI assumption/metadata và phân biệt dependent-marginal approximation.
+4. Exhaustive validation trên `{0,-1,1}^K`, `K <= 6`.
+5. Thêm counterexample F1-BOP khác threshold `0.5`/Hamming-BOP và benchmark runtime nhỏ.
+
+Exit criteria:
+
+- F1-BOP khớp exhaustive optimum trên toàn bộ synthetic fixtures;
+- complete/no-abstention và partial modes đều pass;
+- dependent marginals được gắn nhãn “BOP dưới xấp xỉ CLI”;
+- chưa nối policy vào GSI selection.
+
+#### Phase Q5 — Jaccard-BOP hoàn chỉnh
+
+**Phụ thuộc:** Q4.
+
+Phạm vi:
+
+1. Cài complete/partial `JaccardBOPPolicy` theo Algorithm 3.
+2. Tái sử dụng hạ tầng count-distribution an toàn từ Q4.
+3. Cài empty-union convention, penalty và deterministic tie-breaking.
+4. Exhaustive validation `K <= 6` và runtime/memory smoke với `K` lớn hơn.
+5. Rà API/config/cache parity với F1/Hamming policies.
+
+Exit criteria:
+
+- Jaccard-BOP khớp exhaustive optimum;
+- không regression Hamming/F1;
+- policy registry tạo và serialize được cả ba objective families;
+- `docs/progress/phase_Q5.md` ghi độ phức tạp và giới hạn CLI.
+
+#### Phase Q6 — Objective injection cho GSI
+
+**Phụ thuộc:** Q5.
+
+Phạm vi:
+
+1. Tạo `src/selection/objectives.py` với `full_macro_f1`, `immediate_instance_f1`, `bop_instance_f1`, `bop_jaccard`, F0.5 và F2.
+2. Inject objective/decision policy vào GSI, giữ default `full_macro_f1` tương thích.
+3. Score mọi candidate trên inner validation; cấm outer-test access.
+4. Cache selection history, objective, policy, beta, cost và seed.
+5. Thêm spy leakage test, default regression fixture và synthetic objective smoke.
+
+Exit criteria:
+
+- spy test chứng minh không có outer-test leakage;
+- default GSI tái tạo kết quả trước thay đổi;
+- thay objective cập nhật score/history đúng policy;
+- selector không chứa công thức decision policy hard-code.
+
+#### Phase Q7 — Partition modes và IL/DL ablation infrastructure
+
+**Phụ thuộc:** Q6.
+
+Phạm vi:
+
+1. Tạo `partition_provider` cho `all_il`, `all_dl`, `learned`, `fixed`, `random_matched`.
+2. Thêm `learned_no_correlation_order` và control final order để tách partition khỏi reorder.
+3. Xuất IL/DL group metrics, partition size, stability và selection/inference time.
+4. Test empty IL/DL, fixed partition, random seed và same-order invariants.
+5. Smoke ablation nhỏ trên `emotions`, 2 folds, một base learner.
+
+Exit criteria:
+
+- năm partition modes chạy qua cùng evaluation API;
+- random-matched tái lập theo seed và giữ đúng số IL;
+- ablation output đủ để so learned với all-IL/all-DL mà không confound order;
+- chưa chạy full 30-seed/10-dataset ablation.
+
+#### Phase Q8 — Shared registry, matched Logistic/MLP baselines
+
+**Phụ thuộc:** Q2; nên thực hiện sau Q7 để registry bao phủ API cuối.
+
+Phạm vi:
+
+1. Tạo shared base-learner factory và `configs/experiment.json`.
+2. Loại hai factory BR/CC bị trùng mà không thay thuật toán fit/predict.
+3. Đăng ký BR, CC, MLC-PA, GSI-MLC-PA cho Logistic và MLP.
+4. Loại silent MLP fallback; backend khác phải có ID/config khác.
+5. Thêm manifest và invariant BR/MLC-PA cùng base có cùng full probabilities/predictions.
+
+Exit criteria:
+
+- 8 model IDs Logistic/MLP được tạo từ một registry;
+- factory/config tests và invariant tests pass;
+- smoke mỗi family trên tiny data pass;
+- hyperparameter/backend xuất đầy đủ vào manifest.
+
+#### Phase Q9 — SVM calibration và hoàn chỉnh 12 baselines
+
+**Phụ thuộc:** Q8.
+
+Phạm vi:
+
+1. Tạo `ProbabilityAdapter` và `svm_calibrated` bằng Platt/sigmoid calibration trong outer-train.
+2. Xử lý rare-label calibration folds/constant labels và ghi fallback.
+3. Thêm Brier, log loss, ECE và reliability data.
+4. Đăng ký bốn family dùng calibrated SVM; giữ `svm_raw` chỉ như legacy full baseline nếu cần.
+5. Spy/split tests bảo đảm calibrator không thấy outer test.
+
+Exit criteria:
+
+- đủ 12 matched family/base IDs;
+- calibration leakage tests pass;
+- rare-label fallback deterministic và được ghi manifest;
+- smoke SVM family pass trên dataset nhỏ.
+
+#### Phase Q10 — Deployment metrics, critical labels và visualization
+
+**Phụ thuộc:** Q2, Q7, Q9.
+
+Phạm vi:
+
+1. Cài `deployment.py`, risk-at-coverage, AURC, review load, error-capture efficiency và optimistic gain.
+2. Tạo/validate `configs/label_policy.json`; không suy importance từ test data.
+3. Cài cost-sensitive utility và optional reviewer accuracy scenarios.
+4. Chọn operating point chỉ trên inner validation.
+5. Sinh các CSV/plot ở C8 và test `NaN`/missing model/incomplete cache.
+
+Exit criteria:
+
+- risk–coverage và deployment tables sinh từ fixture/smoke results;
+- label-policy thiếu thì critical metrics là `N/A`, không crash;
+- operating-point leakage test pass;
+- plot/table không so sai Full với Selective denominator.
+
+#### Phase Q11 — System verification và reproducible smoke benchmark
+
+**Phụ thuộc:** Q0–Q10.
+
+Phạm vi:
+
+1. Chạy toàn bộ C9 unit/integration tests và sửa blocker/high.
+2. Rà cache hash, schema migration, aliases, deterministic seed và run manifest.
+3. Chạy smoke benchmark `emotions`, 2 folds, 12 baseline IDs, cost `0.3` và `0.5`; decision-objective ablation có thể giới hạn Logistic.
+4. Audit output JSON/CSV/figures bằng script, không chỉ nhìn thủ công.
+5. Cập nhật README/lệnh chạy và freeze experiment config cho full run.
+
+Lệnh smoke dự kiến:
+
+```powershell
+python tests_unit.py
+python main.py --datasets emotions `
+  --n_splits 2 --abstention_costs 0.3 0.5 `
+  --report_cost 0.3 --output_dir results_pa_v3_smoke
+```
+
+Exit criteria:
+
+- test suite pass hoặc chỉ còn issue medium/low được ghi rõ;
+- smoke run hoàn tất, audit invariants pass và không sửa kết quả v2;
+- config cho full run được khóa bằng hash;
+- `docs/progress/phase_Q11.md` chứa lệnh resume chính xác.
+
+#### Phase Q12 — Full experiments, phase lặp lại theo quota
+
+**Phụ thuộc:** Q11.
+
+Q12 là phase **repeatable** (`Q12.1`, `Q12.2`, ...), mỗi lần vẫn tối đa 5 giờ. Không gộp toàn bộ 10 datasets và mọi ablation vào một quota.
+
+Mỗi lần Q12:
+
+1. Đọc job queue/cache và ước lượng runtime từ các run trước.
+2. Chọn số model-dataset pairs có thể hoàn thành/checkpoint trong khoảng 4 giờ.
+3. Không dispatch job mới sau mốc `03:30`; thời gian còn lại dành cho job hiện tại, cache audit và handoff.
+4. Sau mỗi fold/pair, xác minh cache có thể load và settings hash khớp.
+5. Khi có lỗi, ưu tiên chẩn đoán/retry một pair; không thay code lớn trong phase experiment.
+
+Gợi ý thứ tự queue:
+
+```text
+small:  emotions, music, scene, yeast
+medium: genbase, medical, enron
+large:  cal500, bibtex, reuters-k500
+primary matched baselines trước -> objective ablation -> random-matched repetitions
+```
+
+Exit criteria của mỗi Q12.x:
+
+- mọi job đã dispatch có completed cache hoặc fold checkpoint hợp lệ;
+- summary completeness report ghi pairs completed/missing/failed;
+- không có cache khác config bị trộn;
+- handoff chỉ rõ job queue kế tiếp.
+
+Thoát Q12 khi đủ primary runs, cost grid và ablations đã đăng ký trước. Full benchmark không bắt buộc hoàn tất trong một Q12.x.
+
+#### Phase Q13 — Statistical analysis và bảng/biểu đồ cuối
+
+**Phụ thuộc:** Q12 hoàn tất primary runs.
+
+Phạm vi:
+
+1. Audit completeness và loại run invalid theo rule đã đăng ký, không chọn theo kết quả đẹp/xấu.
+2. Tổng hợp dataset-level paired results, effect sizes và confidence intervals.
+3. Friedman + post-hoc Wilcoxon-Holm cho so sánh nhiều model.
+4. Tạo bảng complete/selective/rejected/optimistic, IL/DL và hyperparameter.
+5. Chốt figure captions và claim matrix: claim nào được/không được dữ liệu hỗ trợ.
+
+Exit criteria:
+
+- script analysis tái lập từ raw cache;
+- mọi số trong bảng truy ngược được dataset/fold/config;
+- không pseudo-replicate folds như mẫu độc lập;
+- có danh sách kết luận thắng/thua/hòa và giới hạn.
+
+#### Phase Q14 — Cập nhật báo cáo hoàn chỉnh
+
+**Phụ thuộc:** Q13.
+
+Phạm vi:
+
+1. Hoàn thiện R2–R9: phương pháp, metric, baseline, objective/partition ablation, deployment và thống kê.
+2. Dùng Hamming Accuracy trong phần thân, giữ generalized loss ở phần lý thuyết.
+3. Phân biệt immediate, selective, rejected và optimistic claims.
+4. Ghi limitations: CLI approximation, calibration, mean-field, reviewer/domain assumptions.
+5. Cross-check mọi claim với bảng/figure và cập nhật `meeting_summary.md`.
+
+Exit criteria:
+
+- báo cáo không còn claim chỉ dựa trên Selective Macro-F1;
+- công thức/tên metric khớp code;
+- baseline/hyperparameter tables đầy đủ;
+- tài liệu có reproduction commands và reference đúng.
+
+#### Phase Q15 — MDP/marginalization research spike, tùy chọn
+
+**Phụ thuộc:** báo cáo chính không phụ thuộc phase này; chỉ chạy khi cần trả lời hướng nghiên cứu mục 7.
+
+Phạm vi một quota:
+
+1. Viết `docs/research/mdp_probability_marginalization.md` và trả lời sáu gate questions.
+2. So sánh one-step BOP, dynamic programming, exact-small-K, mean-field và Monte Carlo về giả định/độ phức tạp.
+3. Chỉ thiết kế synthetic pilot nếu xác định được state/action/transition/reward.
+4. Không nối MDP vào core trong cùng phase nghiên cứu.
+
+Exit criteria:
+
+- kết luận rõ `not applicable`, `needs data/domain definition`, hoặc `pilot justified`;
+- nếu pilot justified, tách implementation thành phase Q16 mới, cũng tối đa 5 giờ;
+- không mô tả mô hình hiện tại là MDP khi chưa có sequential feedback.
+
+### 8.4. Quy tắc ưu tiên và dừng phase
+
+Thứ tự mặc định:
+
+```text
+Q0 -> Q1 -> Q2 -> Q3 -> Q4 -> Q5 -> Q6 -> Q7 -> Q8
+   -> Q9 -> Q10 -> Q11 -> Q12.x (lặp) -> Q13 -> Q14
+Q15 là tùy chọn; Q16 chỉ tồn tại nếu Q15 qua gate.
+```
+
+Quy tắc khi phase gần hết quota:
+
+1. Không bắt đầu subtask mới sau `04:00`.
+2. Không cắt test bảo toàn cache, leakage, metric edge cases hoặc reproducibility.
+3. Có thể hoãn plot/prose/performance optimization sang phase sau.
+4. Nếu implementation chính chưa xong, tạo checkpoint có test cho phần đã hoàn tất; không để API nửa cũ nửa mới mà không có feature flag.
+5. Handoff là deliverable bắt buộc, không phải phần tùy chọn khi còn thời gian.
 
 ## 9. Definition of Done
+
+### 9.1. Definition of Done áp dụng cho từng quota phase
+
+- [ ] Phase không vượt quá một quota 5 giờ và không bắt đầu subtask mới sau mốc dừng ở mục 8.4.
+- [ ] Exit criteria riêng của phase ở mục 8.3 đã đạt; nếu chưa đạt phải ghi trạng thái `partial` thay vì `complete`.
+- [ ] Test liên quan đến thay đổi của phase đã chạy và kết quả được ghi nguyên văn/tóm tắt có thể kiểm chứng.
+- [ ] Không ghi đè cache/kết quả cũ và không trộn output khác config hash.
+- [ ] `git diff --check` pass; mọi thay đổi ngoài phạm vi được bảo toàn và giải thích.
+- [ ] `docs/progress/phase_<ID>.md` có files, decisions, tests, outputs, blockers, git status và entry point cho phase sau.
+- [ ] Không claim hạng mục của phase tương lai là đã hoàn thành; đặc biệt với exact BOP, đủ baselines, full benchmark, hiệu quả thực tế và MDP.
+
+### 9.2. Definition of Done cho toàn bộ đặc tả
 
 Đợt cải tiến hoàn thành khi:
 
