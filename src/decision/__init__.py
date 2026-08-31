@@ -1,6 +1,7 @@
 """Decision-policy layer kept independent from probability estimators."""
 
 from .base import DecisionPolicy
+from .configuration import create_configured_policy
 from .fbeta import FbetaBOPPolicy
 from .hamming import HammingBOPPolicy
 from .jaccard import JaccardBOPPolicy
@@ -36,6 +37,7 @@ __all__ = [
     "JaccardBOPPolicy",
     "available_policies",
     "canonical_policy_name",
+    "create_configured_policy",
     "create_policy",
     "register_policy",
 ]
