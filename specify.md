@@ -639,6 +639,8 @@ Entry point/lệnh đầu tiên cho phase tiếp theo
 
 #### Phase Q0 — Audit, hợp đồng metric và tài liệu cuộc họp
 
+**Trạng thái:** ✅ Đã hoàn thành ngày 2026-08-30 — xem [`docs/progress/phase_Q0.md`](docs/progress/phase_Q0.md).
+
 **Mục tiêu:** khóa nền tảng trước khi sửa production code.
 
 Phạm vi:
@@ -657,6 +659,8 @@ Exit criteria:
 - `meeting_summary.md` và `docs/progress/phase_Q0.md` tồn tại.
 
 #### Phase Q1 — Complete, partial, optimistic và group metrics
+
+**Trạng thái:** ✅ Đã hoàn thành ngày 2026-08-31 — xem [`docs/progress/phase_Q1.md`](docs/progress/phase_Q1.md).
 
 **Phụ thuộc:** Q0.
 
@@ -677,6 +681,8 @@ Exit criteria:
 
 #### Phase Q2 — Pipeline integration, output schema v3 và resumability
 
+**Trạng thái:** ✅ Đã hoàn thành ngày 2026-08-31 — xem [`docs/progress/phase_Q2.md`](docs/progress/phase_Q2.md).
+
 **Phụ thuộc:** Q1.
 
 Phạm vi:
@@ -695,6 +701,8 @@ Exit criteria:
 - schema/audit tests pass và `docs/progress/phase_Q2.md` ghi migration rule.
 
 #### Phase Q3 — Decision-policy interface và Hamming regression
+
+**Trạng thái:** ✅ Đã hoàn thành ngày 2026-08-31 — xem [`docs/progress/phase_Q3.md`](docs/progress/phase_Q3.md).
 
 **Phụ thuộc:** Q2.
 
@@ -715,6 +723,8 @@ Exit criteria:
 
 #### Phase Q4 — F1-BOP hoàn chỉnh
 
+**Trạng thái:** ✅ Đã hoàn thành ngày 2026-08-31 — xem [`docs/progress/phase_Q4.md`](docs/progress/phase_Q4.md).
+
 **Phụ thuộc:** Q3.
 
 Phạm vi:
@@ -733,6 +743,8 @@ Exit criteria:
 - chưa nối policy vào GSI selection.
 
 #### Phase Q5 — Jaccard-BOP hoàn chỉnh
+
+**Trạng thái:** ✅ Đã hoàn thành ngày 2026-08-31 — xem [`docs/progress/phase_Q5.md`](docs/progress/phase_Q5.md).
 
 **Phụ thuộc:** Q4.
 
