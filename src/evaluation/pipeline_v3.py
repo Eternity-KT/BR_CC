@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 from sklearn.preprocessing import MaxAbsScaler
 
-from ..decision import HammingBOPPolicy
+from ..decision import create_configured_policy
 from .cache_v3 import (
     CACHE_SCHEMA_VERSION_V3,
     completed_fold_indices,
@@ -26,7 +26,14 @@ class V3OutputIsolationError(ValueError):
     """Raised when schema-v3 output targets a legacy result directory."""
 
 
-def _evaluation_policy_config(model_name, report_cost, abstention_penalty):
+def _evaluation_policy_config(
+    model_name,
+    report_cost,
+    abstention_penalty,
+    gsi_decision_policy="hamming",
+    gsi_beta=1.0,
+    gsi_penalty="linear",
+):
     """Describe the exact decision layer that affects one model's outputs."""
 
     configuration = {
@@ -36,11 +43,19 @@ def _evaluation_policy_config(model_name, report_cost, abstention_penalty):
         "partial_policy": None,
     }
     if model_name in ("MLC_PA", "GSI_MLC_PA"):
-        penalty = abstention_penalty if model_name == "MLC_PA" else "linear"
-        configuration["partial_policy"] = HammingBOPPolicy(
+        policy_name = (
+            "hamming" if model_name == "MLC_PA" else gsi_decision_policy
+        )
+        penalty = (
+            abstention_penalty if model_name == "MLC_PA" else gsi_penalty
+        )
+        configuration["partial_policy"] = create_configured_policy(
+            policy_name,
             cost=report_cost,
             penalty=penalty,
-            linear_boundary=(
+            beta=gsi_beta,
+            allow_abstention=True,
+            hamming_boundary=(
                 "symmetric_thresholds"
                 if model_name == "GSI_MLC_PA"
                 else "minimum_loss"
@@ -194,6 +209,10 @@ def _pair_config(
     abstention_penalty,
     mlc_pa_base,
     gsi_validation_size,
+    gsi_selection_objective,
+    gsi_decision_policy,
+    gsi_beta,
+    gsi_penalty,
     critical_labels,
     model_signature,
     dataset_fingerprint,
@@ -220,10 +239,19 @@ def _pair_config(
         "abstention_penalty": abstention_penalty,
         "mlc_pa_base": mlc_pa_base,
         "gsi_validation_size": float(gsi_validation_size),
+        "gsi_selection_objective": gsi_selection_objective,
+        "gsi_decision_policy": gsi_decision_policy,
+        "gsi_beta": float(gsi_beta),
+        "gsi_penalty": gsi_penalty,
         "critical_labels": critical_labels,
         "model_signature": model_signature,
         "evaluation_policy": _evaluation_policy_config(
-            model_name, report_cost, abstention_penalty
+            model_name,
+            report_cost,
+            abstention_penalty,
+            gsi_decision_policy,
+            gsi_beta,
+            gsi_penalty,
         ),
     }
 
@@ -288,6 +316,10 @@ def run_experiment_v3(
     evaluator,
     critical_labels=None,
     max_new_folds=None,
+    gsi_selection_objective="full_macro_f1",
+    gsi_decision_policy="hamming",
+    gsi_beta=1.0,
+    gsi_penalty="linear",
 ):
     """Run/resume schema-v3 folds and export strict JSON plus scope CSVs."""
 
@@ -314,6 +346,10 @@ def run_experiment_v3(
             abstention_penalty=abstention_penalty,
             mlc_pa_base=mlc_pa_base,
             gsi_validation_size=gsi_validation_size,
+            gsi_selection_objective=gsi_selection_objective,
+            gsi_decision_policy=gsi_decision_policy,
+            gsi_beta=gsi_beta,
+            gsi_penalty=gsi_penalty,
         )
         model_signatures[model_name] = _model_signature(prototype)
 
@@ -342,6 +378,10 @@ def run_experiment_v3(
                 abstention_penalty,
                 mlc_pa_base,
                 gsi_validation_size,
+                gsi_selection_objective,
+                gsi_decision_policy,
+                gsi_beta,
+                gsi_penalty,
                 critical_labels,
                 model_signatures[model_name],
                 dataset_fingerprint,
@@ -366,6 +406,10 @@ def run_experiment_v3(
                     abstention_penalty=abstention_penalty,
                     mlc_pa_base=mlc_pa_base,
                     gsi_validation_size=gsi_validation_size,
+                    gsi_selection_objective=gsi_selection_objective,
+                    gsi_decision_policy=gsi_decision_policy,
+                    gsi_beta=gsi_beta,
+                    gsi_penalty=gsi_penalty,
                 )
                 started = time.time()
                 classifier.fit(x_train, y_train)
@@ -420,12 +464,21 @@ def run_experiment_v3(
         "abstention_penalty": abstention_penalty,
         "mlc_pa_base": mlc_pa_base,
         "gsi_validation_size": float(gsi_validation_size),
+        "gsi_selection_objective": gsi_selection_objective,
+        "gsi_decision_policy": gsi_decision_policy,
+        "gsi_beta": float(gsi_beta),
+        "gsi_penalty": gsi_penalty,
         "critical_labels": critical_labels,
         "scaler": "MaxAbsScaler",
         "model_signatures": model_signatures,
         "evaluation_policy": {
             model_name: _evaluation_policy_config(
-                model_name, report_cost, abstention_penalty
+                model_name,
+                report_cost,
+                abstention_penalty,
+                gsi_decision_policy,
+                gsi_beta,
+                gsi_penalty,
             )
             for model_name in models
         },

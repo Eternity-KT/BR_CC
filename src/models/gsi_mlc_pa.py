@@ -15,7 +15,6 @@ from copy import deepcopy
 
 import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin, clone
-from sklearn.metrics import f1_score
 from sklearn.model_selection import train_test_split
 from sklearn.utils.validation import check_is_fitted
 
@@ -24,7 +23,11 @@ try:
 except ImportError:  # pragma: no cover - project requirements normally provide it
     MultilabelStratifiedShuffleSplit = None
 
-from ..decision import HammingBOPPolicy
+from ..decision import canonical_policy_name, create_configured_policy
+from ..selection import (
+    canonical_selection_objective,
+    evaluate_selection_objective,
+)
 from .binary_relevance import BinaryRelevanceMLP
 from .classifier_chain import ClassifierChainClassifier
 
@@ -66,14 +69,14 @@ def _positive_probability(classifier, X):
 
 
 class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
-    """GSI-MLC-PA with cost-independent IL/DL selection.
+    """GSI-MLC-PA with configurable leakage-safe IL/DL selection.
 
     Parameters
     ----------
     cost : float, default=0.3
-        Default BOP rejection cost used by :meth:`predict`.  It is only a
-        decision-time setting and never participates in training or IL/DL
-        selection.
+        Default BOP rejection cost used by :meth:`predict` and by partial-BOP
+        selection objectives. The compatible ``full_macro_f1`` default does
+        not depend on this cost.
     validation_size : float, default=0.2
         Fraction of the outer-training fold used only for IL/DL selection.
     refit : bool, default=True
@@ -88,6 +91,15 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         Integer sentinel representing the abstention symbol.
     random_state : int, default=42
         Seed for the internal split and MLP estimators.
+    selection_objective : str, default="full_macro_f1"
+        Inner-validation objective used to accept or reject IL candidates.
+    decision_policy : str, default="hamming"
+        Final policy used by :meth:`predict`; selection objectives record their
+        own corresponding policy separately.
+    beta : float, default=1.0
+        F-beta parameter used when the final decision policy is ``fbeta``.
+    penalty : {"linear", "concave"}, default="linear"
+        Abstention penalty used by partial selection and final policies.
 
     Notes
     -----
@@ -108,6 +120,10 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         cc_estimator=None,
         abstain_value=-1,
         random_state=42,
+        selection_objective="full_macro_f1",
+        decision_policy="hamming",
+        beta=1.0,
+        penalty="linear",
     ):
         self.cost = cost
         self.validation_size = validation_size
@@ -117,6 +133,10 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         self.cc_estimator = cc_estimator
         self.abstain_value = abstain_value
         self.random_state = random_state
+        self.selection_objective = selection_objective
+        self.decision_policy = decision_policy
+        self.beta = beta
+        self.penalty = penalty
 
     def _validate_parameters(self):
         if not 0.0 <= float(self.cost) <= 1.0:
@@ -125,6 +145,12 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             raise ValueError("validation_size must lie strictly between 0 and 1.")
         if self.abstain_value in (0, 1):
             raise ValueError("abstain_value must differ from 0 and 1.")
+        beta = float(self.beta)
+        if not np.isfinite(beta) or beta <= 0.0:
+            raise ValueError("beta must be a finite positive number.")
+        canonical_selection_objective(self.selection_objective)
+        canonical_policy_name(self.decision_policy)
+        self._make_decision_policy()
 
     def _validated_order(self, n_labels):
         if self.order is None:
@@ -345,22 +371,42 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
 
     def _apply_bop(self, probabilities, cost=None):
         """Apply BOP once, after all final probabilities have been produced."""
-        return HammingBOPPolicy(
-            cost=self.cost,
-            penalty="linear",
-            abstain_value=self.abstain_value,
-            linear_boundary="symmetric_thresholds",
-        ).predict_from_proba(probabilities, cost=cost)
-
-    def _configuration_objective(self, Y, probabilities):
-        """Score a candidate partition without any rejection mechanism."""
-        full_predictions = (np.asarray(probabilities) >= 0.5).astype(np.int32)
-        return float(
-            f1_score(Y, full_predictions, average="macro", zero_division=0)
+        return self._make_decision_policy().predict_from_proba(
+            probabilities, cost=cost
         )
 
+    def _make_decision_policy(self):
+        """Build the final configured policy without embedding its formula."""
+
+        return create_configured_policy(
+            self.decision_policy,
+            cost=self.cost,
+            penalty=self.penalty,
+            beta=self.beta,
+            allow_abstention=True,
+            abstain_value=self.abstain_value,
+            hamming_boundary="symmetric_thresholds",
+        )
+
+    def _evaluate_configuration(self, Y, probabilities):
+        """Delegate one candidate to the selection-objective registry."""
+
+        return evaluate_selection_objective(
+            self.selection_objective,
+            Y,
+            probabilities,
+            cost=self.cost,
+            penalty=self.penalty,
+            abstain_value=self.abstain_value,
+        )
+
+    def _configuration_objective(self, Y, probabilities):
+        """Compatibility scalar API backed by the objective registry."""
+
+        return float(self._evaluate_configuration(Y, probabilities).score)
+
     def _select_partition(self, X, Y, direct_probabilities, cc_model):
-        """Move labels from DL to IL sequentially using complete Macro-F1."""
+        """Move labels from DL to IL using the configured objective module."""
         independent = []
         dependent = set(range(self.n_labels_))
         probability_cache = {}
@@ -378,27 +424,44 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
                 )
                 probability_cache[key] = (
                     candidate_probabilities,
-                    self._configuration_objective(Y, candidate_probabilities),
+                    self._evaluate_configuration(Y, candidate_probabilities),
                 )
             return probability_cache[key]
 
-        current_probabilities, current_score = evaluate(independent)
-        history = [{
-            "step": 0,
-            "tested_label": None,
-            "accepted": True,
-            "score": current_score,
-            "full_macro_f1": current_score,
-            "improvement": 0.0,
-        }]
+        final_policy_name = canonical_policy_name(self.decision_policy)
+
+        def history_record(step, label, accepted, result, improvement):
+            metadata = result.history_metadata()
+            return {
+                "step": int(step),
+                "tested_label": None if label is None else int(label),
+                "accepted": bool(accepted),
+                "score": float(result.score),
+                "full_macro_f1": float(
+                    result.diagnostics["full_macro_f1"]
+                ),
+                "improvement": float(improvement),
+                **metadata,
+                "configured_cost": float(self.cost),
+                "penalty": self.penalty,
+                "inner_split_seed": int(self.random_state),
+                "final_decision_policy": final_policy_name,
+            }
+
+        current_probabilities, current_result = evaluate(independent)
+        current_score = float(current_result.score)
+        history = [
+            history_record(0, None, True, current_result, 0.0)
+        ]
 
         for label in list(self.order_):
             candidate_set = independent + [label]
-            candidate_probabilities, candidate_score = evaluate(
+            candidate_probabilities, candidate_result = evaluate(
                 candidate_set,
                 initial_probabilities=current_probabilities,
                 start_position=self.order_.index(label),
             )
+            candidate_score = float(candidate_result.score)
             improvement = float(candidate_score - current_score)
             accepted = improvement > 1e-12
             if accepted:
@@ -406,16 +469,40 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
                 dependent.remove(label)
                 current_probabilities = candidate_probabilities
                 current_score = float(candidate_score)
-            history.append({
-                "step": len(history),
-                "tested_label": int(label),
-                "accepted": bool(accepted),
-                "score": float(candidate_score),
-                "full_macro_f1": float(candidate_score),
-                "improvement": improvement,
-            })
+                current_result = candidate_result
+            history.append(
+                history_record(
+                    len(history),
+                    label,
+                    accepted,
+                    candidate_result,
+                    improvement,
+                )
+            )
 
         self.evaluated_configurations_ = int(len(probability_cache))
+        self.selection_objective_name_ = current_result.objective
+        self.selection_policy_config_ = dict(current_result.policy_config)
+        self.validation_objective_details_ = dict(current_result.diagnostics)
+        self.validation_full_macro_f1_ = float(
+            current_result.diagnostics["full_macro_f1"]
+        )
+        self.decision_policy_name_ = final_policy_name
+        self.decision_policy_config_ = self._make_decision_policy().get_config()
+        self.selection_config_ = {
+            "selection_objective": self.selection_objective_name_,
+            "selection_policy": dict(self.selection_policy_config_),
+            "final_decision_policy": dict(self.decision_policy_config_),
+            "beta": (
+                None
+                if current_result.beta is None
+                else float(current_result.beta)
+            ),
+            "final_decision_beta": float(self.beta),
+            "cost": float(self.cost),
+            "penalty": self.penalty,
+            "inner_split_seed": int(self.random_state),
+        }
         return sorted(independent), sorted(dependent), current_score, history
 
     def fit(self, X, Y):
@@ -462,8 +549,9 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             selection_cc,
         )
 
-        # IL/DL is frozen before correlation is calculated.  Thus neither
-        # correlation nor a rejection cost can feed back into label selection.
+        # IL/DL is frozen before correlation is calculated. The configured
+        # objective/cost may affect selection, but correlation and outer-test
+        # data cannot feed back into it.
         self.label_correlation_ = self._compute_label_correlation(Y_array)
         if self.order is None:
             desired_final_order = self._correlation_order(

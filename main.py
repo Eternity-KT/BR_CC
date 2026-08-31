@@ -55,6 +55,10 @@ def _create_model(
     abstention_penalty="linear",
     mlc_pa_base="mlp",
     gsi_validation_size=0.2,
+    gsi_selection_objective="full_macro_f1",
+    gsi_decision_policy="hamming",
+    gsi_beta=1.0,
+    gsi_penalty="linear",
 ):
     """Create a supported model from its standardized name."""
     model_key = model_name.upper()
@@ -94,6 +98,10 @@ def _create_model(
             cost=abstention_cost,
             validation_size=gsi_validation_size,
             random_state=random_state,
+            selection_objective=gsi_selection_objective,
+            decision_policy=gsi_decision_policy,
+            beta=gsi_beta,
+            penalty=gsi_penalty,
         )
     raise ValueError(
         f"Unknown model name: {model_name}. Supported: BR, BR_Logistic, "
@@ -145,6 +153,10 @@ def _cache_settings(
     abstention_penalty,
     mlc_pa_base,
     gsi_validation_size,
+    gsi_selection_objective="full_macro_f1",
+    gsi_decision_policy="hamming",
+    gsi_beta=1.0,
+    gsi_penalty="linear",
 ):
     settings = {
         "n_splits": int(n_splits),
@@ -160,12 +172,21 @@ def _cache_settings(
             "f1_abstention_policy": "full_separate_selective_ignore",
         })
     elif model_name == "GSI_MLC_PA":
+        from src.selection import canonical_selection_objective
+
+        canonical_objective = canonical_selection_objective(
+            gsi_selection_objective
+        )
         settings.update({
             "abstention_costs": [float(cost) for cost in abstention_costs],
             "report_cost": float(report_cost),
             "base_estimators": "BR_MLP+CC_MLP",
             "validation_size": float(gsi_validation_size),
-            "selection_objective": "complete_macro_f1",
+            "selection_objective": (
+                "complete_macro_f1"
+                if canonical_objective == "full_macro_f1"
+                else canonical_objective
+            ),
             "selection_strategy": "sequential_single_pass",
             "correlation_timing": "after_il_dl_selection",
             "correlation_measure": "phi_pearson_binary",
@@ -174,6 +195,18 @@ def _cache_settings(
             "chain_order": "post_selection_correlation",
             "refit_after_selection": True,
         })
+        if (
+            canonical_objective != "full_macro_f1"
+            or gsi_decision_policy != "hamming"
+            or float(gsi_beta) != 1.0
+            or gsi_penalty != "linear"
+        ):
+            settings.update({
+                "selection_objective_canonical": canonical_objective,
+                "decision_policy": gsi_decision_policy,
+                "decision_beta": float(gsi_beta),
+                "decision_penalty": gsi_penalty,
+            })
     return settings
 
 
@@ -198,7 +231,7 @@ def _evaluate_model_v3(
 ):
     """Evaluate one fitted model with isolated schema-v3 metric scopes."""
 
-    from src.decision import create_policy
+    from src.decision import create_configured_policy
     from src.evaluation.metric_facade import compute_metric_bundle
 
     model_metadata = {}
@@ -210,19 +243,33 @@ def _evaluate_model_v3(
         model_metadata = {
             "Independent Labels": independent,
             "Dependent Labels": dependent,
-            "Validation Full Macro-F1": float(classifier.validation_objective_),
+            "Validation Full Macro-F1": float(
+                getattr(
+                    classifier,
+                    "validation_full_macro_f1_",
+                    classifier.validation_objective_,
+                )
+            ),
+            "Validation Objective Score": float(classifier.validation_objective_),
+            "Selection Objective": getattr(
+                classifier, "selection_objective_name_", "full_macro_f1"
+            ),
+            "Selection Config": getattr(classifier, "selection_config_", {}),
+            "Selection History": getattr(classifier, "selection_history_", []),
         }
 
     if model_name in SELECTIVE_MODELS:
         probabilities = np.asarray(classifier.predict_proba(x_test), dtype=np.float64)
         full_prediction = classifier.predict_full_from_proba(probabilities)
         acceptance_confidence = np.abs(probabilities - 0.5) * 2.0
-        decision_policy = create_policy(
-            "hamming",
+        decision_policy = create_configured_policy(
+            getattr(classifier, "decision_policy", "hamming"),
             cost=getattr(classifier, "cost", 0.3),
             penalty=getattr(classifier, "penalty", "linear"),
+            beta=getattr(classifier, "beta", 1.0),
+            allow_abstention=True,
             abstain_value=classifier.abstain_value,
-            linear_boundary=(
+            hamming_boundary=(
                 "symmetric_thresholds"
                 if model_name == "GSI_MLC_PA"
                 else "minimum_loss"
@@ -407,6 +454,10 @@ def run_experiment(
     abstention_penalty="linear",
     mlc_pa_base="mlp",
     gsi_validation_size=0.2,
+    gsi_selection_objective="full_macro_f1",
+    gsi_decision_policy="hamming",
+    gsi_beta=1.0,
+    gsi_penalty="linear",
     result_schema=2,
     critical_labels=None,
     max_new_folds=None,
@@ -456,6 +507,10 @@ def run_experiment(
             abstention_penalty=abstention_penalty,
             mlc_pa_base=mlc_pa_base,
             gsi_validation_size=gsi_validation_size,
+            gsi_selection_objective=gsi_selection_objective,
+            gsi_decision_policy=gsi_decision_policy,
+            gsi_beta=gsi_beta,
+            gsi_penalty=gsi_penalty,
             dataset_loader=load_dataset,
             cv_factory=get_multilabel_cv,
             model_factory=_create_model,
@@ -491,6 +546,10 @@ def run_experiment(
             abstention_penalty,
             mlc_pa_base,
             gsi_validation_size,
+            gsi_selection_objective,
+            gsi_decision_policy,
+            gsi_beta,
+            gsi_penalty,
         )
         cache = load_model_cache(tables_dir, model_name)
         legacy_dataset_shape = any(
@@ -643,6 +702,10 @@ def run_experiment(
                     abstention_penalty=abstention_penalty,
                     mlc_pa_base=mlc_pa_base,
                     gsi_validation_size=gsi_validation_size,
+                    gsi_selection_objective=gsi_selection_objective,
+                    gsi_decision_policy=gsi_decision_policy,
+                    gsi_beta=gsi_beta,
+                    gsi_penalty=gsi_penalty,
                 )
                 classifier.fit(x_train, y_train)
                 metrics = _evaluate_model(
@@ -666,6 +729,9 @@ def run_experiment(
                             for label in classifier.dependent_labels_
                         ],
                         "selection_history": classifier.selection_history_,
+                        "selection_config": getattr(
+                            classifier, "selection_config_", {}
+                        ),
                         "selection_order": [
                             int(label) for label in classifier.selection_order_
                         ],
@@ -714,6 +780,10 @@ def run_experiment(
                 abstention_penalty,
                 mlc_pa_base,
                 gsi_validation_size,
+                gsi_selection_objective,
+                gsi_decision_policy,
+                gsi_beta,
+                gsi_penalty,
             )
             model_caches[model_name]["settings"] = settings
             cache_path = save_model_cache(
@@ -882,6 +952,39 @@ def main():
         default=0.2,
         help="Internal outer-train fraction for GSI IL/DL selection (default: 0.2).",
     )
+    parser.add_argument(
+        "--gsi_selection_objective",
+        choices=[
+            "full_macro_f1",
+            "immediate_instance_f1",
+            "bop_instance_f1",
+            "bop_jaccard",
+            "macro_precision",
+            "macro_recall",
+            "f_beta_0_5",
+            "f_beta_2",
+        ],
+        default="full_macro_f1",
+        help="Inner-validation objective for learned GSI partitions.",
+    )
+    parser.add_argument(
+        "--gsi_decision_policy",
+        choices=["hamming", "fbeta", "jaccard"],
+        default="hamming",
+        help="Final GSI decision policy used after probability inference.",
+    )
+    parser.add_argument(
+        "--gsi_beta",
+        type=float,
+        default=1.0,
+        help="Beta for the final GSI F-beta decision policy (default: 1).",
+    )
+    parser.add_argument(
+        "--gsi_penalty",
+        choices=["linear", "concave"],
+        default="linear",
+        help="Abstention penalty for GSI selection/final policy.",
+    )
     args = parser.parse_args()
 
     resolved_costs = args.abstention_costs
@@ -901,6 +1004,10 @@ def main():
         abstention_penalty=args.abstention_penalty,
         mlc_pa_base=args.mlc_pa_base,
         gsi_validation_size=args.gsi_validation_size,
+        gsi_selection_objective=args.gsi_selection_objective,
+        gsi_decision_policy=args.gsi_decision_policy,
+        gsi_beta=args.gsi_beta,
+        gsi_penalty=args.gsi_penalty,
         result_schema=args.result_schema,
         critical_labels=args.critical_labels,
         max_new_folds=args.max_new_folds,
