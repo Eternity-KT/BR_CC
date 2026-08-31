@@ -1,4 +1,4 @@
-"""Phase-Q0 tests for names, conventions, fixtures and migration boundaries."""
+"""Tests for names, conventions, signatures and the Q2 migration boundary."""
 
 import inspect
 import unittest
@@ -77,7 +77,7 @@ class MetricContractTests(unittest.TestCase):
         self.assertFalse(np.any(zero_true[:, 1]))
         self.assertEqual(zero_true.shape, zero_full.shape)
 
-    def test_q0_skeleton_api_signatures_are_stable(self):
+    def test_metric_api_signatures_are_stable(self):
         self.assertEqual(
             list(inspect.signature(compute_complete_metrics).parameters),
             ["y_true", "y_full"],
@@ -99,7 +99,7 @@ class MetricContractTests(unittest.TestCase):
             ["y_true", "y_full"],
         )
 
-    def test_production_facade_is_unchanged_during_q0(self):
+    def test_production_facade_is_unchanged_until_q2(self):
         y_true, y_full, expected = complete_metric_case()
         actual = compute_all_metrics(y_true, y_full)
         self.assertEqual(

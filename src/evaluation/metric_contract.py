@@ -220,6 +220,7 @@ METRIC_DEFINITIONS = (
         "AURC", "Selective",
         "mean_m(error_count among top-m confidence positions / m), m=1..N*K",
         "N*K ranked prefixes; ties use stable row-major position order", "lower_better",
+        "acceptance confidence is not supplied",
     ),
     MetricDefinition(
         "Rejected Counterfactual Macro-F1", "Rejected",
