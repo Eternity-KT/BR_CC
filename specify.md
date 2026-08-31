@@ -765,6 +765,8 @@ Exit criteria:
 
 #### Phase Q6 — Objective injection cho GSI
 
+**Trạng thái:** ✅ Đã hoàn thành ngày 2026-08-31 — xem `docs/progress/phase_Q6.md`.
+
 **Phụ thuộc:** Q5.
 
 Phạm vi:
