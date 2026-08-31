@@ -18,6 +18,7 @@ import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin, clone
 from sklearn.utils.validation import check_is_fitted
 
+from ..decision import HammingBOPPolicy
 from .binary_relevance import (
     BinaryRelevanceClassifier,
     BinaryRelevanceLogisticRegression,
@@ -150,43 +151,28 @@ class MLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         return (np.clip(probabilities, 0.0, 1.0) >= 0.5).astype(np.int32)
 
     def _linear_decision_mask(self, probabilities, cost=None):
-        cost = float(self.cost if cost is None else cost)
-        expected_label_losses = np.minimum(probabilities, 1.0 - probabilities)
-        return expected_label_losses <= cost
+        return HammingBOPPolicy(
+            cost=self.cost,
+            penalty="linear",
+            abstain_value=self.abstain_value,
+        ).decision_mask(probabilities, cost=cost)
 
     def _concave_decision_mask(self, probabilities, cost=None):
         """Find the optimal decided-set size from Corollary 1 for each row."""
-        cost = float(self.cost if cost is None else cost)
-        n_samples, n_labels = probabilities.shape
-        expected_label_losses = np.minimum(probabilities, 1.0 - probabilities)
-        masks = np.zeros((n_samples, n_labels), dtype=bool)
-        abstention_counts = n_labels - np.arange(n_labels + 1, dtype=np.float64)
-        penalties = (
-            abstention_counts
-            * float(n_labels)
-            * cost
-            / (float(n_labels) + abstention_counts)
-        )
-
-        for row_idx in range(n_samples):
-            order = np.argsort(expected_label_losses[row_idx], kind="stable")
-            sorted_losses = expected_label_losses[row_idx, order]
-            cumulative_losses = np.concatenate(
-                ([0.0], np.cumsum(sorted_losses, dtype=np.float64))
-            )
-            risks = cumulative_losses + penalties
-            minimum = np.min(risks)
-            # Prefer more decided labels when several actions have equal risk.
-            best_d = int(np.flatnonzero(np.isclose(risks, minimum))[-1])
-            masks[row_idx, order[:best_d]] = True
-        return masks
+        return HammingBOPPolicy(
+            cost=self.cost,
+            penalty="concave",
+            abstain_value=self.abstain_value,
+        ).decision_mask(probabilities, cost=cost)
 
     def decision_mask(self, X):
         """Return True at label positions on which the classifier decides."""
         probabilities = self.predict_proba(X)
-        if self.penalty == "linear":
-            return self._linear_decision_mask(probabilities)
-        return self._concave_decision_mask(probabilities)
+        return HammingBOPPolicy(
+            cost=self.cost,
+            penalty=self.penalty,
+            abstain_value=self.abstain_value,
+        ).decision_mask(probabilities)
 
     def predict(self, X):
         """Return Bayes-optimal partial predictions in ``{0, abstain, 1}^K``."""
@@ -198,23 +184,14 @@ class MLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         ``fit`` never uses the rejection cost.  Passing ``cost`` here allows
         several operating costs to reuse one fitted probabilistic model.
         """
-        cost = float(self.cost if cost is None else cost)
-        if not 0.0 <= cost <= 1.0:
-            raise ValueError("cost must lie in [0, 1].")
         probabilities = np.asarray(probabilities, dtype=np.float64)
         if probabilities.ndim != 2 or probabilities.shape[1] != self.n_labels_:
             raise ValueError("probabilities must have shape (n_samples, n_labels).")
-        probabilities = np.clip(probabilities, 0.0, 1.0)
-        full_predictions = self.predict_full_from_proba(probabilities)
-        if self.penalty == "linear":
-            decided = self._linear_decision_mask(probabilities, cost=cost)
-        else:
-            decided = self._concave_decision_mask(probabilities, cost=cost)
-        partial = np.full(
-            full_predictions.shape, self.abstain_value, dtype=np.int32
-        )
-        partial[decided] = full_predictions[decided]
-        return partial
+        return HammingBOPPolicy(
+            cost=self.cost,
+            penalty=self.penalty,
+            abstain_value=self.abstain_value,
+        ).predict_from_proba(probabilities, cost=cost)
 
     def decision_function(self, X):
         """Return base scores when available, otherwise probability logits."""

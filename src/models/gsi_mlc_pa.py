@@ -24,6 +24,7 @@ try:
 except ImportError:  # pragma: no cover - project requirements normally provide it
     MultilabelStratifiedShuffleSplit = None
 
+from ..decision import HammingBOPPolicy
 from .binary_relevance import BinaryRelevanceMLP
 from .classifier_chain import ClassifierChainClassifier
 
@@ -344,18 +345,12 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
 
     def _apply_bop(self, probabilities, cost=None):
         """Apply BOP once, after all final probabilities have been produced."""
-        cost = float(self.cost if cost is None else cost)
-        if not 0.0 <= cost <= 1.0:
-            raise ValueError("cost must lie in [0, 1].")
-        probabilities = np.asarray(probabilities, dtype=np.float64)
-        if cost >= 0.5:
-            return (probabilities >= 0.5).astype(np.int32)
-        predictions = np.full(
-            probabilities.shape, self.abstain_value, dtype=np.int32
-        )
-        predictions[probabilities <= cost] = 0
-        predictions[probabilities >= 1.0 - cost] = 1
-        return predictions
+        return HammingBOPPolicy(
+            cost=self.cost,
+            penalty="linear",
+            abstain_value=self.abstain_value,
+            linear_boundary="symmetric_thresholds",
+        ).predict_from_proba(probabilities, cost=cost)
 
     def _configuration_objective(self, Y, probabilities):
         """Score a candidate partition without any rejection mechanism."""
