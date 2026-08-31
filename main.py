@@ -187,14 +187,126 @@ def _selective_cache_is_compatible(cached_settings, expected_settings):
     )
 
 
+def _evaluate_model_v3(
+    model_name,
+    classifier,
+    x_test,
+    y_test,
+    abstention_costs,
+    label_names=None,
+    critical_labels=None,
+):
+    """Evaluate one fitted model with isolated schema-v3 metric scopes."""
+
+    from src.decision import create_policy
+    from src.evaluation.metric_facade import compute_metric_bundle
+
+    model_metadata = {}
+    label_groups = {}
+    if model_name == "GSI_MLC_PA":
+        independent = [int(label) for label in classifier.independent_labels_]
+        dependent = [int(label) for label in classifier.dependent_labels_]
+        label_groups = {"IL": independent, "DL": dependent}
+        model_metadata = {
+            "Independent Labels": independent,
+            "Dependent Labels": dependent,
+            "Validation Full Macro-F1": float(classifier.validation_objective_),
+        }
+
+    if model_name in SELECTIVE_MODELS:
+        probabilities = np.asarray(classifier.predict_proba(x_test), dtype=np.float64)
+        full_prediction = classifier.predict_full_from_proba(probabilities)
+        acceptance_confidence = np.abs(probabilities - 0.5) * 2.0
+        decision_policy = create_policy(
+            "hamming",
+            cost=getattr(classifier, "cost", 0.3),
+            penalty=getattr(classifier, "penalty", "linear"),
+            abstain_value=classifier.abstain_value,
+            linear_boundary=(
+                "symmetric_thresholds"
+                if model_name == "GSI_MLC_PA"
+                else "minimum_loss"
+            ),
+        )
+        model_metadata["Decision Policy"] = decision_policy.get_config()
+    else:
+        probabilities = None
+        acceptance_confidence = None
+        full_prediction = classifier.predict(x_test)
+        decision_policy = None
+
+    full_bundle = compute_metric_bundle(
+        y_test,
+        full_prediction,
+        acceptance_confidence=acceptance_confidence,
+        label_names=label_names,
+        label_groups=label_groups,
+        critical_labels=critical_labels,
+    )
+    result = {
+        "Schema Version": 3,
+        "Metric Contract Version": full_bundle["Metric Contract Version"],
+        "Full": dict(full_bundle["Full"]),
+        "Per Label": full_bundle["Per Label"],
+        "Groups": full_bundle["Groups"],
+        "Critical Labels": full_bundle["Critical Labels"],
+        "Model Metadata": model_metadata,
+        "Costs": {},
+    }
+    if model_name not in SELECTIVE_MODELS:
+        return result
+
+    for cost in abstention_costs:
+        partial_prediction = decision_policy.predict_from_proba(
+            probabilities, cost=cost
+        )
+        bundle = compute_metric_bundle(
+            y_test,
+            full_prediction,
+            y_partial=partial_prediction,
+            cost=cost,
+            penalty=getattr(classifier, "penalty", "linear"),
+            abstain_value=classifier.abstain_value,
+            acceptance_confidence=acceptance_confidence,
+            label_names=label_names,
+            label_groups=label_groups,
+            critical_labels=critical_labels,
+        )
+        result["Costs"][_cost_key(cost)] = {
+            "Selective": dict(bundle["Selective"]),
+            "Rejected": bundle["Rejected"],
+            "Optimistic": bundle["Optimistic"],
+            "Diagnostics": bundle["Diagnostics"],
+            "Per Label": bundle["Per Label"],
+            "Groups": bundle["Groups"],
+            "Critical Labels": bundle["Critical Labels"],
+        }
+    return result
+
+
 def _evaluate_model(
     model_name,
     classifier,
     x_test,
     y_test,
     abstention_costs,
+    metric_schema=2,
+    label_names=None,
+    critical_labels=None,
 ):
     """Evaluate one fitted model, applying rejection only after training."""
+    if metric_schema == 3:
+        return _evaluate_model_v3(
+            model_name,
+            classifier,
+            x_test,
+            y_test,
+            abstention_costs,
+            label_names=label_names,
+            critical_labels=critical_labels,
+        )
+    if metric_schema != 2:
+        raise ValueError("metric_schema must be either 2 or 3.")
     if model_name not in SELECTIVE_MODELS:
         return {
             "full": compute_all_metrics(y_test, classifier.predict(x_test)),
@@ -289,19 +401,30 @@ def run_experiment(
     models=None,
     n_splits=5,
     random_state=42,
-    output_dir="results_pa",
+    output_dir=None,
     abstention_costs=None,
     report_cost=0.3,
     abstention_penalty="linear",
     mlc_pa_base="mlp",
     gsi_validation_size=0.2,
+    result_schema=2,
+    critical_labels=None,
+    max_new_folds=None,
 ):
     """Run only missing model/dataset pairs and then rebuild all plots.
 
-    Results are checkpointed as ``results_pa/tables/<MODEL>.json``.  Existing
-    BR_MLP and CC_MLP entries are imported from the legacy combined
-    ``raw_results.json`` and are not trained again.
+    Schema v2 remains the default and preserves its existing caches/plots.
+    Schema v3 is opt-in, writes to an isolated directory, and checkpoints each
+    completed fold before continuing.
     """
+    if result_schema not in (2, 3):
+        raise ValueError("result_schema must be either 2 or 3.")
+    if result_schema == 2 and max_new_folds is not None:
+        raise ValueError("max_new_folds is available only with result_schema=3.")
+    if result_schema == 2 and critical_labels is not None:
+        raise ValueError("critical_labels is available only with result_schema=3.")
+    if output_dir is None:
+        output_dir = "results_pa_v3" if result_schema == 3 else "results_pa"
     if datasets is None:
         datasets = list(DATASET_CONFIG.keys())
     else:
@@ -318,6 +441,28 @@ def run_experiment(
     unknown_datasets = sorted(set(datasets) - set(DATASET_CONFIG))
     if unknown_datasets:
         raise ValueError(f"Unknown datasets: {unknown_datasets}")
+
+    if result_schema == 3:
+        from src.evaluation.pipeline_v3 import run_experiment_v3
+
+        return run_experiment_v3(
+            datasets=datasets,
+            models=standardized_models,
+            n_splits=n_splits,
+            random_state=random_state,
+            output_dir=output_dir,
+            abstention_costs=abstention_costs,
+            report_cost=report_cost,
+            abstention_penalty=abstention_penalty,
+            mlc_pa_base=mlc_pa_base,
+            gsi_validation_size=gsi_validation_size,
+            dataset_loader=load_dataset,
+            cv_factory=get_multilabel_cv,
+            model_factory=_create_model,
+            evaluator=_evaluate_model,
+            critical_labels=critical_labels,
+            max_new_folds=max_new_folds,
+        )
 
     figures_dir = os.path.join(output_dir, "plots_pa")
     tables_dir = os.path.join(output_dir, "tables")
@@ -676,7 +821,29 @@ def main():
         "--random_state", type=int, default=42, help="Random seed (default: 42)."
     )
     parser.add_argument(
-        "--output_dir", type=str, default="results_pa", help="Output directory."
+        "--output_dir",
+        type=str,
+        default=None,
+        help="Output directory; defaults to results_pa or isolated results_pa_v3.",
+    )
+    parser.add_argument(
+        "--result_schema",
+        type=int,
+        choices=[2, 3],
+        default=2,
+        help="Result/cache schema. v3 enables fold checkpoints (default: 2).",
+    )
+    parser.add_argument(
+        "--max_new_folds",
+        type=int,
+        default=None,
+        help="Stop safely after this many newly completed v3 folds.",
+    )
+    parser.add_argument(
+        "--critical_labels",
+        nargs="+",
+        default=None,
+        help="Optional global critical label names for schema-v3 audit.",
     )
     parser.add_argument(
         "--abstention_costs",
@@ -707,7 +874,7 @@ def main():
         "--mlc_pa_base",
         choices=["mlp", "logistic", "svm"],
         default="logistic",
-        help="Marginal probability estimator below MLC-PA (default: mlp).",
+        help="Marginal probability estimator below MLC-PA (default: logistic).",
     )
     parser.add_argument(
         "--gsi_validation_size",
@@ -734,6 +901,9 @@ def main():
         abstention_penalty=args.abstention_penalty,
         mlc_pa_base=args.mlc_pa_base,
         gsi_validation_size=args.gsi_validation_size,
+        result_schema=args.result_schema,
+        critical_labels=args.critical_labels,
+        max_new_folds=args.max_new_folds,
     )
 
 
