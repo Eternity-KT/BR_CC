@@ -12,6 +12,7 @@ selection.
 """
 
 from copy import deepcopy
+from time import perf_counter
 
 import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin, clone
@@ -25,8 +26,11 @@ except ImportError:  # pragma: no cover - project requirements normally provide 
 
 from ..decision import canonical_policy_name, create_configured_policy
 from ..selection import (
+    canonical_final_order_strategy,
+    canonical_partition_mode,
     canonical_selection_objective,
     evaluate_selection_objective,
+    provide_partition,
 )
 from .binary_relevance import BinaryRelevanceMLP
 from .classifier_chain import ClassifierChainClassifier
@@ -100,6 +104,14 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         F-beta parameter used when the final decision policy is ``fbeta``.
     penalty : {"linear", "concave"}, default="linear"
         Abstention penalty used by partial selection and final policies.
+    partition_mode : str, default="learned"
+        IL/DL provider. Supports learned, learned without correlation reorder,
+        all-IL, all-DL, fixed and random-matched ablations.
+    fixed_independent_labels : sequence of int or None, default=None
+        IL indices required only when ``partition_mode="fixed"``.
+    final_order : {"correlation", "selection", "natural"}, default="correlation"
+        Order strategy applied after the partition is frozen. An explicit
+        ``order`` permutation retains precedence for backward compatibility.
 
     Notes
     -----
@@ -124,6 +136,9 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         decision_policy="hamming",
         beta=1.0,
         penalty="linear",
+        partition_mode="learned",
+        fixed_independent_labels=None,
+        final_order="correlation",
     ):
         self.cost = cost
         self.validation_size = validation_size
@@ -137,6 +152,9 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         self.decision_policy = decision_policy
         self.beta = beta
         self.penalty = penalty
+        self.partition_mode = partition_mode
+        self.fixed_independent_labels = fixed_independent_labels
+        self.final_order = final_order
 
     def _validate_parameters(self):
         if not 0.0 <= float(self.cost) <= 1.0:
@@ -150,6 +168,8 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             raise ValueError("beta must be a finite positive number.")
         canonical_selection_objective(self.selection_objective)
         canonical_policy_name(self.decision_policy)
+        canonical_partition_mode(self.partition_mode)
+        canonical_final_order_strategy(self.final_order)
         self._make_decision_policy()
 
     def _validated_order(self, n_labels):
@@ -405,6 +425,74 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
 
         return float(self._evaluate_configuration(Y, probabilities).score)
 
+    def _selection_history_record(
+        self,
+        step,
+        label,
+        accepted,
+        result,
+        improvement,
+    ):
+        metadata = result.history_metadata()
+        return {
+            "step": int(step),
+            "tested_label": None if label is None else int(label),
+            "accepted": bool(accepted),
+            "score": float(result.score),
+            "full_macro_f1": float(result.diagnostics["full_macro_f1"]),
+            "improvement": float(improvement),
+            **metadata,
+            "configured_cost": float(self.cost),
+            "penalty": self.penalty,
+            "inner_split_seed": int(self.random_state),
+            "final_decision_policy": canonical_policy_name(self.decision_policy),
+            "partition_mode": canonical_partition_mode(self.partition_mode),
+        }
+
+    def _store_selection_result(self, result):
+        self.selection_objective_name_ = result.objective
+        self.selection_policy_config_ = dict(result.policy_config)
+        self.validation_objective_details_ = dict(result.diagnostics)
+        self.validation_full_macro_f1_ = float(
+            result.diagnostics["full_macro_f1"]
+        )
+        self.decision_policy_name_ = canonical_policy_name(self.decision_policy)
+        self.decision_policy_config_ = self._make_decision_policy().get_config()
+        self.selection_config_ = {
+            "selection_objective": self.selection_objective_name_,
+            "selection_policy": dict(self.selection_policy_config_),
+            "final_decision_policy": dict(self.decision_policy_config_),
+            "beta": None if result.beta is None else float(result.beta),
+            "final_decision_beta": float(self.beta),
+            "cost": float(self.cost),
+            "penalty": self.penalty,
+            "inner_split_seed": int(self.random_state),
+        }
+
+    def _score_frozen_partition(
+        self,
+        X,
+        Y,
+        direct_probabilities,
+        cc_model,
+        independent_labels,
+    ):
+        """Score a provider partition through the same Q6 objective API."""
+
+        probabilities = self._configured_probabilities(
+            X,
+            direct_probabilities,
+            cc_model,
+            independent_labels,
+        )
+        result = self._evaluate_configuration(Y, probabilities)
+        self.evaluated_configurations_ = 1
+        self._store_selection_result(result)
+        history = [
+            self._selection_history_record(0, None, True, result, 0.0)
+        ]
+        return float(result.score), history
+
     def _select_partition(self, X, Y, direct_probabilities, cc_model):
         """Move labels from DL to IL using the configured objective module."""
         independent = []
@@ -428,30 +516,10 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
                 )
             return probability_cache[key]
 
-        final_policy_name = canonical_policy_name(self.decision_policy)
-
-        def history_record(step, label, accepted, result, improvement):
-            metadata = result.history_metadata()
-            return {
-                "step": int(step),
-                "tested_label": None if label is None else int(label),
-                "accepted": bool(accepted),
-                "score": float(result.score),
-                "full_macro_f1": float(
-                    result.diagnostics["full_macro_f1"]
-                ),
-                "improvement": float(improvement),
-                **metadata,
-                "configured_cost": float(self.cost),
-                "penalty": self.penalty,
-                "inner_split_seed": int(self.random_state),
-                "final_decision_policy": final_policy_name,
-            }
-
         current_probabilities, current_result = evaluate(independent)
         current_score = float(current_result.score)
         history = [
-            history_record(0, None, True, current_result, 0.0)
+            self._selection_history_record(0, None, True, current_result, 0.0)
         ]
 
         for label in list(self.order_):
@@ -471,7 +539,7 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
                 current_score = float(candidate_score)
                 current_result = candidate_result
             history.append(
-                history_record(
+                self._selection_history_record(
                     len(history),
                     label,
                     accepted,
@@ -481,28 +549,7 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             )
 
         self.evaluated_configurations_ = int(len(probability_cache))
-        self.selection_objective_name_ = current_result.objective
-        self.selection_policy_config_ = dict(current_result.policy_config)
-        self.validation_objective_details_ = dict(current_result.diagnostics)
-        self.validation_full_macro_f1_ = float(
-            current_result.diagnostics["full_macro_f1"]
-        )
-        self.decision_policy_name_ = final_policy_name
-        self.decision_policy_config_ = self._make_decision_policy().get_config()
-        self.selection_config_ = {
-            "selection_objective": self.selection_objective_name_,
-            "selection_policy": dict(self.selection_policy_config_),
-            "final_decision_policy": dict(self.decision_policy_config_),
-            "beta": (
-                None
-                if current_result.beta is None
-                else float(current_result.beta)
-            ),
-            "final_decision_beta": float(self.beta),
-            "cost": float(self.cost),
-            "penalty": self.penalty,
-            "inner_split_seed": int(self.random_state),
-        }
+        self._store_selection_result(current_result)
         return sorted(independent), sorted(dependent), current_score, history
 
     def fit(self, X, Y):
@@ -518,8 +565,13 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             raise ValueError("GSI_MLC_PA requires at least four training samples.")
 
         self.n_labels_ = Y_array.shape[1]
+        self.partition_mode_ = canonical_partition_mode(self.partition_mode)
+        self.requested_final_order_strategy_ = canonical_final_order_strategy(
+            self.final_order
+        )
         self.selection_order_ = self._validated_order(self.n_labels_)
         self.order_ = list(self.selection_order_)
+        selection_started = perf_counter()
         selection_train, validation = self._split_train_validation(X_array, Y_array)
         if len(selection_train) == 0 or len(validation) == 0:
             raise ValueError("The internal train/validation split is empty.")
@@ -537,31 +589,113 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         validation_direct = self._direct_probabilities(
             selection_br, X_array[validation]
         )
-        (
-            self.independent_labels_,
-            self.dependent_labels_,
-            self.validation_objective_,
-            self.selection_history_,
-        ) = self._select_partition(
-            X_array[validation],
-            Y_array[validation],
-            validation_direct,
-            selection_cc,
+        needs_learned_reference = self.partition_mode_ in (
+            "learned",
+            "learned_no_correlation_order",
+            "random_matched",
         )
+        learned_independent = None
+        learned_dependent = None
+        learned_score = None
+        learned_history = None
+        learned_evaluation_count = 0
+        if needs_learned_reference:
+            (
+                learned_independent,
+                learned_dependent,
+                learned_score,
+                learned_history,
+            ) = self._select_partition(
+                X_array[validation],
+                Y_array[validation],
+                validation_direct,
+                selection_cc,
+            )
+            learned_evaluation_count = int(self.evaluated_configurations_)
+
+        partition = provide_partition(
+            self.partition_mode_,
+            self.n_labels_,
+            learned_independent_labels=learned_independent,
+            fixed_independent_labels=self.fixed_independent_labels,
+            random_state=self.random_state,
+        )
+        self.independent_labels_ = list(partition.independent_labels)
+        self.dependent_labels_ = list(partition.dependent_labels)
+        self.reference_independent_labels_ = (
+            None
+            if learned_independent is None
+            else [int(label) for label in learned_independent]
+        )
+        self.reference_dependent_labels_ = (
+            None
+            if learned_dependent is None
+            else [int(label) for label in learned_dependent]
+        )
+        self.reference_validation_objective_ = (
+            None if learned_score is None else float(learned_score)
+        )
+        self.reference_selection_history_ = (
+            [] if learned_history is None else list(learned_history)
+        )
+
+        if self.partition_mode_ in ("learned", "learned_no_correlation_order"):
+            self.validation_objective_ = float(learned_score)
+            self.selection_history_ = list(learned_history)
+        else:
+            (
+                self.validation_objective_,
+                self.selection_history_,
+            ) = self._score_frozen_partition(
+                X_array[validation],
+                Y_array[validation],
+                validation_direct,
+                selection_cc,
+                self.independent_labels_,
+            )
+            if self.partition_mode_ == "random_matched":
+                self.evaluated_configurations_ += learned_evaluation_count
+
+        self.learned_reference_evaluated_configurations_ = learned_evaluation_count
+        self.partition_audit_ = partition.as_dict()
+        self.selection_config_.update({
+            "partition": dict(self.partition_audit_),
+            "learned_reference_independent_labels": (
+                self.reference_independent_labels_
+            ),
+            "learned_reference_validation_objective": (
+                self.reference_validation_objective_
+            ),
+            "requested_final_order_strategy": (
+                self.requested_final_order_strategy_
+            ),
+        })
+        self.selection_time_seconds_ = float(perf_counter() - selection_started)
 
         # IL/DL is frozen before correlation is calculated. The configured
         # objective/cost may affect selection, but correlation and outer-test
         # data cannot feed back into it.
         self.label_correlation_ = self._compute_label_correlation(Y_array)
-        if self.order is None:
-            desired_final_order = self._correlation_order(
-                self.label_correlation_,
-                self.independent_labels_,
-                self.dependent_labels_,
-            )
-        else:
+        correlation_order = self._correlation_order(
+            self.label_correlation_,
+            self.independent_labels_,
+            self.dependent_labels_,
+        )
+        self.correlation_order_ = [int(label) for label in correlation_order]
+        if self.order is not None:
             desired_final_order = self._validated_order(self.n_labels_)
-        self.correlation_order_ = [int(label) for label in desired_final_order]
+            self.final_order_strategy_ = "explicit"
+        else:
+            effective_strategy = self.requested_final_order_strategy_
+            if self.partition_mode_ == "learned_no_correlation_order":
+                effective_strategy = "selection"
+            self.final_order_strategy_ = effective_strategy
+            if effective_strategy == "correlation":
+                desired_final_order = list(self.correlation_order_)
+            elif effective_strategy == "selection":
+                desired_final_order = list(self.selection_order_)
+            else:
+                desired_final_order = list(range(self.n_labels_))
 
         # Final fitting uses no validation score and never sees the outer test
         # fold supplied later to predict().
@@ -586,6 +720,13 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         self.dependent_parent_map_ = self._dependent_parent_map(
             self.label_correlation_, self.order_, self.dependent_labels_
         )
+        self.selection_config_.update({
+            "effective_final_order_strategy": self.final_order_strategy_,
+            "selection_order": [int(label) for label in self.selection_order_],
+            "correlation_order": [int(label) for label in self.correlation_order_],
+            "final_order": [int(label) for label in self.order_],
+            "selection_time_seconds": self.selection_time_seconds_,
+        })
 
         self.is_fitted_ = True
         return self

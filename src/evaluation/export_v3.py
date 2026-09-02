@@ -46,6 +46,7 @@ def _scope_rows(run_document):
     selective_rows = []
     per_label_rows = []
     group_rows = []
+    partition_rows = []
     for dataset_name, models in run_document.get("Results", {}).items():
         for model_name, summary in models.items():
             prefix = {"Dataset": dataset_name, "Model": model_name}
@@ -55,6 +56,8 @@ def _scope_rows(run_document):
                 per_label_rows.append({**prefix, "Cost": None, **row})
             for row in summary.get("Groups", {}).get("Raw Records", []):
                 group_rows.append({**prefix, "Cost": None, **row})
+            for row in summary.get("Partition Audit", {}).get("Raw Records", []):
+                partition_rows.append({**prefix, **row})
 
             for cost, cost_summary in summary.get("Costs", {}).items():
                 scope_by_fold = {}
@@ -70,20 +73,21 @@ def _scope_rows(run_document):
                     per_label_rows.append({**prefix, "Cost": cost, **row})
                 for row in cost_summary.get("Groups", {}).get("Raw Records", []):
                     group_rows.append({**prefix, "Cost": cost, **row})
-    return complete_rows, selective_rows, per_label_rows, group_rows
+    return complete_rows, selective_rows, per_label_rows, group_rows, partition_rows
 
 
 def export_v3_artifacts(run_document, tables_dir):
     """Export the v3 manifest plus complete/selective/per-label/group CSV files."""
 
     tables_path = Path(tables_dir)
-    complete, selective, per_label, groups = _scope_rows(run_document)
+    complete, selective, per_label, groups, partitions = _scope_rows(run_document)
     paths = {
         "json": tables_path / "results_v3.json",
         "complete_csv": tables_path / "complete_metrics.csv",
         "selective_csv": tables_path / "selective_metrics.csv",
         "per_label_csv": tables_path / "per_label_metrics.csv",
         "group_csv": tables_path / "group_metrics.csv",
+        "partition_csv": tables_path / "partition_audit.csv",
     }
     artifacts = {name: str(path) for name, path in paths.items()}
     run_document["Artifacts"] = artifacts
@@ -107,5 +111,10 @@ def export_v3_artifacts(run_document, tables_dir):
         groups,
         paths["group_csv"],
         ("Dataset", "Model", "Cost", "Fold", "Group"),
+    )
+    _atomic_csv_dump(
+        partitions,
+        paths["partition_csv"],
+        ("Dataset", "Model", "Fold", "Partition Mode"),
     )
     return artifacts

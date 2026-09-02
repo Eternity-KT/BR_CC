@@ -59,6 +59,9 @@ def _create_model(
     gsi_decision_policy="hamming",
     gsi_beta=1.0,
     gsi_penalty="linear",
+    gsi_partition_mode="learned",
+    gsi_fixed_independent_labels=None,
+    gsi_final_order="correlation",
 ):
     """Create a supported model from its standardized name."""
     model_key = model_name.upper()
@@ -102,6 +105,9 @@ def _create_model(
             decision_policy=gsi_decision_policy,
             beta=gsi_beta,
             penalty=gsi_penalty,
+            partition_mode=gsi_partition_mode,
+            fixed_independent_labels=gsi_fixed_independent_labels,
+            final_order=gsi_final_order,
         )
     raise ValueError(
         f"Unknown model name: {model_name}. Supported: BR, BR_Logistic, "
@@ -157,6 +163,9 @@ def _cache_settings(
     gsi_decision_policy="hamming",
     gsi_beta=1.0,
     gsi_penalty="linear",
+    gsi_partition_mode="learned",
+    gsi_fixed_independent_labels=None,
+    gsi_final_order="correlation",
 ):
     settings = {
         "n_splits": int(n_splits),
@@ -200,12 +209,22 @@ def _cache_settings(
             or gsi_decision_policy != "hamming"
             or float(gsi_beta) != 1.0
             or gsi_penalty != "linear"
+            or gsi_partition_mode != "learned"
+            or gsi_fixed_independent_labels is not None
+            or gsi_final_order != "correlation"
         ):
             settings.update({
                 "selection_objective_canonical": canonical_objective,
                 "decision_policy": gsi_decision_policy,
                 "decision_beta": float(gsi_beta),
                 "decision_penalty": gsi_penalty,
+                "partition_mode": gsi_partition_mode,
+                "fixed_independent_labels": (
+                    None
+                    if gsi_fixed_independent_labels is None
+                    else [int(label) for label in gsi_fixed_independent_labels]
+                ),
+                "final_order_strategy": gsi_final_order,
             })
     return settings
 
@@ -243,6 +262,30 @@ def _evaluate_model_v3(
         model_metadata = {
             "Independent Labels": independent,
             "Dependent Labels": dependent,
+            "Independent Label Count": int(len(independent)),
+            "Dependent Label Count": int(len(dependent)),
+            "Partition Mode": getattr(classifier, "partition_mode_", "learned"),
+            "Partition Audit": getattr(classifier, "partition_audit_", {}),
+            "Reference Independent Labels": getattr(
+                classifier, "reference_independent_labels_", None
+            ),
+            "Final Order Strategy": getattr(
+                classifier, "final_order_strategy_", "correlation"
+            ),
+            "Selection Order": [
+                int(label)
+                for label in getattr(classifier, "selection_order_", [])
+            ],
+            "Correlation Order": [
+                int(label)
+                for label in getattr(classifier, "correlation_order_", [])
+            ],
+            "Final Order": [
+                int(label) for label in getattr(classifier, "order_", [])
+            ],
+            "Selection Seconds": float(
+                getattr(classifier, "selection_time_seconds_", 0.0)
+            ),
             "Validation Full Macro-F1": float(
                 getattr(
                     classifier,
@@ -259,7 +302,9 @@ def _evaluate_model_v3(
         }
 
     if model_name in SELECTIVE_MODELS:
+        inference_started = time.perf_counter()
         probabilities = np.asarray(classifier.predict_proba(x_test), dtype=np.float64)
+        inference_seconds = float(time.perf_counter() - inference_started)
         full_prediction = classifier.predict_full_from_proba(probabilities)
         acceptance_confidence = np.abs(probabilities - 0.5) * 2.0
         decision_policy = create_configured_policy(
@@ -276,6 +321,8 @@ def _evaluate_model_v3(
             ),
         )
         model_metadata["Decision Policy"] = decision_policy.get_config()
+        if model_name == "GSI_MLC_PA":
+            model_metadata["Probability Inference Seconds"] = inference_seconds
     else:
         probabilities = None
         acceptance_confidence = None
@@ -362,7 +409,9 @@ def _evaluate_model(
 
     # One probability pass feeds both the complete output and every operating
     # cost.  No cost can affect fit(), IL/DL selection, or correlation.
+    inference_started = time.perf_counter()
     test_probabilities = classifier.predict_proba(x_test)
+    inference_seconds = float(time.perf_counter() - inference_started)
     full_prediction = classifier.predict_full_from_proba(test_probabilities)
     full_metrics = compute_all_metrics(y_test, full_prediction)
     if model_name == "GSI_MLC_PA":
@@ -370,6 +419,10 @@ def _evaluate_model(
             "Independent Label Count": float(len(classifier.independent_labels_)),
             "Dependent Label Count": float(len(classifier.dependent_labels_)),
             "Validation Full Macro-F1": float(classifier.validation_objective_),
+            "Selection Time Seconds": float(
+                getattr(classifier, "selection_time_seconds_", 0.0)
+            ),
+            "Inference Time Seconds": inference_seconds,
         })
 
     cost_metrics = {}
@@ -461,6 +514,9 @@ def run_experiment(
     result_schema=2,
     critical_labels=None,
     max_new_folds=None,
+    gsi_partition_mode="learned",
+    gsi_fixed_independent_labels=None,
+    gsi_final_order="correlation",
 ):
     """Run only missing model/dataset pairs and then rebuild all plots.
 
@@ -511,6 +567,9 @@ def run_experiment(
             gsi_decision_policy=gsi_decision_policy,
             gsi_beta=gsi_beta,
             gsi_penalty=gsi_penalty,
+            gsi_partition_mode=gsi_partition_mode,
+            gsi_fixed_independent_labels=gsi_fixed_independent_labels,
+            gsi_final_order=gsi_final_order,
             dataset_loader=load_dataset,
             cv_factory=get_multilabel_cv,
             model_factory=_create_model,
@@ -550,6 +609,9 @@ def run_experiment(
             gsi_decision_policy,
             gsi_beta,
             gsi_penalty,
+            gsi_partition_mode,
+            gsi_fixed_independent_labels,
+            gsi_final_order,
         )
         cache = load_model_cache(tables_dir, model_name)
         legacy_dataset_shape = any(
@@ -706,6 +768,9 @@ def run_experiment(
                     gsi_decision_policy=gsi_decision_policy,
                     gsi_beta=gsi_beta,
                     gsi_penalty=gsi_penalty,
+                    gsi_partition_mode=gsi_partition_mode,
+                    gsi_fixed_independent_labels=gsi_fixed_independent_labels,
+                    gsi_final_order=gsi_final_order,
                 )
                 classifier.fit(x_train, y_train)
                 metrics = _evaluate_model(
@@ -728,6 +793,12 @@ def run_experiment(
                             int(label)
                             for label in classifier.dependent_labels_
                         ],
+                        "partition_mode": classifier.partition_mode_,
+                        "partition_audit": classifier.partition_audit_,
+                        "final_order_strategy": classifier.final_order_strategy_,
+                        "selection_time_seconds": float(
+                            classifier.selection_time_seconds_
+                        ),
                         "selection_history": classifier.selection_history_,
                         "selection_config": getattr(
                             classifier, "selection_config_", {}
@@ -784,6 +855,9 @@ def run_experiment(
                 gsi_decision_policy,
                 gsi_beta,
                 gsi_penalty,
+                gsi_partition_mode,
+                gsi_fixed_independent_labels,
+                gsi_final_order,
             )
             model_caches[model_name]["settings"] = settings
             cache_path = save_model_cache(
@@ -985,6 +1059,32 @@ def main():
         default="linear",
         help="Abstention penalty for GSI selection/final policy.",
     )
+    parser.add_argument(
+        "--gsi_partition_mode",
+        choices=[
+            "learned",
+            "learned_no_correlation_order",
+            "all_il",
+            "all_dl",
+            "fixed",
+            "random_matched",
+        ],
+        default="learned",
+        help="GSI IL/DL provider used for partition ablations.",
+    )
+    parser.add_argument(
+        "--gsi_fixed_independent_labels",
+        type=int,
+        nargs="*",
+        default=None,
+        help="Zero-based IL indices required by --gsi_partition_mode fixed.",
+    )
+    parser.add_argument(
+        "--gsi_final_order",
+        choices=["correlation", "selection", "natural"],
+        default="correlation",
+        help="Final GSI chain order after the IL/DL partition is frozen.",
+    )
     args = parser.parse_args()
 
     resolved_costs = args.abstention_costs
@@ -1008,6 +1108,9 @@ def main():
         gsi_decision_policy=args.gsi_decision_policy,
         gsi_beta=args.gsi_beta,
         gsi_penalty=args.gsi_penalty,
+        gsi_partition_mode=args.gsi_partition_mode,
+        gsi_fixed_independent_labels=args.gsi_fixed_independent_labels,
+        gsi_final_order=args.gsi_final_order,
         result_schema=args.result_schema,
         critical_labels=args.critical_labels,
         max_new_folds=args.max_new_folds,

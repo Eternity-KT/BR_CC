@@ -786,6 +786,8 @@ Exit criteria:
 
 #### Phase Q7 — Partition modes và IL/DL ablation infrastructure
 
+**Trạng thái:** ✅ Đã hoàn thành ngày 2026-09-02 — xem `docs/progress/phase_Q7.md`.
+
 **Phụ thuộc:** Q6.
 
 Phạm vi:

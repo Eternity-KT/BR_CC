@@ -123,6 +123,65 @@ def _group_records(ordered_folds, selector):
     return {"Raw Records": records}
 
 
+def _partition_audit(ordered_folds):
+    """Summarize GSI partition size, order, timing and fold stability."""
+
+    records = []
+    independent_sets = []
+    for fold_index, metrics in ordered_folds:
+        metadata = metrics.get("Model Metadata", {})
+        if "Partition Mode" not in metadata:
+            continue
+        independent = tuple(
+            sorted(int(label) for label in metadata.get("Independent Labels", []))
+        )
+        independent_sets.append(set(independent))
+        records.append({
+            "Fold": int(fold_index),
+            "Partition Mode": metadata.get("Partition Mode"),
+            "Independent Labels": list(independent),
+            "Dependent Labels": [
+                int(label) for label in metadata.get("Dependent Labels", [])
+            ],
+            "Independent Label Count": int(
+                metadata.get("Independent Label Count", len(independent))
+            ),
+            "Dependent Label Count": int(
+                metadata.get(
+                    "Dependent Label Count",
+                    len(metadata.get("Dependent Labels", [])),
+                )
+            ),
+            "Final Order Strategy": metadata.get("Final Order Strategy"),
+            "Final Order": [
+                int(label) for label in metadata.get("Final Order", [])
+            ],
+            "Selection Seconds": float(metadata.get("Selection Seconds", 0.0)),
+            "Probability Inference Seconds": float(
+                metadata.get("Probability Inference Seconds", 0.0)
+            ),
+        })
+
+    pairwise_scores = []
+    for left_index, left in enumerate(independent_sets):
+        for right in independent_sets[left_index + 1:]:
+            union = left | right
+            pairwise_scores.append(
+                1.0 if not union else float(len(left & right) / len(union))
+            )
+    if pairwise_scores:
+        stability = float(np.mean(pairwise_scores))
+    elif independent_sets:
+        stability = 1.0
+    else:
+        stability = float("nan")
+    return {
+        "Pairwise IL Jaccard Stability": stability,
+        "Summary": _numeric_summary(records),
+        "Raw Records": records,
+    }
+
+
 def summarize_v3_checkpoint(checkpoint):
     """Aggregate scalar scopes while retaining fold-level label/group records."""
 
@@ -148,6 +207,7 @@ def summarize_v3_checkpoint(checkpoint):
         "Groups": _group_records(
             ordered_folds, lambda metrics: metrics.get("Groups", {})
         ),
+        "Partition Audit": _partition_audit(ordered_folds),
         "Critical Labels": [
             {"Fold": fold_index, **metrics.get("Critical Labels", {})}
             for fold_index, metrics in ordered_folds
@@ -213,6 +273,9 @@ def _pair_config(
     gsi_decision_policy,
     gsi_beta,
     gsi_penalty,
+    gsi_partition_mode,
+    gsi_fixed_independent_labels,
+    gsi_final_order,
     critical_labels,
     model_signature,
     dataset_fingerprint,
@@ -243,6 +306,13 @@ def _pair_config(
         "gsi_decision_policy": gsi_decision_policy,
         "gsi_beta": float(gsi_beta),
         "gsi_penalty": gsi_penalty,
+        "gsi_partition_mode": gsi_partition_mode,
+        "gsi_fixed_independent_labels": (
+            None
+            if gsi_fixed_independent_labels is None
+            else [int(label) for label in gsi_fixed_independent_labels]
+        ),
+        "gsi_final_order": gsi_final_order,
         "critical_labels": critical_labels,
         "model_signature": model_signature,
         "evaluation_policy": _evaluation_policy_config(
@@ -320,6 +390,9 @@ def run_experiment_v3(
     gsi_decision_policy="hamming",
     gsi_beta=1.0,
     gsi_penalty="linear",
+    gsi_partition_mode="learned",
+    gsi_fixed_independent_labels=None,
+    gsi_final_order="correlation",
 ):
     """Run/resume schema-v3 folds and export strict JSON plus scope CSVs."""
 
@@ -350,6 +423,9 @@ def run_experiment_v3(
             gsi_decision_policy=gsi_decision_policy,
             gsi_beta=gsi_beta,
             gsi_penalty=gsi_penalty,
+            gsi_partition_mode=gsi_partition_mode,
+            gsi_fixed_independent_labels=gsi_fixed_independent_labels,
+            gsi_final_order=gsi_final_order,
         )
         model_signatures[model_name] = _model_signature(prototype)
 
@@ -382,6 +458,9 @@ def run_experiment_v3(
                 gsi_decision_policy,
                 gsi_beta,
                 gsi_penalty,
+                gsi_partition_mode,
+                gsi_fixed_independent_labels,
+                gsi_final_order,
                 critical_labels,
                 model_signatures[model_name],
                 dataset_fingerprint,
@@ -410,6 +489,9 @@ def run_experiment_v3(
                     gsi_decision_policy=gsi_decision_policy,
                     gsi_beta=gsi_beta,
                     gsi_penalty=gsi_penalty,
+                    gsi_partition_mode=gsi_partition_mode,
+                    gsi_fixed_independent_labels=gsi_fixed_independent_labels,
+                    gsi_final_order=gsi_final_order,
                 )
                 started = time.time()
                 classifier.fit(x_train, y_train)
@@ -428,6 +510,21 @@ def run_experiment_v3(
                     "Train Size": int(len(train_indices)),
                     "Test Size": int(len(test_indices)),
                 }
+                model_metadata = metrics.get("Model Metadata", {})
+                if "Partition Mode" in model_metadata:
+                    metadata.update({
+                        "Partition Mode": model_metadata["Partition Mode"],
+                        "Independent Label Count": model_metadata[
+                            "Independent Label Count"
+                        ],
+                        "Dependent Label Count": model_metadata[
+                            "Dependent Label Count"
+                        ],
+                        "Selection Seconds": model_metadata["Selection Seconds"],
+                        "Probability Inference Seconds": model_metadata[
+                            "Probability Inference Seconds"
+                        ],
+                    })
                 save_completed_fold(
                     checkpoint_path, checkpoint, fold_index, metrics, metadata
                 )
@@ -468,6 +565,13 @@ def run_experiment_v3(
         "gsi_decision_policy": gsi_decision_policy,
         "gsi_beta": float(gsi_beta),
         "gsi_penalty": gsi_penalty,
+        "gsi_partition_mode": gsi_partition_mode,
+        "gsi_fixed_independent_labels": (
+            None
+            if gsi_fixed_independent_labels is None
+            else [int(label) for label in gsi_fixed_independent_labels]
+        ),
+        "gsi_final_order": gsi_final_order,
         "critical_labels": critical_labels,
         "scaler": "MaxAbsScaler",
         "model_signatures": model_signatures,
