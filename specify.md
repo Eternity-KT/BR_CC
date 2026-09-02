@@ -909,6 +909,7 @@ Exit criteria:
 - ✅ Q12.3 hoàn thành ngày 2026-09-02: `scene`, lũy kế 36/120 pairs và xác nhận canonical run hash ổn định — xem `docs/progress/phase_Q12.3.md`.
 - ✅ Q12.4 hoàn thành ngày 2026-09-02: `yeast`, lũy kế 48/120 pairs và 240/600 folds — xem `docs/progress/phase_Q12.4.md`.
 - ✅ Q12.5 hoàn thành ngày 2026-09-02: `genbase`, lũy kế 60/120 pairs và 300/600 folds — xem `docs/progress/phase_Q12.5.md`.
+- ⏸️ Q12.6 checkpoint ngày 2026-09-02: hoàn thành `medical`, `enron`, `cal500` và 9/12 pairs của `bibtex`; lũy kế 105/120 pairs, 525/600 folds, không có partial pair — xem `docs/progress/phase_Q12.6.md`.
 
 Q12 là phase **repeatable** (`Q12.1`, `Q12.2`, ...), mỗi lần vẫn tối đa 5 giờ. Không gộp toàn bộ 10 datasets và mọi ablation vào một quota.
 
