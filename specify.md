@@ -807,6 +807,8 @@ Exit criteria:
 
 #### Phase Q8 — Shared registry, matched Logistic/MLP baselines
 
+**Trạng thái:** ✅ Đã hoàn thành ngày 2026-09-02 — xem `docs/progress/phase_Q8.md`.
+
 **Phụ thuộc:** Q2; nên thực hiện sau Q7 để registry bao phủ API cuối.
 
 Phạm vi:

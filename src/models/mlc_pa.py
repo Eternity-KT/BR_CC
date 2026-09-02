@@ -12,50 +12,18 @@ Hamming loss from Corollaries 1 and 2.  MLC-PA is a decision layer on top of a
 probabilistic multilabel classifier; it is not a new probability estimator.
 """
 
-from copy import deepcopy
-
 import numpy as np
-from sklearn.base import BaseEstimator, ClassifierMixin, clone
+from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.utils.validation import check_is_fitted
 
 from ..decision import HammingBOPPolicy
-from .binary_relevance import (
-    BinaryRelevanceClassifier,
-    BinaryRelevanceLogisticRegression,
-    BinaryRelevanceMLP,
-)
+from .base_learners import create_multilabel_estimator
 
 
 def _make_base_estimator(base_estimator, random_state):
-    """Resolve the marginal-probability estimator used by MLC-PA."""
-    if base_estimator is None or (
-        isinstance(base_estimator, str)
-        and base_estimator.lower() in ("mlp", "br_mlp", "pytorch_mlp")
-    ):
-        return BinaryRelevanceMLP(random_state=random_state)
-    if isinstance(base_estimator, str) and base_estimator.lower() in (
-        "logistic",
-        "lr",
-        "br_logistic",
-    ):
-        return BinaryRelevanceLogisticRegression(random_state=random_state)
-    if isinstance(base_estimator, str) and base_estimator.lower() in (
-        "svm",
-        "linearsvc",
-        "br_svm",
-    ):
-        return BinaryRelevanceClassifier(
-            base_estimator="svm", random_state=random_state
-        )
-    if hasattr(base_estimator, "fit") and hasattr(base_estimator, "predict_proba"):
-        try:
-            return clone(base_estimator)
-        except (TypeError, RuntimeError):
-            return deepcopy(base_estimator)
-    raise ValueError(
-        "base_estimator must be 'mlp', 'logistic', 'svm', or an estimator "
-        "implementing fit() and predict_proba()."
-    )
+    """Compatibility wrapper around the shared marginal-estimator factory."""
+
+    return create_multilabel_estimator(base_estimator, random_state)
 
 
 class MLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):

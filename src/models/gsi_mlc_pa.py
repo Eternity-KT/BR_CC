@@ -32,7 +32,12 @@ from ..selection import (
     evaluate_selection_objective,
     provide_partition,
 )
-from .binary_relevance import BinaryRelevanceMLP
+from .base_learners import (
+    base_learner_manifest,
+    canonical_base_learner_name,
+    create_binary_estimator,
+    create_multilabel_estimator,
+)
 from .classifier_chain import ClassifierChainClassifier
 
 
@@ -112,6 +117,9 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
     final_order : {"correlation", "selection", "natural"}, default="correlation"
         Order strategy applied after the partition is frozen. An explicit
         ``order`` permutation retains precedence for backward compatibility.
+    base_learner : {"logistic", "mlp"}, default="mlp"
+        Shared marginal/binary learner configuration used by the BR and CC
+        components. Registered Q8 model IDs set this value explicitly.
 
     Notes
     -----
@@ -139,6 +147,7 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         partition_mode="learned",
         fixed_independent_labels=None,
         final_order="correlation",
+        base_learner="mlp",
     ):
         self.cost = cost
         self.validation_size = validation_size
@@ -155,6 +164,7 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         self.partition_mode = partition_mode
         self.fixed_independent_labels = fixed_independent_labels
         self.final_order = final_order
+        self.base_learner = base_learner
 
     def _validate_parameters(self):
         if not 0.0 <= float(self.cost) <= 1.0:
@@ -170,6 +180,7 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         canonical_policy_name(self.decision_policy)
         canonical_partition_mode(self.partition_mode)
         canonical_final_order_strategy(self.final_order)
+        canonical_base_learner_name(self.base_learner, default="mlp")
         self._make_decision_policy()
 
     def _validated_order(self, n_labels):
@@ -182,14 +193,18 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
 
     def _make_br_model(self):
         if self.br_estimator is None:
-            return BinaryRelevanceMLP(random_state=self.random_state)
+            return create_multilabel_estimator(
+                self.base_learner, random_state=self.random_state
+            )
         return _clone_or_copy(self.br_estimator)
 
     def _make_cc_model(self, order=None):
         requested_order = self.order_ if order is None else list(order)
         if self.cc_estimator is None:
             return ClassifierChainClassifier(
-                base_estimator="mlp",
+                base_estimator=create_binary_estimator(
+                    self.base_learner, random_state=self.random_state
+                ),
                 order=requested_order,
                 random_state=self.random_state,
             )
@@ -659,6 +674,7 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         self.learned_reference_evaluated_configurations_ = learned_evaluation_count
         self.partition_audit_ = partition.as_dict()
         self.selection_config_.update({
+            "base_learner": base_learner_manifest(self.base_learner),
             "partition": dict(self.partition_audit_),
             "learned_reference_independent_labels": (
                 self.reference_independent_labels_

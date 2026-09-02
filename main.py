@@ -33,6 +33,16 @@ from src.models.binary_relevance import (
 from src.models.classifier_chain import ClassifierChainClassifier
 from src.models.gsi_mlc_pa import GSIMLCPartialAbstentionClassifier
 from src.models.mlc_pa import MLCPartialAbstentionClassifier
+from src.models.base_learners import base_learner_manifest
+from src.models.registry import (
+    MATCHED_MODEL_IDS,
+    canonical_registered_model_id,
+    create_registered_model,
+    get_model_spec,
+    is_registered_model_id,
+    model_base_learner,
+    model_family,
+)
 from src.visualization.plots import generate_pa_plots
 
 
@@ -41,7 +51,20 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 
 DEFAULT_ABSTENTION_COSTS = (0.20, 0.25, 0.30, 0.35, 0.40)
-SELECTIVE_MODELS = {"MLC_PA", "GSI_MLC_PA"}
+
+
+def _is_selective_model(model_name):
+    try:
+        return model_family(model_name) in ("MLC_PA", "GSI_MLC_PA")
+    except ValueError:
+        return False
+
+
+def _is_gsi_model(model_name):
+    try:
+        return model_family(model_name) == "GSI_MLC_PA"
+    except ValueError:
+        return False
 
 
 def _cost_key(cost):
@@ -65,6 +88,21 @@ def _create_model(
 ):
     """Create a supported model from its standardized name."""
     model_key = model_name.upper()
+    if is_registered_model_id(model_name):
+        return create_registered_model(
+            model_name,
+            random_state=random_state,
+            abstention_cost=abstention_cost,
+            abstention_penalty=abstention_penalty,
+            gsi_validation_size=gsi_validation_size,
+            gsi_selection_objective=gsi_selection_objective,
+            gsi_decision_policy=gsi_decision_policy,
+            gsi_beta=gsi_beta,
+            gsi_penalty=gsi_penalty,
+            gsi_partition_mode=gsi_partition_mode,
+            gsi_fixed_independent_labels=gsi_fixed_independent_labels,
+            gsi_final_order=gsi_final_order,
+        )
     if model_key in ("BR", "BR_SVC", "BR_LINEARSVC"):
         return BinaryRelevanceClassifier(
             base_estimator="svm", random_state=random_state
@@ -110,8 +148,8 @@ def _create_model(
             final_order=gsi_final_order,
         )
     raise ValueError(
-        f"Unknown model name: {model_name}. Supported: BR, BR_Logistic, "
-        "BR_MLP, CC, CC_Logistic, CC_MLP, MLC_PA, GSI_MLC_PA"
+        f"Unknown model name: {model_name}. Registered: {MATCHED_MODEL_IDS}; "
+        "legacy aliases BR, CC, MLC_PA and GSI_MLC_PA remain supported."
     )
 
 
@@ -119,16 +157,8 @@ def _standardize_model_name(name):
     model_key = name.upper()
     if model_key in ("BR", "BR_SVC", "BR_LINEARSVC"):
         return "BR"
-    if model_key in ("BR_LOGISTIC", "BR_LR", "BR_LOGREG"):
-        return "BR_Logistic"
-    if model_key in ("BR_MLP", "BR_NEURAL_NETWORK", "BR_NN"):
-        return "BR_MLP"
     if model_key in ("CC", "CC_SVC", "CC_LINEARSVC"):
         return "CC"
-    if model_key in ("CC_LOGISTIC", "CC_LR", "CC_LOGREG"):
-        return "CC_Logistic"
-    if model_key in ("CC_MLP", "CC_NEURAL_NETWORK", "CC_NN"):
-        return "CC_MLP"
     if model_key in ("MLC_PA", "MLCPA", "MLC_PARTIAL_ABSTENTION"):
         return "MLC_PA"
     if model_key in (
@@ -137,6 +167,8 @@ def _standardize_model_name(name):
         "GSI_MLC_PARTIAL_ABSTENTION",
     ):
         return "GSI_MLC_PA"
+    if is_registered_model_id(name):
+        return canonical_registered_model_id(name)
     return name
 
 
@@ -171,16 +203,20 @@ def _cache_settings(
         "n_splits": int(n_splits),
         "random_state": int(random_state),
     }
-    if model_name == "MLC_PA":
+    family = model_family(model_name)
+    configured_base = model_base_learner(
+        model_name, legacy_mlc_pa_base=mlc_pa_base
+    )
+    if family == "MLC_PA":
         settings.update({
             "abstention_costs": [float(cost) for cost in abstention_costs],
             "report_cost": float(report_cost),
             "abstention_penalty": abstention_penalty,
-            "base_estimator": mlc_pa_base,
+            "base_estimator": configured_base,
             "target_loss": "generalized_hamming",
             "f1_abstention_policy": "full_separate_selective_ignore",
         })
-    elif model_name == "GSI_MLC_PA":
+    elif family == "GSI_MLC_PA":
         from src.selection import canonical_selection_objective
 
         canonical_objective = canonical_selection_objective(
@@ -189,7 +225,10 @@ def _cache_settings(
         settings.update({
             "abstention_costs": [float(cost) for cost in abstention_costs],
             "report_cost": float(report_cost),
-            "base_estimators": "BR_MLP+CC_MLP",
+            "base_estimators": (
+                f"BR_{str(configured_base).upper()}+"
+                f"CC_{str(configured_base).upper()}"
+            ),
             "validation_size": float(gsi_validation_size),
             "selection_objective": (
                 "complete_macro_f1"
@@ -226,6 +265,13 @@ def _cache_settings(
                 ),
                 "final_order_strategy": gsi_final_order,
             })
+    if is_registered_model_id(model_name):
+        spec = get_model_spec(model_name)
+        settings["model_manifest"] = {
+            "model_id": spec.model_id,
+            "family": spec.family,
+            "base_learner": base_learner_manifest(spec.base_learner),
+        }
     return settings
 
 
@@ -254,12 +300,14 @@ def _evaluate_model_v3(
     from src.evaluation.metric_facade import compute_metric_bundle
 
     model_metadata = {}
+    if hasattr(classifier, "experiment_manifest_"):
+        model_metadata["Experiment Manifest"] = classifier.experiment_manifest_
     label_groups = {}
-    if model_name == "GSI_MLC_PA":
+    if _is_gsi_model(model_name):
         independent = [int(label) for label in classifier.independent_labels_]
         dependent = [int(label) for label in classifier.dependent_labels_]
         label_groups = {"IL": independent, "DL": dependent}
-        model_metadata = {
+        model_metadata.update({
             "Independent Labels": independent,
             "Dependent Labels": dependent,
             "Independent Label Count": int(len(independent)),
@@ -299,9 +347,9 @@ def _evaluate_model_v3(
             ),
             "Selection Config": getattr(classifier, "selection_config_", {}),
             "Selection History": getattr(classifier, "selection_history_", []),
-        }
+        })
 
-    if model_name in SELECTIVE_MODELS:
+    if _is_selective_model(model_name):
         inference_started = time.perf_counter()
         probabilities = np.asarray(classifier.predict_proba(x_test), dtype=np.float64)
         inference_seconds = float(time.perf_counter() - inference_started)
@@ -316,12 +364,12 @@ def _evaluate_model_v3(
             abstain_value=classifier.abstain_value,
             hamming_boundary=(
                 "symmetric_thresholds"
-                if model_name == "GSI_MLC_PA"
+                if _is_gsi_model(model_name)
                 else "minimum_loss"
             ),
         )
         model_metadata["Decision Policy"] = decision_policy.get_config()
-        if model_name == "GSI_MLC_PA":
+        if _is_gsi_model(model_name):
             model_metadata["Probability Inference Seconds"] = inference_seconds
     else:
         probabilities = None
@@ -347,7 +395,7 @@ def _evaluate_model_v3(
         "Model Metadata": model_metadata,
         "Costs": {},
     }
-    if model_name not in SELECTIVE_MODELS:
+    if not _is_selective_model(model_name):
         return result
 
     for cost in abstention_costs:
@@ -401,7 +449,7 @@ def _evaluate_model(
         )
     if metric_schema != 2:
         raise ValueError("metric_schema must be either 2 or 3.")
-    if model_name not in SELECTIVE_MODELS:
+    if not _is_selective_model(model_name):
         return {
             "full": compute_all_metrics(y_test, classifier.predict(x_test)),
             "costs": {},
@@ -414,7 +462,7 @@ def _evaluate_model(
     inference_seconds = float(time.perf_counter() - inference_started)
     full_prediction = classifier.predict_full_from_proba(test_probabilities)
     full_metrics = compute_all_metrics(y_test, full_prediction)
-    if model_name == "GSI_MLC_PA":
+    if _is_gsi_model(model_name):
         full_metrics.update({
             "Independent Label Count": float(len(classifier.independent_labels_)),
             "Dependent Label Count": float(len(classifier.dependent_labels_)),
@@ -537,7 +585,7 @@ def run_experiment(
     else:
         datasets = [_canonicalize_dataset_name(name) for name in datasets]
     if models is None:
-        models = ["BR_MLP", "CC_MLP", "MLC_PA", "GSI_MLC_PA"]
+        models = list(MATCHED_MODEL_IDS)
     abstention_costs, report_cost = _validated_costs(
         abstention_costs, report_cost
     )
@@ -625,7 +673,7 @@ def run_experiment(
             for dataset_name, result in cache.get("datasets", {}).items()
         }
         if (
-            model_name in ("MLC_PA", "GSI_MLC_PA")
+            _is_selective_model(model_name)
             and cache["datasets"]
             and not _selective_cache_is_compatible(
                 cache.get("settings", {}), expected_settings
@@ -648,7 +696,7 @@ def run_experiment(
             import_legacy_model_results(
                 legacy_results, model_name, source_model=model_name
             )
-            if model_name not in ("MLC_PA", "GSI_MLC_PA")
+            if not _is_selective_model(model_name)
             else {}
         )
         imported_any = False
@@ -660,9 +708,9 @@ def run_experiment(
                 imported_any = True
 
         if imported_any or (
-            legacy_dataset_shape and model_name not in SELECTIVE_MODELS
+            legacy_dataset_shape and not _is_selective_model(model_name)
         ):
-            if legacy_dataset_shape and model_name not in SELECTIVE_MODELS:
+            if legacy_dataset_shape and not _is_selective_model(model_name):
                 backup_model_cache(
                     tables_dir, model_name, reason="pre_schema_v2"
                 )
@@ -782,7 +830,7 @@ def run_experiment(
                 )
                 metrics["full"]["train_time"] = time.time() - started
                 fold_metrics[model_name].append(metrics)
-                if model_name == "GSI_MLC_PA":
+                if _is_gsi_model(model_name):
                     fold_metadata[model_name].append({
                         "fold": int(fold_index),
                         "independent_labels": [
@@ -952,10 +1000,10 @@ def main():
     parser.add_argument(
         "--models",
         nargs="+",
-        default=["BR_MLP", "CC_MLP", "MLC_PA", "GSI_MLC_PA"],
+        default=list(MATCHED_MODEL_IDS),
         help=(
             "Models to evaluate. Existing per-model or raw_results.json "
-            "entries are reused. Default: BR_MLP CC_MLP MLC_PA GSI_MLC_PA."
+            "entries are reused. Defaults to the eight matched Logistic/MLP IDs."
         ),
     )
     parser.add_argument(

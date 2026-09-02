@@ -7,9 +7,8 @@ Reference: Read, J., Pfahringer, B., Holmes, G., & Frank, E. (2011).
 
 import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin, clone
-from sklearn.svm import LinearSVC
-from sklearn.linear_model import LogisticRegression
-from sklearn.neural_network import MLPClassifier
+
+from .base_learners import create_binary_estimator
 
 
 class _ConstantClassifier:
@@ -36,60 +35,9 @@ class _ConstantClassifier:
 
 
 def _get_base_estimator(base_estimator, random_state=42):
-    """
-    Resolve base classifier from string or estimator instance.
+    """Compatibility wrapper around the shared base-learner factory."""
 
-    Supported string presets:
-    - 'svm', 'linearsvc', None: LinearSVC(C=1.0, dual='auto', tol=1e-3, max_iter=5000, random_state=random_state)
-    - 'logistic', 'lr', 'logistic_regression': LogisticRegression(solver='liblinear', C=1.0, tol=1e-3, max_iter=1000, random_state=random_state)
-    - 'mlp', 'pytorch_mlp', 'gpu_mlp', 'nn': FastPyTorchBinaryMLP(hidden_layer_sizes=(64,), lr=3e-3, weight_decay=1e-3, epochs=80, random_state=random_state) [GPU accelerated via CUDA]
-    - 'sklearn_mlp': MLPClassifier(hidden_layer_sizes=(100,), activation='relu', solver='adam', alpha=1e-4, max_iter=200, early_stopping=False, tol=1e-4, n_iter_no_change=10, random_state=random_state)
-    """
-    if base_estimator is None or (isinstance(base_estimator, str) and base_estimator.lower() in ("svm", "linearsvc", "linear_svc")):
-        return LinearSVC(C=1.0, dual="auto", tol=1e-3, max_iter=5000, random_state=random_state)
-    elif isinstance(base_estimator, str) and base_estimator.lower() in ("logistic", "lr", "logistic_regression", "logreg"):
-        return LogisticRegression(solver="liblinear", C=1.0, tol=1e-3, max_iter=1000, random_state=random_state)
-    elif isinstance(base_estimator, str) and base_estimator.lower() in ("mlp", "pytorch_mlp", "gpu_mlp", "mlpclassifier", "neural_network", "nn"):
-        try:
-            from .pytorch_mlp import FastPyTorchBinaryMLP
-            return FastPyTorchBinaryMLP(
-                hidden_layer_sizes=(64,),
-                lr=1e-3,
-                weight_decay=1e-3,
-                epochs=30,
-                random_state=random_state
-            )
-        except Exception:
-            return MLPClassifier(
-                hidden_layer_sizes=(100,),
-                activation="relu",
-                solver="adam",
-                alpha=1e-4,
-                max_iter=200,
-                early_stopping=False,
-                tol=1e-4,
-                n_iter_no_change=10,
-                random_state=random_state
-            )
-    elif isinstance(base_estimator, str) and base_estimator.lower() in ("sklearn_mlp", "cpu_mlp"):
-        return MLPClassifier(
-            hidden_layer_sizes=(100,),
-            activation="relu",
-            solver="adam",
-            alpha=1e-4,
-            max_iter=200,
-            early_stopping=False,
-            tol=1e-4,
-            n_iter_no_change=10,
-            random_state=random_state
-        )
-    elif hasattr(base_estimator, "fit"):
-        return clone(base_estimator)
-    else:
-        raise ValueError(
-            f"Unsupported base_estimator: {base_estimator}. "
-            f"Must be None, 'svm', 'logistic', 'mlp', or an estimator instance implementing fit/predict."
-        )
+    return create_binary_estimator(base_estimator, random_state)
 
 
 class ClassifierChainClassifier(BaseEstimator, ClassifierMixin):

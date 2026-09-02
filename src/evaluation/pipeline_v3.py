@@ -10,6 +10,7 @@ import numpy as np
 from sklearn.preprocessing import MaxAbsScaler
 
 from ..decision import create_configured_policy
+from ..models.registry import model_family
 from .cache_v3 import (
     CACHE_SCHEMA_VERSION_V3,
     completed_fold_indices,
@@ -42,12 +43,13 @@ def _evaluation_policy_config(
         "calibration": "none",
         "partial_policy": None,
     }
-    if model_name in ("MLC_PA", "GSI_MLC_PA"):
+    family = model_family(model_name)
+    if family in ("MLC_PA", "GSI_MLC_PA"):
         policy_name = (
-            "hamming" if model_name == "MLC_PA" else gsi_decision_policy
+            "hamming" if family == "MLC_PA" else gsi_decision_policy
         )
         penalty = (
-            abstention_penalty if model_name == "MLC_PA" else gsi_penalty
+            abstention_penalty if family == "MLC_PA" else gsi_penalty
         )
         configuration["partial_policy"] = create_configured_policy(
             policy_name,
@@ -57,7 +59,7 @@ def _evaluation_policy_config(
             allow_abstention=True,
             hamming_boundary=(
                 "symmetric_thresholds"
-                if model_name == "GSI_MLC_PA"
+                if family == "GSI_MLC_PA"
                 else "minimum_loss"
             ),
         ).get_config()
@@ -327,6 +329,7 @@ def _pair_config(
 
 
 def _model_signature(classifier):
+    experiment_manifest = getattr(classifier, "experiment_manifest_", None)
     signature = {
         "class": (
             f"{classifier.__class__.__module__}."
@@ -334,7 +337,12 @@ def _model_signature(classifier):
         ),
         "backend": getattr(classifier, "backend_", None),
     }
-    if hasattr(classifier, "get_params"):
+    if experiment_manifest is not None:
+        signature["experiment_manifest"] = experiment_manifest
+        signature["parameters"] = experiment_manifest.get(
+            "model_parameters", {}
+        )
+    elif hasattr(classifier, "get_params"):
         try:
             signature["parameters"] = classifier.get_params(deep=True)
         except (TypeError, ValueError):

@@ -7,9 +7,9 @@ Reference: Zhang, M.-L., Li, Y.-K., Liu, X.-Y., & Geng, X. (2018).
 
 import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin, clone
-from sklearn.svm import LinearSVC
 from sklearn.linear_model import LogisticRegression
-from sklearn.neural_network import MLPClassifier
+
+from .base_learners import create_binary_estimator
 
 
 class _ConstantClassifier:
@@ -36,60 +36,9 @@ class _ConstantClassifier:
 
 
 def _get_base_estimator(base_estimator, random_state=42):
-    """
-    Resolve base classifier from string or estimator instance.
+    """Compatibility wrapper around the shared base-learner factory."""
 
-    Supported string presets:
-    - 'svm', 'linearsvc', None: LinearSVC(C=1.0, dual='auto', tol=1e-3, max_iter=5000, random_state=random_state)
-    - 'logistic', 'lr', 'logistic_regression': LogisticRegression(solver='liblinear', C=1.0, tol=1e-3, max_iter=1000, random_state=random_state)
-    - 'mlp', 'pytorch_mlp', 'gpu_mlp', 'nn': FastPyTorchBinaryMLP(hidden_layer_sizes=(64,), lr=3e-3, weight_decay=1e-3, epochs=80, random_state=random_state) [GPU accelerated via CUDA]
-    - 'sklearn_mlp': MLPClassifier(hidden_layer_sizes=(100,), activation='relu', solver='adam', alpha=1e-4, max_iter=200, early_stopping=False, tol=1e-4, n_iter_no_change=10, random_state=random_state)
-    """
-    if base_estimator is None or (isinstance(base_estimator, str) and base_estimator.lower() in ("svm", "linearsvc", "linear_svc")):
-        return LinearSVC(C=1.0, dual="auto", tol=1e-3, max_iter=5000, random_state=random_state)
-    elif isinstance(base_estimator, str) and base_estimator.lower() in ("logistic", "lr", "logistic_regression", "logreg"):
-        return LogisticRegression(solver="liblinear", C=1.0, tol=1e-3, max_iter=1000, random_state=random_state)
-    elif isinstance(base_estimator, str) and base_estimator.lower() in ("mlp", "pytorch_mlp", "gpu_mlp", "mlpclassifier", "neural_network", "nn"):
-        try:
-            from .pytorch_mlp import FastPyTorchBinaryMLP
-            return FastPyTorchBinaryMLP(
-                hidden_layer_sizes=(64,),
-                lr=1e-3,
-                weight_decay=1e-3,
-                epochs=30,
-                random_state=random_state
-            )
-        except Exception:
-            return MLPClassifier(
-                hidden_layer_sizes=(100,),
-                activation="relu",
-                solver="adam",
-                alpha=1e-4,
-                max_iter=200,
-                early_stopping=False,
-                tol=1e-4,
-                n_iter_no_change=10,
-                random_state=random_state
-            )
-    elif isinstance(base_estimator, str) and base_estimator.lower() in ("sklearn_mlp", "cpu_mlp"):
-        return MLPClassifier(
-            hidden_layer_sizes=(100,),
-            activation="relu",
-            solver="adam",
-            alpha=1e-4,
-            max_iter=200,
-            early_stopping=False,
-            tol=1e-4,
-            n_iter_no_change=10,
-            random_state=random_state
-        )
-    elif hasattr(base_estimator, "fit"):
-        return clone(base_estimator)
-    else:
-        raise ValueError(
-            f"Unsupported base_estimator: {base_estimator}. "
-            f"Must be None, 'svm', 'logistic', 'mlp', or an estimator instance implementing fit/predict."
-        )
+    return create_binary_estimator(base_estimator, random_state)
 
 
 class BinaryRelevanceClassifier(BaseEstimator, ClassifierMixin):
@@ -329,34 +278,20 @@ class BinaryRelevanceMLP(BaseEstimator, ClassifierMixin):
         self.device = device
         self.random_state = random_state
         self.kwargs = kwargs
-        try:
-            from .pytorch_mlp import MultiLabelMLPClassifier
-            self.model_ = MultiLabelMLPClassifier(
-                hidden_layer_sizes=self.hidden_layer_sizes,
-                lr=self.lr,
-                weight_decay=self.weight_decay,
-                epochs=self.epochs,
-                dropout=self.dropout,
-                device=self.device,
-                random_state=self.random_state,
-                **kwargs
-            )
-            self.backend_ = "pytorch"
-        except ImportError:
-            # Keep a CPU fallback for environments where PyTorch cannot be
-            # imported. The sklearn MLP supports the same 2D multilabel target
-            # and fit/predict/predict_proba contract as the accelerated model.
-            self.model_ = MLPClassifier(
-                hidden_layer_sizes=self.hidden_layer_sizes,
-                activation=kwargs.get("activation", "relu"),
-                solver=kwargs.get("solver", "adam"),
-                alpha=kwargs.get("alpha", self.weight_decay),
-                learning_rate_init=kwargs.get("learning_rate_init", self.lr),
-                max_iter=kwargs.get("max_iter", self.epochs),
-                early_stopping=kwargs.get("early_stopping", False),
-                random_state=self.random_state,
-            )
-            self.backend_ = "sklearn"
+        from .base_learners import _pytorch_classes
+
+        _, multilabel_class = _pytorch_classes()
+        self.model_ = multilabel_class(
+            hidden_layer_sizes=self.hidden_layer_sizes,
+            lr=self.lr,
+            weight_decay=self.weight_decay,
+            epochs=self.epochs,
+            dropout=self.dropout,
+            device=self.device,
+            random_state=self.random_state,
+            **kwargs
+        )
+        self.backend_ = "pytorch"
 
     def fit(self, X, Y):
         self.model_.fit(X, Y)

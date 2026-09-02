@@ -10,6 +10,13 @@ from .binary_relevance import (
 from .classifier_chain import ClassifierChainClassifier
 from .mlc_pa import MLCPartialAbstentionClassifier, MLCPAClassifier
 from .gsi_mlc_pa import GSIMLCPartialAbstentionClassifier, GSIMLCPAClassifier
+from .registry import (
+    MATCHED_MODEL_IDS,
+    canonical_registered_model_id,
+    create_registered_model,
+    get_model_spec,
+    model_family,
+)
 try:
     from .pytorch_mlp import (
         MultiLabelMLPClassifier,
@@ -32,6 +39,11 @@ __all__ = [
     "MLCPAClassifier",
     "GSIMLCPartialAbstentionClassifier",
     "GSIMLCPAClassifier",
+    "MATCHED_MODEL_IDS",
+    "canonical_registered_model_id",
+    "create_registered_model",
+    "get_model_spec",
+    "model_family",
     "MultiLabelMLPClassifier",
     "FastPyTorchBinaryMLP"
 ]

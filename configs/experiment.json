@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "base_learners": {
+    "logistic": {
+      "backend": "sklearn.linear_model.LogisticRegression",
+      "binary_parameters": {
+        "C": 1.0,
+        "solver": "liblinear",
+        "tol": 0.001,
+        "max_iter": 1000
+      }
+    },
+    "mlp": {
+      "backend": "pytorch",
+      "binary_class": "src.models.pytorch_mlp.FastPyTorchBinaryMLP",
+      "multilabel_class": "src.models.pytorch_mlp.MultiLabelMLPClassifier",
+      "binary_parameters": {
+        "hidden_layer_sizes": [64],
+        "lr": 0.001,
+        "weight_decay": 0.001,
+        "epochs": 30
+      },
+      "multilabel_parameters": {
+        "hidden_layer_sizes": [128, 64],
+        "lr": 0.001,
+        "weight_decay": 0.001,
+        "epochs": 30,
+        "dropout": 0.15,
+        "pos_weight_clamp": 15.0
+      }
+    },
+    "svm_raw": {
+      "backend": "sklearn.svm.LinearSVC",
+      "status": "legacy_uncalibrated",
+      "binary_parameters": {
+        "C": 1.0,
+        "dual": "auto",
+        "tol": 0.001,
+        "max_iter": 5000
+      }
+    },
+    "mlp_sklearn": {
+      "backend": "sklearn.neural_network.MLPClassifier",
+      "status": "explicit_legacy_backend",
+      "binary_parameters": {
+        "hidden_layer_sizes": [100],
+        "activation": "relu",
+        "solver": "adam",
+        "alpha": 0.0001,
+        "max_iter": 200,
+        "early_stopping": false,
+        "tol": 0.0001,
+        "n_iter_no_change": 10
+      }
+    }
+  },
+  "models": {
+    "BR_Logistic": {"family": "BR", "base_learner": "logistic"},
+    "BR_MLP": {"family": "BR", "base_learner": "mlp"},
+    "CC_Logistic": {"family": "CC", "base_learner": "logistic"},
+    "CC_MLP": {"family": "CC", "base_learner": "mlp"},
+    "MLC_PA_Logistic": {"family": "MLC_PA", "base_learner": "logistic"},
+    "MLC_PA_MLP": {"family": "MLC_PA", "base_learner": "mlp"},
+    "GSI_MLC_PA_Logistic": {"family": "GSI_MLC_PA", "base_learner": "logistic"},
+    "GSI_MLC_PA_MLP": {"family": "GSI_MLC_PA", "base_learner": "mlp"}
+  },
+  "defaults": {
+    "matched_model_ids": [
+      "BR_Logistic",
+      "BR_MLP",
+      "CC_Logistic",
+      "CC_MLP",
+      "MLC_PA_Logistic",
+      "MLC_PA_MLP",
+      "GSI_MLC_PA_Logistic",
+      "GSI_MLC_PA_MLP"
+    ]
+  }
+}
