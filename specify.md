@@ -908,6 +908,7 @@ Exit criteria:
 - ✅ Q12.2 hoàn thành ngày 2026-09-02: `music`, lũy kế 24/120 pairs và sửa run-hash drift khi resume — xem `docs/progress/phase_Q12.2.md`.
 - ✅ Q12.3 hoàn thành ngày 2026-09-02: `scene`, lũy kế 36/120 pairs và xác nhận canonical run hash ổn định — xem `docs/progress/phase_Q12.3.md`.
 - ✅ Q12.4 hoàn thành ngày 2026-09-02: `yeast`, lũy kế 48/120 pairs và 240/600 folds — xem `docs/progress/phase_Q12.4.md`.
+- ✅ Q12.5 hoàn thành ngày 2026-09-02: `genbase`, lũy kế 60/120 pairs và 300/600 folds — xem `docs/progress/phase_Q12.5.md`.
 
 Q12 là phase **repeatable** (`Q12.1`, `Q12.2`, ...), mỗi lần vẫn tối đa 5 giờ. Không gộp toàn bộ 10 datasets và mọi ablation vào một quota.
 
