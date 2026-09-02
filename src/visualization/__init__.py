@@ -19,3 +19,6 @@ __all__ = [
     "plot_pa_metric_comparison",
     "plot_rejection_cost_comparison",
 ]
+from .deployment import generate_deployment_plots
+
+__all__ = ["generate_deployment_plots"]

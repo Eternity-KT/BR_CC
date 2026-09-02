@@ -49,6 +49,8 @@ def _scope_rows(run_document):
     partition_rows = []
     calibration_rows = []
     reliability_rows = []
+    deployment_rows = []
+    critical_deployment_rows = []
     for dataset_name, models in run_document.get("Results", {}).items():
         for model_name, summary in models.items():
             prefix = {"Dataset": dataset_name, "Model": model_name}
@@ -82,6 +84,32 @@ def _scope_rows(run_document):
                     per_label_rows.append({**prefix, "Cost": cost, **row})
                 for row in cost_summary.get("Groups", {}).get("Raw Records", []):
                     group_rows.append({**prefix, "Cost": cost, **row})
+                deployment = cost_summary.get("Deployment", {})
+                for row in deployment.get("Raw Folds", []):
+                    deployment_rows.append({
+                        **prefix,
+                        "Cost": cost,
+                        "Scope": "Operating Point",
+                        **row,
+                    })
+                for row in deployment.get("Reviewer Scenarios", []):
+                    deployment_rows.append({
+                        **prefix,
+                        "Cost": cost,
+                        "Scope": "Reviewer Scenario",
+                        **row,
+                    })
+                for row in deployment.get("Critical Labels", []):
+                    metrics = row.get("Metrics", {})
+                    critical_deployment_rows.append({
+                        **prefix,
+                        "Cost": cost,
+                        "Fold": row.get("Fold"),
+                        "Status": row.get("Status"),
+                        "Reason": row.get("Reason"),
+                        "Critical Labels": row.get("Critical Labels", []),
+                        **metrics,
+                    })
     return (
         complete_rows,
         selective_rows,
@@ -90,6 +118,8 @@ def _scope_rows(run_document):
         partition_rows,
         calibration_rows,
         reliability_rows,
+        deployment_rows,
+        critical_deployment_rows,
     )
 
 
@@ -105,6 +135,8 @@ def export_v3_artifacts(run_document, tables_dir):
         partitions,
         calibration,
         reliability,
+        deployment,
+        critical_deployment,
     ) = _scope_rows(run_document)
     paths = {
         "json": tables_path / "results_v3.json",
@@ -115,8 +147,13 @@ def export_v3_artifacts(run_document, tables_dir):
         "partition_csv": tables_path / "partition_audit.csv",
         "calibration_csv": tables_path / "calibration_metrics.csv",
         "reliability_csv": tables_path / "reliability_data.csv",
+        "deployment_csv": tables_path / "deployment_metrics.csv",
+        "critical_deployment_csv": tables_path / "critical_label_deployment.csv",
     }
-    artifacts = {name: str(path) for name, path in paths.items()}
+    artifacts = {
+        **run_document.get("Artifacts", {}),
+        **{name: str(path) for name, path in paths.items()},
+    }
     run_document["Artifacts"] = artifacts
     atomic_json_dump_v3(run_document, paths["json"])
     _atomic_csv_dump(
@@ -153,5 +190,15 @@ def export_v3_artifacts(run_document, tables_dir):
         reliability,
         paths["reliability_csv"],
         ("Dataset", "Model", "Fold", "Bin"),
+    )
+    _atomic_csv_dump(
+        deployment,
+        paths["deployment_csv"],
+        ("Dataset", "Model", "Cost", "Fold", "Scope", "Reviewer Accuracy"),
+    )
+    _atomic_csv_dump(
+        critical_deployment,
+        paths["critical_deployment_csv"],
+        ("Dataset", "Model", "Cost", "Fold", "Status"),
     )
     return artifacts

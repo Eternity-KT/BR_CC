@@ -51,6 +51,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 
 DEFAULT_ABSTENTION_COSTS = (0.20, 0.25, 0.30, 0.35, 0.40)
+DEFAULT_V3_ABSTENTION_COSTS = (*DEFAULT_ABSTENTION_COSTS, 0.50)
 
 
 def _is_selective_model(model_name):
@@ -293,11 +294,16 @@ def _evaluate_model_v3(
     abstention_costs,
     label_names=None,
     critical_labels=None,
+    label_policy=None,
 ):
     """Evaluate one fitted model with isolated schema-v3 metric scopes."""
 
     from src.decision import create_configured_policy
     from src.evaluation.metric_facade import compute_metric_bundle
+    from src.evaluation.deployment import compute_deployment_metrics
+
+    if critical_labels is None and label_policy is not None:
+        critical_labels = label_policy.get("critical_labels") or None
 
     model_metadata = {}
     if hasattr(classifier, "experiment_manifest_"):
@@ -441,6 +447,17 @@ def _evaluate_model_v3(
             "Per Label": bundle["Per Label"],
             "Groups": bundle["Groups"],
             "Critical Labels": bundle["Critical Labels"],
+            "Deployment": compute_deployment_metrics(
+                y_test,
+                full_prediction,
+                partial_prediction,
+                cost=cost,
+                penalty=getattr(classifier, "penalty", "linear"),
+                abstain_value=classifier.abstain_value,
+                label_names=label_names,
+                label_policy=label_policy,
+                acceptance_confidence=acceptance_confidence,
+            ),
         }
     return result
 
@@ -454,6 +471,7 @@ def _evaluate_model(
     metric_schema=2,
     label_names=None,
     critical_labels=None,
+    label_policy=None,
 ):
     """Evaluate one fitted model, applying rejection only after training."""
     if metric_schema == 3:
@@ -465,6 +483,7 @@ def _evaluate_model(
             abstention_costs,
             label_names=label_names,
             critical_labels=critical_labels,
+            label_policy=label_policy,
         )
     if metric_schema != 2:
         raise ValueError("metric_schema must be either 2 or 3.")
@@ -507,9 +526,13 @@ def _evaluate_model(
     return {"full": full_metrics, "costs": cost_metrics}
 
 
-def _validated_costs(abstention_costs, report_cost):
+def _validated_costs(abstention_costs, report_cost, *, result_schema=2):
     costs = (
-        list(DEFAULT_ABSTENTION_COSTS)
+        list(
+            DEFAULT_V3_ABSTENTION_COSTS
+            if result_schema == 3
+            else DEFAULT_ABSTENTION_COSTS
+        )
         if abstention_costs is None
         else [float(cost) for cost in abstention_costs]
     )
@@ -584,6 +607,11 @@ def run_experiment(
     gsi_partition_mode="learned",
     gsi_fixed_independent_labels=None,
     gsi_final_order="correlation",
+    label_policy_path=None,
+    operating_point_rule=None,
+    operating_coverage_gamma=0.8,
+    operating_risk_epsilon=0.1,
+    operating_validation_size=0.2,
 ):
     """Run only missing model/dataset pairs and then rebuild all plots.
 
@@ -597,6 +625,12 @@ def run_experiment(
         raise ValueError("max_new_folds is available only with result_schema=3.")
     if result_schema == 2 and critical_labels is not None:
         raise ValueError("critical_labels is available only with result_schema=3.")
+    if result_schema == 2 and label_policy_path is not None:
+        raise ValueError("label_policy_path is available only with result_schema=3.")
+    if result_schema == 2 and operating_point_rule not in (None, "none"):
+        raise ValueError(
+            "operating_point_rule is available only with result_schema=3."
+        )
     if output_dir is None:
         output_dir = "results_pa_v3" if result_schema == 3 else "results_pa"
     if datasets is None:
@@ -606,7 +640,7 @@ def run_experiment(
     if models is None:
         models = list(MATCHED_MODEL_IDS)
     abstention_costs, report_cost = _validated_costs(
-        abstention_costs, report_cost
+        abstention_costs, report_cost, result_schema=result_schema
     )
 
     standardized_models = [_standardize_model_name(model) for model in models]
@@ -643,6 +677,11 @@ def run_experiment(
             evaluator=_evaluate_model,
             critical_labels=critical_labels,
             max_new_folds=max_new_folds,
+            label_policy_path=label_policy_path,
+            operating_point_rule=operating_point_rule,
+            operating_coverage_gamma=operating_coverage_gamma,
+            operating_risk_epsilon=operating_risk_epsilon,
+            operating_validation_size=operating_validation_size,
         )
 
     figures_dir = os.path.join(output_dir, "plots_pa")
@@ -1058,11 +1097,49 @@ def main():
         help="Optional global critical label names for schema-v3 audit.",
     )
     parser.add_argument(
+        "--label_policy_path",
+        type=str,
+        default=None,
+        help="Dataset-specific critical-label/cost policy JSON for schema v3.",
+    )
+    parser.add_argument(
+        "--operating_point_rule",
+        choices=[
+            "none",
+            "min_generalized_loss",
+            "max_utility_at_coverage",
+            "max_coverage_at_risk",
+        ],
+        default="none",
+        help="Select a cost on inner validation only (schema v3).",
+    )
+    parser.add_argument(
+        "--operating_coverage_gamma",
+        type=float,
+        default=0.8,
+        help="Minimum coverage for max-utility operating-point selection.",
+    )
+    parser.add_argument(
+        "--operating_risk_epsilon",
+        type=float,
+        default=0.1,
+        help="Maximum selective risk for max-coverage selection.",
+    )
+    parser.add_argument(
+        "--operating_validation_size",
+        type=float,
+        default=0.2,
+        help="Outer-train fraction reserved for operating-point selection.",
+    )
+    parser.add_argument(
         "--abstention_costs",
         nargs="+",
         type=float,
-        default=list(DEFAULT_ABSTENTION_COSTS),
-        help="Decision-time costs (default: 0.20 0.25 0.30 0.35 0.40).",
+        default=None,
+        help=(
+            "Decision-time costs (schema v2 default: 0.20..0.40; "
+            "schema v3 also includes the no-abstention sanity point 0.50)."
+        ),
     )
     parser.add_argument(
         "--report_cost",
@@ -1182,6 +1259,11 @@ def main():
         result_schema=args.result_schema,
         critical_labels=args.critical_labels,
         max_new_folds=args.max_new_folds,
+        label_policy_path=args.label_policy_path,
+        operating_point_rule=args.operating_point_rule,
+        operating_coverage_gamma=args.operating_coverage_gamma,
+        operating_risk_epsilon=args.operating_risk_epsilon,
+        operating_validation_size=args.operating_validation_size,
     )
 
 

@@ -7,10 +7,23 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MaxAbsScaler
 
 from ..decision import create_configured_policy
 from ..models.registry import model_family
+from ..visualization import generate_deployment_plots
+from .deployment import (
+    OPERATING_POINT_RULES,
+    compute_deployment_metrics,
+    operating_point_record,
+    select_operating_point,
+)
+from .label_policy import (
+    get_dataset_label_policy,
+    label_policy_hash,
+    load_label_policy_config,
+)
 from .cache_v3 import (
     CACHE_SCHEMA_VERSION_V3,
     completed_fold_indices,
@@ -289,6 +302,29 @@ def summarize_v3_checkpoint(checkpoint):
             {"Fold": fold_index, **entry.get("Critical Labels", {})}
             for fold_index, entry in entries
         ]
+        cost_summary["Deployment"] = _numeric_summary(
+            [
+                {
+                    "Fold": fold_index,
+                    **entry.get("Deployment", {}).get("Metrics", {}),
+                }
+                for fold_index, entry in entries
+            ]
+        )
+        cost_summary["Deployment"]["Reviewer Scenarios"] = [
+            {"Fold": fold_index, **row}
+            for fold_index, entry in entries
+            for row in entry.get("Deployment", {})
+            .get("Reviewer Scenarios", {})
+            .get("Records", [])
+        ]
+        cost_summary["Deployment"]["Critical Labels"] = [
+            {
+                "Fold": fold_index,
+                **entry.get("Deployment", {}).get("Critical Labels", {}),
+            }
+            for fold_index, entry in entries
+        ]
         summary["Costs"][cost] = cost_summary
     return summary
 
@@ -317,6 +353,11 @@ def _pair_config(
     model_signature,
     dataset_fingerprint,
     split_hash,
+    label_policy_digest,
+    operating_point_rule,
+    operating_coverage_gamma,
+    operating_risk_epsilon,
+    operating_validation_size,
 ):
     return {
         "schema_version": CACHE_SCHEMA_VERSION_V3,
@@ -352,6 +393,14 @@ def _pair_config(
         "gsi_final_order": gsi_final_order,
         "critical_labels": critical_labels,
         "model_signature": model_signature,
+        "label_policy_hash": label_policy_digest,
+        "operating_point": {
+            "rule": operating_point_rule,
+            "coverage_gamma": float(operating_coverage_gamma),
+            "risk_epsilon": float(operating_risk_epsilon),
+            "validation_size": float(operating_validation_size),
+            "selection_scope": "inner_validation",
+        },
         "evaluation_policy": _evaluation_policy_config(
             model_name,
             report_cost,
@@ -411,6 +460,98 @@ def _split_hash(splits):
     )
 
 
+def _select_inner_operating_point(
+    *,
+    model_name,
+    x_train,
+    y_train,
+    abstention_costs,
+    rule,
+    coverage_gamma,
+    risk_epsilon,
+    validation_size,
+    random_state,
+    model_factory,
+    model_factory_kwargs,
+    label_names,
+    label_policy,
+):
+    """Fit a selector only on inner-train and score costs on inner-validation."""
+
+    if rule is None:
+        return None
+    if not 0.0 < float(validation_size) < 1.0:
+        raise ValueError("operating_validation_size must lie strictly in (0, 1).")
+    indices = np.arange(len(x_train))
+    inner_train, inner_validation = train_test_split(
+        indices,
+        test_size=float(validation_size),
+        random_state=int(random_state),
+        shuffle=True,
+    )
+    inner_scaler = MaxAbsScaler()
+    inner_x_train = inner_scaler.fit_transform(x_train[inner_train])
+    inner_x_validation = inner_scaler.transform(x_train[inner_validation])
+    selector = model_factory(
+        model_name,
+        random_state=random_state,
+        **model_factory_kwargs,
+    )
+    selector.fit(inner_x_train, y_train[inner_train])
+    probabilities = np.asarray(
+        selector.predict_proba(inner_x_validation), dtype=np.float64
+    )
+    full_prediction = selector.predict_full_from_proba(probabilities)
+    family = model_family(model_name)
+    policy = create_configured_policy(
+        getattr(selector, "decision_policy", "hamming"),
+        cost=getattr(selector, "cost", 0.3),
+        penalty=getattr(selector, "penalty", "linear"),
+        beta=getattr(selector, "beta", 1.0),
+        allow_abstention=True,
+        abstain_value=selector.abstain_value,
+        hamming_boundary=(
+            "symmetric_thresholds"
+            if family == "GSI_MLC_PA"
+            else "minimum_loss"
+        ),
+    )
+    records = []
+    for cost in abstention_costs:
+        partial = policy.predict_from_proba(probabilities, cost=cost)
+        deployment = compute_deployment_metrics(
+            y_train[inner_validation],
+            full_prediction,
+            partial,
+            cost=cost,
+            penalty=getattr(selector, "penalty", "linear"),
+            abstain_value=selector.abstain_value,
+            label_names=label_names,
+            label_policy=label_policy,
+            acceptance_confidence=np.abs(probabilities - 0.5) * 2.0,
+        )
+        records.append(
+            operating_point_record(
+                cost, deployment, data_scope="inner_validation"
+            )
+        )
+    selection = select_operating_point(
+        records,
+        rule,
+        data_scope="inner_validation",
+        coverage_gamma=coverage_gamma,
+        risk_epsilon=risk_epsilon,
+    )
+    selection.update({
+        "Inner Train Size": int(len(inner_train)),
+        "Inner Validation Size": int(len(inner_validation)),
+        "Inner Split Seed": int(random_state),
+        "Candidate Records": records,
+        "Outer Test Access": False,
+    })
+    return selection
+
+
 def run_experiment_v3(
     *,
     datasets,
@@ -436,10 +577,31 @@ def run_experiment_v3(
     gsi_partition_mode="learned",
     gsi_fixed_independent_labels=None,
     gsi_final_order="correlation",
+    label_policy_path=None,
+    operating_point_rule=None,
+    operating_coverage_gamma=0.8,
+    operating_risk_epsilon=0.1,
+    operating_validation_size=0.2,
 ):
     """Run/resume schema-v3 folds and export strict JSON plus scope CSVs."""
 
     output_path = ensure_v3_output_directory(output_dir)
+    if operating_point_rule == "none":
+        operating_point_rule = None
+    if (
+        operating_point_rule is not None
+        and operating_point_rule not in OPERATING_POINT_RULES
+    ):
+        raise ValueError(
+            f"operating_point_rule must be one of {OPERATING_POINT_RULES} or None."
+        )
+    if not 0.0 <= float(operating_coverage_gamma) <= 1.0:
+        raise ValueError("operating_coverage_gamma must lie in [0, 1].")
+    if not 0.0 <= float(operating_risk_epsilon) <= 1.0:
+        raise ValueError("operating_risk_epsilon must lie in [0, 1].")
+    if not 0.0 < float(operating_validation_size) < 1.0:
+        raise ValueError("operating_validation_size must lie strictly in (0, 1).")
+    label_policy_config = load_label_policy_config(label_policy_path)
     if max_new_folds is not None:
         if (
             isinstance(max_new_folds, (bool, np.bool_))
@@ -450,6 +612,7 @@ def run_experiment_v3(
         max_new_folds = int(max_new_folds)
     checkpoints_dir = output_path / "checkpoints"
     results = {}
+    dataset_policy_hashes = {}
     new_fold_count = 0
     stopped_early = False
 
@@ -475,6 +638,22 @@ def run_experiment_v3(
     for dataset_name in datasets:
         x_data, y_data, _, label_names = dataset_loader(dataset_name)
         label_names = list(label_names)
+        dataset_label_policy = get_dataset_label_policy(
+            label_policy_config,
+            dataset_name,
+            label_names=label_names,
+        )
+        effective_critical_labels = (
+            critical_labels
+            if critical_labels is not None
+            else (
+                None
+                if dataset_label_policy is None
+                else dataset_label_policy.get("critical_labels") or None
+            )
+        )
+        dataset_policy_hash = label_policy_hash(dataset_label_policy)
+        dataset_policy_hashes[dataset_name] = dataset_policy_hash
         splits = list(
             cv_factory(n_splits=n_splits, random_state=random_state).split(
                 x_data, y_data
@@ -504,10 +683,15 @@ def run_experiment_v3(
                 gsi_partition_mode,
                 gsi_fixed_independent_labels,
                 gsi_final_order,
-                critical_labels,
+                effective_critical_labels,
                 model_signatures[model_name],
                 dataset_fingerprint,
                 split_hash,
+                dataset_policy_hash,
+                operating_point_rule,
+                operating_coverage_gamma,
+                operating_risk_epsilon,
+                operating_validation_size,
             )
             checkpoint_path, checkpoint = load_or_create_fold_checkpoint(
                 checkpoints_dir, model_name, dataset_name, config
@@ -536,6 +720,40 @@ def run_experiment_v3(
                     gsi_fixed_independent_labels=gsi_fixed_independent_labels,
                     gsi_final_order=gsi_final_order,
                 )
+                operating_selection = None
+                if (
+                    operating_point_rule is not None
+                    and model_family(model_name) in ("MLC_PA", "GSI_MLC_PA")
+                ):
+                    operating_selection = _select_inner_operating_point(
+                        model_name=model_name,
+                        x_train=x_data[train_indices],
+                        y_train=y_train,
+                        abstention_costs=abstention_costs,
+                        rule=operating_point_rule,
+                        coverage_gamma=operating_coverage_gamma,
+                        risk_epsilon=operating_risk_epsilon,
+                        validation_size=operating_validation_size,
+                        random_state=random_state,
+                        model_factory=model_factory,
+                        model_factory_kwargs={
+                            "abstention_cost": report_cost,
+                            "abstention_penalty": abstention_penalty,
+                            "mlc_pa_base": mlc_pa_base,
+                            "gsi_validation_size": gsi_validation_size,
+                            "gsi_selection_objective": gsi_selection_objective,
+                            "gsi_decision_policy": gsi_decision_policy,
+                            "gsi_beta": gsi_beta,
+                            "gsi_penalty": gsi_penalty,
+                            "gsi_partition_mode": gsi_partition_mode,
+                            "gsi_fixed_independent_labels": (
+                                gsi_fixed_independent_labels
+                            ),
+                            "gsi_final_order": gsi_final_order,
+                        },
+                        label_names=label_names,
+                        label_policy=dataset_label_policy,
+                    )
                 started = time.time()
                 classifier.fit(x_train, y_train)
                 metrics = evaluator(
@@ -546,8 +764,13 @@ def run_experiment_v3(
                     abstention_costs,
                     metric_schema=3,
                     label_names=label_names,
-                    critical_labels=critical_labels,
+                    critical_labels=effective_critical_labels,
+                    label_policy=dataset_label_policy,
                 )
+                if operating_selection is not None:
+                    metrics.setdefault("Model Metadata", {})[
+                        "Operating Point Selection"
+                    ] = operating_selection
                 metadata = {
                     "Train And Evaluate Seconds": float(time.time() - started),
                     "Train Size": int(len(train_indices)),
@@ -616,6 +839,15 @@ def run_experiment_v3(
         ),
         "gsi_final_order": gsi_final_order,
         "critical_labels": critical_labels,
+        "label_policy_status": label_policy_config.get("status"),
+        "label_policy_hashes": dataset_policy_hashes,
+        "operating_point": {
+            "rule": operating_point_rule,
+            "coverage_gamma": float(operating_coverage_gamma),
+            "risk_epsilon": float(operating_risk_epsilon),
+            "validation_size": float(operating_validation_size),
+            "selection_scope": "inner_validation",
+        },
         "scaler": "MaxAbsScaler",
         "model_signatures": model_signatures,
         "evaluation_policy": {
@@ -649,8 +881,12 @@ def run_experiment_v3(
         "Status": "complete" if every_pair_complete else "partial",
         "Generated At": datetime.now(timezone.utc).isoformat(),
         "Settings": run_config,
+        "Label Policy Source": label_policy_config.get("source_path"),
         "Results": results,
     }
+    document["Artifacts"] = generate_deployment_plots(
+        document, output_path / "figures" / run_config_hash
+    )
     document["Artifacts"] = export_v3_artifacts(
         document, output_path / "tables" / run_config_hash
     )

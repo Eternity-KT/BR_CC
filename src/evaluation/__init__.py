@@ -27,8 +27,18 @@ from .calibration_metrics import (
     CALIBRATION_METRIC_NAMES,
     compute_calibration_metrics,
 )
+from .deployment import (
+    OPERATING_POINT_RULES,
+    compute_deployment_metrics,
+    operating_point_record,
+    select_operating_point,
+)
 
-__all__ = [
+__all__ += [
     "CALIBRATION_METRIC_NAMES",
     "compute_calibration_metrics",
+    "OPERATING_POINT_RULES",
+    "compute_deployment_metrics",
+    "operating_point_record",
+    "select_operating_point",
 ]

@@ -849,6 +849,8 @@ Exit criteria:
 
 #### Phase Q10 — Deployment metrics, critical labels và visualization
 
+**Trạng thái:** ✅ Đã hoàn thành ngày 2026-09-02 — xem `docs/progress/phase_Q10.md`.
+
 **Phụ thuộc:** Q2, Q7, Q9.
 
 Phạm vi:
