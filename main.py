@@ -302,6 +302,8 @@ def _evaluate_model_v3(
     model_metadata = {}
     if hasattr(classifier, "experiment_manifest_"):
         model_metadata["Experiment Manifest"] = classifier.experiment_manifest_
+    if hasattr(classifier, "calibration_audit_"):
+        model_metadata["Calibration Audit"] = classifier.calibration_audit_
     label_groups = {}
     if _is_gsi_model(model_name):
         independent = [int(label) for label in classifier.independent_labels_]
@@ -372,7 +374,11 @@ def _evaluate_model_v3(
         if _is_gsi_model(model_name):
             model_metadata["Probability Inference Seconds"] = inference_seconds
     else:
-        probabilities = None
+        probabilities = (
+            np.asarray(classifier.predict_proba(x_test), dtype=np.float64)
+            if hasattr(classifier, "predict_proba")
+            else None
+        )
         acceptance_confidence = None
         full_prediction = classifier.predict(x_test)
         decision_policy = None
@@ -395,6 +401,19 @@ def _evaluate_model_v3(
         "Model Metadata": model_metadata,
         "Costs": {},
     }
+    if probabilities is not None:
+        from src.evaluation.calibration_metrics import compute_calibration_metrics
+
+        result["Calibration"] = compute_calibration_metrics(
+            y_test,
+            probabilities,
+            label_names=label_names,
+        )
+    else:
+        result["Calibration"] = {
+            "Status": "Unavailable",
+            "Reason": "classifier_has_no_predict_proba",
+        }
     if not _is_selective_model(model_name):
         return result
 
@@ -1003,7 +1022,8 @@ def main():
         default=list(MATCHED_MODEL_IDS),
         help=(
             "Models to evaluate. Existing per-model or raw_results.json "
-            "entries are reused. Defaults to the eight matched Logistic/MLP IDs."
+            "entries are reused. Defaults to the 12 matched Logistic/MLP/"
+            "calibrated-SVM IDs."
         ),
     )
     parser.add_argument(

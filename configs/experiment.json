@@ -52,6 +52,21 @@
         "tol": 0.0001,
         "n_iter_no_change": 10
       }
+    },
+    "svm_calibrated": {
+      "backend": "sklearn.svm.LinearSVC+CalibratedClassifierCV",
+      "binary_parameters": {
+        "C": 1.0,
+        "dual": "auto",
+        "tol": 0.001,
+        "max_iter": 5000
+      },
+      "calibration": {
+        "method": "sigmoid",
+        "cv": 3,
+        "rare_label_strategy": "smoothed_prior",
+        "scope": "nested_in_training_fold"
+      }
     }
   },
   "models": {
@@ -62,10 +77,14 @@
     "MLC_PA_Logistic": {"family": "MLC_PA", "base_learner": "logistic"},
     "MLC_PA_MLP": {"family": "MLC_PA", "base_learner": "mlp"},
     "GSI_MLC_PA_Logistic": {"family": "GSI_MLC_PA", "base_learner": "logistic"},
-    "GSI_MLC_PA_MLP": {"family": "GSI_MLC_PA", "base_learner": "mlp"}
+    "GSI_MLC_PA_MLP": {"family": "GSI_MLC_PA", "base_learner": "mlp"},
+    "BR_SVM": {"family": "BR", "base_learner": "svm_calibrated"},
+    "CC_SVM": {"family": "CC", "base_learner": "svm_calibrated"},
+    "MLC_PA_SVM": {"family": "MLC_PA", "base_learner": "svm_calibrated"},
+    "GSI_MLC_PA_SVM": {"family": "GSI_MLC_PA", "base_learner": "svm_calibrated"}
   },
   "defaults": {
-    "matched_model_ids": [
+    "logistic_mlp_model_ids": [
       "BR_Logistic",
       "BR_MLP",
       "CC_Logistic",
@@ -74,6 +93,20 @@
       "MLC_PA_MLP",
       "GSI_MLC_PA_Logistic",
       "GSI_MLC_PA_MLP"
+    ],
+    "matched_model_ids": [
+      "BR_Logistic",
+      "BR_MLP",
+      "CC_Logistic",
+      "CC_MLP",
+      "MLC_PA_Logistic",
+      "MLC_PA_MLP",
+      "GSI_MLC_PA_Logistic",
+      "GSI_MLC_PA_MLP",
+      "BR_SVM",
+      "CC_SVM",
+      "MLC_PA_SVM",
+      "GSI_MLC_PA_SVM"
     ]
   }
 }

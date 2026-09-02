@@ -23,3 +23,12 @@ __all__ = [
     "get_multilabel_cv",
     "backup_model_cache",
 ]
+from .calibration_metrics import (
+    CALIBRATION_METRIC_NAMES,
+    compute_calibration_metrics,
+)
+
+__all__ = [
+    "CALIBRATION_METRIC_NAMES",
+    "compute_calibration_metrics",
+]

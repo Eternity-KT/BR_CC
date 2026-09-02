@@ -24,6 +24,7 @@ from src.models.base_learners import (
     load_experiment_config,
 )
 from src.models.registry import (
+    LOGISTIC_MLP_MODEL_IDS,
     MATCHED_MODEL_IDS,
     canonical_registered_model_id,
     create_registered_model,
@@ -37,7 +38,10 @@ class SharedBaseLearnerFactoryTests(unittest.TestCase):
         config = load_experiment_config()
         self.assertTrue(EXPERIMENT_CONFIG_PATH.exists())
         self.assertEqual(config["schema_version"], 1)
-        self.assertEqual(tuple(config["defaults"]["matched_model_ids"]), MATCHED_MODEL_IDS)
+        self.assertEqual(
+            tuple(config["defaults"]["logistic_mlp_model_ids"]),
+            LOGISTIC_MLP_MODEL_IDS,
+        )
         logistic = create_binary_estimator("logistic", random_state=19)
         self.assertIsInstance(logistic, LogisticRegression)
         self.assertEqual(logistic.C, 1.0)
@@ -77,7 +81,7 @@ class MatchedModelRegistryTests(unittest.TestCase):
 
     def test_registry_contains_exactly_eight_matched_ids_and_aliases(self):
         self.assertEqual(
-            MATCHED_MODEL_IDS,
+            LOGISTIC_MLP_MODEL_IDS,
             (
                 "BR_Logistic",
                 "BR_MLP",
@@ -96,7 +100,10 @@ class MatchedModelRegistryTests(unittest.TestCase):
             "GSI_MLC_PA": 2,
         }
         actual_families = {
-            family: sum(model_family(model_id) == family for model_id in MATCHED_MODEL_IDS)
+            family: sum(
+                model_family(model_id) == family
+                for model_id in LOGISTIC_MLP_MODEL_IDS
+            )
             for family in expected_families
         }
         self.assertEqual(actual_families, expected_families)
@@ -108,7 +115,7 @@ class MatchedModelRegistryTests(unittest.TestCase):
         self.assertEqual(_standardize_model_name("cc_nn"), "CC_MLP")
 
     def test_every_registered_model_has_json_safe_backend_manifest(self):
-        for model_id in MATCHED_MODEL_IDS:
+        for model_id in LOGISTIC_MLP_MODEL_IDS:
             with self.subTest(model_id=model_id):
                 model = _create_model(model_id, random_state=13)
                 manifest = model.experiment_manifest_
@@ -154,7 +161,7 @@ class MatchedModelRegistryTests(unittest.TestCase):
         features, truth = self._tiny_data()
         train_x, test_x = features[:18], features[18:]
         train_y, test_y = truth[:18], truth[18:]
-        for model_id in MATCHED_MODEL_IDS:
+        for model_id in LOGISTIC_MLP_MODEL_IDS:
             with self.subTest(model_id=model_id):
                 model = _create_model(
                     model_id,

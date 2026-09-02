@@ -38,6 +38,9 @@ def _configured_specs():
 MATCHED_MODEL_IDS = tuple(
     load_experiment_config()["defaults"]["matched_model_ids"]
 )
+LOGISTIC_MLP_MODEL_IDS = tuple(
+    load_experiment_config()["defaults"]["logistic_mlp_model_ids"]
+)
 
 _REGISTERED_ALIASES = {
     "BR_LR": "BR_Logistic",
@@ -52,6 +55,12 @@ _REGISTERED_ALIASES = {
     "MLCPA_MLP": "MLC_PA_MLP",
     "GSIMLCPA_LOGISTIC": "GSI_MLC_PA_Logistic",
     "GSIMLCPA_MLP": "GSI_MLC_PA_MLP",
+    "BR_CALIBRATED_SVM": "BR_SVM",
+    "CC_CALIBRATED_SVM": "CC_SVM",
+    "MLCPA_SVM": "MLC_PA_SVM",
+    "MLC_PA_CALIBRATED_SVM": "MLC_PA_SVM",
+    "GSIMLCPA_SVM": "GSI_MLC_PA_SVM",
+    "GSI_MLC_PA_CALIBRATED_SVM": "GSI_MLC_PA_SVM",
 }
 
 _LEGACY_FAMILIES = {

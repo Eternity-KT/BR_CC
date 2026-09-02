@@ -10,6 +10,7 @@ from sklearn.base import BaseEstimator, ClassifierMixin, clone
 from sklearn.linear_model import LogisticRegression
 
 from .base_learners import create_binary_estimator
+from .probability_adapter import ProbabilityAdapter, aggregate_calibration_audit
 
 
 class _ConstantClassifier:
@@ -85,7 +86,9 @@ class BinaryRelevanceClassifier(BaseEstimator, ClassifierMixin):
             y_j = Y[:, j]
             unique_classes = np.unique(y_j)
 
-            if len(unique_classes) <= 1:
+            if len(unique_classes) <= 1 and not isinstance(
+                template_estimator, ProbabilityAdapter
+            ):
                 # Handle single-class degenerate case
                 const_val = unique_classes[0] if len(unique_classes) == 1 else 0
                 clf = _ConstantClassifier(const_val)
@@ -94,6 +97,12 @@ class BinaryRelevanceClassifier(BaseEstimator, ClassifierMixin):
                 clf.fit(X, y_j)
 
             self.classifiers_.append(clf)
+
+        calibration_audit = aggregate_calibration_audit(
+            enumerate(self.classifiers_)
+        )
+        if calibration_audit is not None:
+            self.calibration_audit_ = calibration_audit
 
         return self
 

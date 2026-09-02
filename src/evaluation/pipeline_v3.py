@@ -184,6 +184,36 @@ def _partition_audit(ordered_folds):
     }
 
 
+def _calibration_summary(ordered_folds):
+    metric_rows = []
+    per_label_records = []
+    reliability_records = []
+    unavailable = []
+    for fold_index, metrics in ordered_folds:
+        calibration = metrics.get("Calibration", {})
+        if "Metrics" not in calibration:
+            unavailable.append({
+                "Fold": int(fold_index),
+                "Status": calibration.get("Status", "Unavailable"),
+                "Reason": calibration.get("Reason"),
+            })
+            continue
+        metric_rows.append({
+            "Fold": int(fold_index),
+            **calibration["Metrics"],
+        })
+        for row in calibration.get("Per Label", []):
+            per_label_records.append({"Fold": int(fold_index), **row})
+        for row in calibration.get("Reliability", []):
+            reliability_records.append({"Fold": int(fold_index), **row})
+    return {
+        "Metrics": _numeric_summary(metric_rows),
+        "Per Label": {"Raw Records": per_label_records},
+        "Reliability": {"Raw Records": reliability_records},
+        "Unavailable": unavailable,
+    }
+
+
 def summarize_v3_checkpoint(checkpoint):
     """Aggregate scalar scopes while retaining fold-level label/group records."""
 
@@ -210,8 +240,13 @@ def summarize_v3_checkpoint(checkpoint):
             ordered_folds, lambda metrics: metrics.get("Groups", {})
         ),
         "Partition Audit": _partition_audit(ordered_folds),
+        "Calibration": _calibration_summary(ordered_folds),
         "Critical Labels": [
             {"Fold": fold_index, **metrics.get("Critical Labels", {})}
+            for fold_index, metrics in ordered_folds
+        ],
+        "Model Metadata": [
+            {"Fold": fold_index, **metrics.get("Model Metadata", {})}
             for fold_index, metrics in ordered_folds
         ],
         "Costs": {},

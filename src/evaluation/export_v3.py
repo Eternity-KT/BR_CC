@@ -47,6 +47,8 @@ def _scope_rows(run_document):
     per_label_rows = []
     group_rows = []
     partition_rows = []
+    calibration_rows = []
+    reliability_rows = []
     for dataset_name, models in run_document.get("Results", {}).items():
         for model_name, summary in models.items():
             prefix = {"Dataset": dataset_name, "Model": model_name}
@@ -58,6 +60,13 @@ def _scope_rows(run_document):
                 group_rows.append({**prefix, "Cost": None, **row})
             for row in summary.get("Partition Audit", {}).get("Raw Records", []):
                 partition_rows.append({**prefix, **row})
+            calibration = summary.get("Calibration", {})
+            for row in calibration.get("Metrics", {}).get("Raw Folds", []):
+                calibration_rows.append({**prefix, "Scope": "Aggregate", **row})
+            for row in calibration.get("Per Label", {}).get("Raw Records", []):
+                calibration_rows.append({**prefix, "Scope": "Per Label", **row})
+            for row in calibration.get("Reliability", {}).get("Raw Records", []):
+                reliability_rows.append({**prefix, **row})
 
             for cost, cost_summary in summary.get("Costs", {}).items():
                 scope_by_fold = {}
@@ -73,14 +82,30 @@ def _scope_rows(run_document):
                     per_label_rows.append({**prefix, "Cost": cost, **row})
                 for row in cost_summary.get("Groups", {}).get("Raw Records", []):
                     group_rows.append({**prefix, "Cost": cost, **row})
-    return complete_rows, selective_rows, per_label_rows, group_rows, partition_rows
+    return (
+        complete_rows,
+        selective_rows,
+        per_label_rows,
+        group_rows,
+        partition_rows,
+        calibration_rows,
+        reliability_rows,
+    )
 
 
 def export_v3_artifacts(run_document, tables_dir):
     """Export the v3 manifest plus complete/selective/per-label/group CSV files."""
 
     tables_path = Path(tables_dir)
-    complete, selective, per_label, groups, partitions = _scope_rows(run_document)
+    (
+        complete,
+        selective,
+        per_label,
+        groups,
+        partitions,
+        calibration,
+        reliability,
+    ) = _scope_rows(run_document)
     paths = {
         "json": tables_path / "results_v3.json",
         "complete_csv": tables_path / "complete_metrics.csv",
@@ -88,6 +113,8 @@ def export_v3_artifacts(run_document, tables_dir):
         "per_label_csv": tables_path / "per_label_metrics.csv",
         "group_csv": tables_path / "group_metrics.csv",
         "partition_csv": tables_path / "partition_audit.csv",
+        "calibration_csv": tables_path / "calibration_metrics.csv",
+        "reliability_csv": tables_path / "reliability_data.csv",
     }
     artifacts = {name: str(path) for name, path in paths.items()}
     run_document["Artifacts"] = artifacts
@@ -116,5 +143,15 @@ def export_v3_artifacts(run_document, tables_dir):
         partitions,
         paths["partition_csv"],
         ("Dataset", "Model", "Fold", "Partition Mode"),
+    )
+    _atomic_csv_dump(
+        calibration,
+        paths["calibration_csv"],
+        ("Dataset", "Model", "Fold", "Scope", "Label Index", "Label Name"),
+    )
+    _atomic_csv_dump(
+        reliability,
+        paths["reliability_csv"],
+        ("Dataset", "Model", "Fold", "Bin"),
     )
     return artifacts

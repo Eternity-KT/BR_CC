@@ -92,6 +92,10 @@ class MLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             self.base_estimator, self.random_state
         )
         self.base_estimator_.fit(X, Y_arr)
+        if hasattr(self.base_estimator_, "calibration_audit_"):
+            self.calibration_audit_ = dict(
+                self.base_estimator_.calibration_audit_
+            )
         return self
 
     def predict_proba(self, X):

@@ -597,6 +597,10 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         selection_cc = self._make_cc_model(order=self.selection_order_)
         selection_br.fit(X_array[selection_train], Y_array[selection_train])
         selection_cc.fit(X_array[selection_train], Y_array[selection_train])
+        self.selection_calibration_audit_ = {
+            "br": getattr(selection_br, "calibration_audit_", None),
+            "cc": getattr(selection_cc, "calibration_audit_", None),
+        }
         if hasattr(selection_cc, "order_"):
             self.order_ = [int(label) for label in selection_cc.order_]
             self.selection_order_ = list(self.order_)
@@ -736,6 +740,16 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         self.dependent_parent_map_ = self._dependent_parent_map(
             self.label_correlation_, self.order_, self.dependent_labels_
         )
+        final_calibration_audit = {
+            "br": getattr(self.br_model_, "calibration_audit_", None),
+            "cc": getattr(self.cc_model_, "calibration_audit_", None),
+        }
+        if any(value is not None for value in final_calibration_audit.values()):
+            self.calibration_audit_ = {
+                "selection": dict(self.selection_calibration_audit_),
+                "final": final_calibration_audit,
+                "outer_test_access": False,
+            }
         self.selection_config_.update({
             "effective_final_order_strategy": self.final_order_strategy_,
             "selection_order": [int(label) for label in self.selection_order_],

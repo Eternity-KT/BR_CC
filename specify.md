@@ -828,6 +828,8 @@ Exit criteria:
 
 #### Phase Q9 — SVM calibration và hoàn chỉnh 12 baselines
 
+**Trạng thái:** ✅ Đã hoàn thành ngày 2026-09-02 — xem `docs/progress/phase_Q9.md`.
+
 **Phụ thuộc:** Q8.
 
 Phạm vi:

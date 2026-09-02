@@ -108,6 +108,17 @@ def create_binary_estimator(base_learner, random_state=42):
         return LogisticRegression(**parameters)
     if name == "svm_raw":
         return LinearSVC(**parameters)
+    if name == "svm_calibrated":
+        from .probability_adapter import ProbabilityAdapter
+
+        calibration = config["calibration"]
+        return ProbabilityAdapter(
+            estimator=LinearSVC(**parameters),
+            method=calibration["method"],
+            cv=int(calibration["cv"]),
+            rare_label_strategy=calibration["rare_label_strategy"],
+            random_state=random_state,
+        )
     if name == "mlp_sklearn":
         return MLPClassifier(**parameters)
     if name == "mlp":

@@ -11,6 +11,7 @@ from .classifier_chain import ClassifierChainClassifier
 from .mlc_pa import MLCPartialAbstentionClassifier, MLCPAClassifier
 from .gsi_mlc_pa import GSIMLCPartialAbstentionClassifier, GSIMLCPAClassifier
 from .registry import (
+    LOGISTIC_MLP_MODEL_IDS,
     MATCHED_MODEL_IDS,
     canonical_registered_model_id,
     create_registered_model,
@@ -40,6 +41,7 @@ __all__ = [
     "GSIMLCPartialAbstentionClassifier",
     "GSIMLCPAClassifier",
     "MATCHED_MODEL_IDS",
+    "LOGISTIC_MLP_MODEL_IDS",
     "canonical_registered_model_id",
     "create_registered_model",
     "get_model_spec",

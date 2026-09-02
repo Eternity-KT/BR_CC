@@ -9,6 +9,7 @@ import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin, clone
 
 from .base_learners import create_binary_estimator
+from .probability_adapter import ProbabilityAdapter, aggregate_calibration_audit
 
 
 class _ConstantClassifier:
@@ -105,7 +106,9 @@ class ClassifierChainClassifier(BaseEstimator, ClassifierMixin):
                 prev_ground_truth = Y[:, prev_indices].astype(np.float32)
                 X_extended = np.hstack([X, prev_ground_truth])
 
-            if len(unique_classes) <= 1:
+            if len(unique_classes) <= 1 and not isinstance(
+                template_estimator, ProbabilityAdapter
+            ):
                 const_val = unique_classes[0] if len(unique_classes) == 1 else 0
                 clf = _ConstantClassifier(const_val)
             else:
@@ -113,6 +116,12 @@ class ClassifierChainClassifier(BaseEstimator, ClassifierMixin):
                 clf.fit(X_extended, y_j)
 
             self.classifiers_.append(clf)
+
+        calibration_audit = aggregate_calibration_audit(
+            zip(self.order_, self.classifiers_)
+        )
+        if calibration_audit is not None:
+            self.calibration_audit_ = calibration_audit
 
         return self
 
