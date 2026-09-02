@@ -17,7 +17,9 @@ Dự án triển khai và đánh giá thực nghiệm so sánh các thuật toá
 
 ### 2.1. Cấu Hình Chung & Base Classifiers
 
-Hệ thống hỗ trợ 2 thuật toán bộ phân loại cơ sở (base binary classifiers):
+Schema v2/legacy hỗ trợ trực tiếp các classifier bên dưới. Schema v3 bổ sung
+MLP PyTorch và calibrated SVM qua shared registry; xem mục 8 để chạy ma trận
+12 baseline có cấu hình khớp nhau.
 
 | Base Classifier | Cấu hình siêu tham số | Loss Function | Đặc điểm & Ưu thế |
 |---|---|---|---|
@@ -71,7 +73,7 @@ Hệ thống hỗ trợ 2 thuật toán bộ phân loại cơ sở (base binary 
 
 ## 4. Bộ Chỉ Số Đánh Giá (Evaluation Metrics)
 
-Hệ thống lưu 5 chỉ số dự đoán đầy đủ vào kết quả:
+Schema v2 lưu 5 chỉ số dự đoán đầy đủ tương thích ngược:
 
 1. **Macro-F1 (⭐ Bắt buộc):** Trung bình điểm F1 trên từng nhãn ($F1_{macro} = \frac{1}{q}\sum_{j=1}^q F1_j$).
 2. **Micro-F1:** Tính F1 gộp toàn bộ các cặp instance-label.
@@ -288,3 +290,107 @@ The four requested figures are written to `results_pa/plots_pa/`:
 - `selective_macro_f1_comparison.png`;
 - `selective_micro_f1_comparison.png`;
 - `generalized_loss_comparison.png`.
+
+---
+
+## 8. Schema v3: matched baselines, deployment audit và resumable folds
+
+Schema v3 là pipeline dùng cho thí nghiệm mới; schema v2 vẫn là mặc định để
+không đọc/ghi nhầm cache cũ. Mọi lệnh v3 phải truyền `--result_schema 3` và một
+output directory riêng.
+
+### 8.1. Ma trận 12 baseline chính
+
+| Family | Logistic | PyTorch MLP | Calibrated SVM |
+|---|---|---|---|
+| BR | `BR_Logistic` | `BR_MLP` | `BR_SVM` |
+| CC | `CC_Logistic` | `CC_MLP` | `CC_SVM` |
+| MLC-PA | `MLC_PA_Logistic` | `MLC_PA_MLP` | `MLC_PA_SVM` |
+| GSI-MLC-PA | `GSI_MLC_PA_Logistic` | `GSI_MLC_PA_MLP` | `GSI_MLC_PA_SVM` |
+
+`BR_SVM`/`CC_SVM` và các selective SVM dùng nested sigmoid/Platt calibration
+chỉ trong outer-training fold. Các alias `BR`/`CC` cũ vẫn là raw LinearSVC và
+không thuộc ma trận primary comparison.
+
+Schema v3 tách riêng các scope `Full`, `Selective`, `Rejected`, `Optimistic`
+và `Deployment`. Ngoài complete metrics, output có coverage, risk-at-coverage,
+AURC, ABS/AABS, error capture, optimistic gain, per-label/IL-DL metrics,
+calibration và reviewer scenarios. Optimistic metrics là upper bound giả định
+reviewer đúng 100%, không phải chất lượng tự động của model.
+
+### 8.2. Smoke benchmark tái lập và audit tự động
+
+Từ repository root, chạy:
+
+```bash
+python -m unittest discover -s tests -v
+python tests_unit.py
+
+python main.py --datasets emotions \
+  --models BR_Logistic BR_MLP CC_Logistic CC_MLP MLC_PA_Logistic MLC_PA_MLP GSI_MLC_PA_Logistic GSI_MLC_PA_MLP BR_SVM CC_SVM MLC_PA_SVM GSI_MLC_PA_SVM \
+  --n_splits 2 --random_state 42 \
+  --abstention_costs 0.3 0.5 --report_cost 0.3 \
+  --result_schema 3 --output_dir results_pa_v3_smoke \
+  --label_policy_path configs/label_policy.json \
+  --operating_point_rule min_generalized_loss
+
+python scripts/audit_v3_results.py results_pa_v3_smoke \
+  --datasets emotions --expect-primary-models --folds 2 --costs 0.3 0.5
+```
+
+Smoke chuẩn Q11 có config hash `2a8c08daeccbf1b4`. Audit kiểm tra strict JSON,
+run/checkpoint hashes, đủ folds/model matrix, `Hamming Accuracy + Hamming Loss =
+1`, sanity point `c=0.5`, chín CSV và bảy figures. Chạy lại cùng lệnh sẽ dùng
+checkpoint hoàn thành thay vì fit lại fold.
+
+Artifacts nằm dưới directory có config hash:
+
+```text
+results_pa_v3_smoke/
+├── checkpoints/<MODEL>/emotions.<pair_hash>.json
+├── tables/2a8c08daeccbf1b4/results_v3.json
+├── tables/2a8c08daeccbf1b4/*.csv
+└── figures/2a8c08daeccbf1b4/*.png
+```
+
+### 8.3. Label policy và chọn operating point
+
+`configs/label_policy.json` chứa critical labels, weights, FP/FN cost, review
+cost và reviewer accuracies theo dataset. File mặc định cố ý rỗng; khi domain
+policy chưa được khai báo, critical metrics/utility trả `N/A` và pipeline không
+suy importance từ test prevalence.
+
+Ba rule được hỗ trợ:
+
+- `min_generalized_loss`;
+- `max_utility_at_coverage` với `--operating_coverage_gamma`;
+- `max_coverage_at_risk` với `--operating_risk_epsilon`.
+
+Cost chỉ được chọn trên inner-validation của outer-training fold. Outer-test
+chỉ dùng để báo cáo sau khi operating point đã freeze.
+
+### 8.4. Full run đã freeze và chạy theo quota
+
+Primary config nằm ở `configs/full_run.json`, SHA-256:
+
+```text
+4036af255fcdc462f9d5307b924cc0d1a1004b02309f749ac66826a9bc61fd1e
+```
+
+Kiểm tra config mà chưa chạy model:
+
+```bash
+python scripts/run_frozen_experiment.py --config configs/full_run.json --dry-run
+```
+
+Chạy/resume theo quota bằng fold checkpoint (ví dụ tối đa 20 fold mới trong
+một phiên):
+
+```bash
+python scripts/run_frozen_experiment.py \
+  --config configs/full_run.json --max-new-folds 20
+```
+
+Không sửa `configs/full_run.json` sau khi bắt đầu primary run. Mọi thay đổi
+scientific setting phải tạo config/checksum mới và output directory mới; tham
+số `--max-new-folds` chỉ là giới hạn vận hành, không thay đổi scientific hash.

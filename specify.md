@@ -870,6 +870,8 @@ Exit criteria:
 
 #### Phase Q11 — System verification và reproducible smoke benchmark
 
+**Trạng thái:** ✅ Đã hoàn thành ngày 2026-09-02 — xem `docs/progress/phase_Q11.md`.
+
 **Phụ thuộc:** Q0–Q10.
 
 Phạm vi:
