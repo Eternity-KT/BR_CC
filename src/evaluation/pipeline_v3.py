@@ -612,7 +612,15 @@ def run_experiment_v3(
         max_new_folds = int(max_new_folds)
     checkpoints_dir = output_path / "checkpoints"
     results = {}
-    dataset_policy_hashes = {}
+    # This run-level field must describe the complete requested queue, not only
+    # datasets reached before a quota stop.  Validation against actual label
+    # names still happens when each dataset is loaded below.
+    dataset_policy_hashes = {
+        dataset_name: label_policy_hash(
+            get_dataset_label_policy(label_policy_config, dataset_name)
+        )
+        for dataset_name in datasets
+    }
     new_fold_count = 0
     stopped_early = False
 
@@ -653,7 +661,10 @@ def run_experiment_v3(
             )
         )
         dataset_policy_hash = label_policy_hash(dataset_label_policy)
-        dataset_policy_hashes[dataset_name] = dataset_policy_hash
+        if dataset_policy_hash != dataset_policy_hashes[dataset_name]:
+            raise RuntimeError(
+                f"Normalized label policy changed while loading {dataset_name}."
+            )
         splits = list(
             cv_factory(n_splits=n_splits, random_state=random_state).split(
                 x_data, y_data

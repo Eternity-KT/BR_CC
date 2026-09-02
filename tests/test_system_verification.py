@@ -106,6 +106,46 @@ class ResultAuditTests(unittest.TestCase):
             self.assertEqual(summary["csv_artifacts"], 9)
             self.assertEqual(summary["figure_artifacts"], 7)
 
+    def test_run_hash_is_stable_across_multi_dataset_quota_resume(self):
+        def loader(dataset_name):
+            if dataset_name not in ("first", "second"):
+                raise ValueError(dataset_name)
+            return tiny_loader("tiny")
+
+        def run(output_dir, max_new_folds=None):
+            return run_experiment_v3(
+                datasets=["first", "second"],
+                models=["BR_Logistic"],
+                n_splits=2,
+                random_state=42,
+                output_dir=output_dir,
+                abstention_costs=[0.25, 0.5],
+                report_cost=0.25,
+                abstention_penalty="linear",
+                mlc_pa_base="logistic",
+                gsi_validation_size=0.2,
+                dataset_loader=loader,
+                cv_factory=lambda **kwargs: TwoFoldCV(),
+                model_factory=lambda *args, **kwargs: TinyProbabilityModel(),
+                evaluator=_evaluate_model,
+                max_new_folds=max_new_folds,
+            )
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            first = run(temporary_directory, max_new_folds=2)
+            self.assertEqual(first["Status"], "partial")
+            resumed = run(temporary_directory)
+            self.assertEqual(resumed["Status"], "complete")
+            self.assertEqual(first["Config Hash"], resumed["Config Hash"])
+            self.assertEqual(
+                first["Settings"]["label_policy_hashes"],
+                {"first": None, "second": None},
+            )
+            manifests = list(
+                Path(temporary_directory).glob("tables/*/results_v3.json")
+            )
+            self.assertEqual(len(manifests), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
