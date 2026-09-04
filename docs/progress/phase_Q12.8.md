@@ -23,8 +23,8 @@ python scripts/audit_v3_results.py results_pa_v3_ablation/objective/immediate_in
 
 `objective/bop_instance_f1` đã checkpoint **8/10 dataset pairs = 40/50
 folds**: `emotions`, `music`, `scene`, `yeast`, `genbase`, `medical`,
-`enron`, và `cal500`. Runner đang tiếp tục `bibtex`, sau đó là
-`reuters-k500`; output hiện tại chỉ được audit khi job đủ 50/50.
+`enron`, và `cal500`. Runner hiện dừng an toàn trước `bibtex`; resume sẽ
+chạy `bibtex`, sau đó `reuters-k500`. Output chỉ được audit khi job đủ 50/50.
 
 Đây là policy F1-BOP partial exact, nên `bibtex` có thể không in dòng mới
 trong thời gian dài giữa hai checkpoint fold. Không thay đổi policy, datasets,
