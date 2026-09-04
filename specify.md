@@ -910,6 +910,25 @@ Exit criteria:
 - ✅ Q12.4 hoàn thành ngày 2026-09-02: `yeast`, lũy kế 48/120 pairs và 240/600 folds — xem `docs/progress/phase_Q12.4.md`.
 - ✅ Q12.5 hoàn thành ngày 2026-09-02: `genbase`, lũy kế 60/120 pairs và 300/600 folds — xem `docs/progress/phase_Q12.5.md`.
 - ⏸️ Q12.6 checkpoint ngày 2026-09-02: hoàn thành `medical`, `enron`, `cal500` và 9/12 pairs của `bibtex`; lũy kế 105/120 pairs, 525/600 folds, không có partial pair — xem `docs/progress/phase_Q12.6.md`.
+- ✅ Q12.7 checkpoint ngày 2026-09-03: hoàn tất primary 120/120 pairs, 600/600 folds, strict audit PASS; khóa ablation grid và hoàn tất 40/50 folds đầu tiên của `immediate_instance_f1` — xem `docs/progress/phase_Q12.7.md`.
+- ⏳ Q12.8 đang chạy ngày 2026-09-03: `immediate_instance_f1` hoàn tất 50/50 folds và audit PASS; `bop_instance_f1` đã bắt đầu với checkpoint quota 5 folds — xem `docs/progress/phase_Q12.8.md`.
+
+**Trạng thái primary benchmark hiện tại:** ✅ hoàn thành 120/120 pairs, 600/600 folds. Strict audit PASS với frozen run hash `2a300c396384c5e9`; Q13 vẫn chờ toàn bộ objective/partition/random-matched ablation hoàn tất.
+
+**Đã hoàn thành trong Q12:**
+
+- [x] Chạy đủ 12 matched model IDs × 5 folds cho `emotions`, `music`, `scene`, `yeast`, `genbase`, `medical`, `enron` và `cal500`.
+- [x] Chạy đủ 9/12 model pairs của `bibtex`: toàn bộ Logistic/MLP và `BR_SVM`.
+- [x] Hoàn tất ba SVM pair còn lại của `bibtex` và đủ 12/12 pairs của `reuters-k500`.
+- [x] Strict full audit primary PASS: không partial/missing/failed, đủ tables/figures.
+- [x] Dừng an toàn sau complete checkpoint; không có fold/pair dở dang, cache bị trộn hay process runner còn chạy.
+
+**Còn lại để hoàn tất Q12 primary queue (thứ tự bắt buộc):**
+
+1. [x] Hoàn tất `bibtex/CC_SVM`, `bibtex/MLC_PA_SVM`, `bibtex/GSI_MLC_PA_SVM` (3 pairs, 15 folds).
+2. [x] Hoàn tất 12 model pairs của `reuters-k500` (60 folds).
+3. [x] Chạy `audit_v3_results.py` với frozen run hash `2a300c396384c5e9`: PASS `120/120` pairs, `600/600` folds, không partial/missing/failed và đầy đủ tables/figures.
+4. [x] Ghi handoff Q12 primary; generated results vẫn giữ local/ignored.
 
 Q12 là phase **repeatable** (`Q12.1`, `Q12.2`, ...), mỗi lần vẫn tối đa 5 giờ. Không gộp toàn bộ 10 datasets và mọi ablation vào một quota.
 
@@ -939,7 +958,22 @@ Exit criteria của mỗi Q12.x:
 
 Thoát Q12 khi đủ primary runs, cost grid và ablations đã đăng ký trước. Full benchmark không bắt buộc hoàn tất trong một Q12.x.
 
+### 8.3.1. Backlog còn lại sau checkpoint Q12.6
+
+| Ưu tiên | Hạng mục | Trạng thái | Điều kiện hoàn tất |
+|---|---|---|---|
+| P0 | Primary queue còn lại | ✅ Hoàn thành | 120/120 pairs, 600/600 folds và strict full audit PASS. |
+| P0 | Objective/partition ablation | ⏳ `immediate_instance_f1` đạt 50/50 folds, audit PASS; `bop_instance_f1` checkpoint 40/50 folds | Resume checksum-frozen `configs/ablation_run.json`; không đổi scientific settings. |
+| P0 | Random-matched repetitions | Chưa chạy | Thực hiện sau objective/partition ablation, lưu seed và giữ đúng số IL. |
+| P1 | Q13 statistical analysis | Chưa bắt đầu | Dataset-level paired analysis, CI/effect size, Friedman + Wilcoxon-Holm, claim matrix tái lập từ raw cache. |
+| P1 | Q14 report | Chưa bắt đầu | Cập nhật R2–R9 chỉ từ bảng/figure đã audit, kèm limitations và reproduction commands. |
+| P2 | Q15 MDP spike | Chưa bắt đầu, tùy chọn | Trả lời gate questions; chỉ mở Q16 nếu pilot được biện minh. |
+
+**Ranh giới code/report cho backlog:** primary queue và ablation trước mắt chỉ dùng module/config/runner đã có. Chỉ sửa code khi audit hoặc test chỉ ra lỗi tái lập; mọi bổ sung mới phải là module tách biệt, có test và không thay đổi default core. Báo cáo chỉ được cập nhật ở Q14 sau Q13, không dùng selective/optimistic metric để suy diễn kết quả primary chưa audit.
+
 #### Phase Q13 — Statistical analysis và bảng/biểu đồ cuối
+
+**Trạng thái:** ⏳ Chưa bắt đầu; bị chặn bởi toàn bộ Q12 ablation đã đăng ký và audit tương ứng.
 
 **Phụ thuộc:** Q12 hoàn tất primary runs.
 
@@ -960,6 +994,8 @@ Exit criteria:
 
 #### Phase Q14 — Cập nhật báo cáo hoàn chỉnh
 
+**Trạng thái:** ⏳ Chưa bắt đầu; bị chặn bởi Q13.
+
 **Phụ thuộc:** Q13.
 
 Phạm vi:
@@ -978,6 +1014,8 @@ Exit criteria:
 - tài liệu có reproduction commands và reference đúng.
 
 #### Phase Q15 — MDP/marginalization research spike, tùy chọn
+
+**Trạng thái:** ○ Chưa bắt đầu; không chặn Q13/Q14.
 
 **Phụ thuộc:** báo cáo chính không phụ thuộc phase này; chỉ chạy khi cần trả lời hướng nghiên cứu mục 7.
 
@@ -1028,19 +1066,19 @@ Quy tắc khi phase gần hết quota:
 
 Đợt cải tiến hoàn thành khi:
 
-- [ ] Tất cả unit/smoke tests ở C9 pass.
-- [ ] Kết quả cũ không bị ghi đè; mọi run có manifest và config hash.
-- [ ] Có đủ baseline theo base learner hoặc có log lý do thiếu.
-- [ ] Không có so sánh family bị confound bởi base learner/hyperparameter/calibration khác nhau.
-- [ ] Complete, selective, rejected và optimistic metrics có tên/mẫu số tách biệt.
-- [ ] Hamming Accuracy là metric hiển thị; generalized Hamming Loss vẫn được giữ cho BOP/audit.
-- [ ] Có Jaccard, Instance-F1, Macro Precision/Recall và per-label table.
-- [ ] Có error-capture/review-load và critical-label analysis hoặc ghi `N/A` vì thiếu domain config.
+- [x] Tất cả unit/smoke tests ở C9 pass.
+- [x] Kết quả cũ không bị ghi đè; mọi run có manifest và config hash.
+- [x] Có đủ baseline theo base learner hoặc có log lý do thiếu.
+- [x] Không có so sánh family bị confound bởi base learner/hyperparameter/calibration khác nhau.
+- [x] Complete, selective, rejected và optimistic metrics có tên/mẫu số tách biệt.
+- [x] Hamming Accuracy là metric hiển thị; generalized Hamming Loss vẫn được giữ cho BOP/audit.
+- [x] Có Jaccard, Instance-F1, Macro Precision/Recall và per-label table.
+- [x] Có error-capture/review-load và critical-label analysis hoặc ghi `N/A` vì thiếu domain config.
 - [ ] Có ablation chứng minh hoặc bác bỏ lợi ích IL/DL một cách độc lập với order/base/policy.
 - [ ] Có objective ablation, trong đó GSI thực sự gọi BOP instance-F1/Jaccard trên inner validation.
-- [ ] Không chọn cost/objective/threshold trên outer test.
+- [x] Không chọn cost/objective/threshold trên outer test.
 - [ ] Báo cáo mô tả đúng giới hạn của optimistic metrics và không suy diễn selective Macro-F1 thành hiệu quả thực tế.
-- [ ] `meeting_summary.md` tồn tại và các điểm chưa xác nhận đã được cập nhật.
+- [x] `meeting_summary.md` tồn tại và các điểm chưa xác nhận đã được cập nhật.
 - [ ] MDP được ghi đúng là future/research direction, trừ khi đã qua gate và có kết quả pilot.
 
 ## 10. Tài liệu tham khảo chính

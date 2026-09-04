@@ -3,7 +3,8 @@
 import numpy as np
 
 from .boundary import BoundarySetBOPPolicy
-from .count_distribution import prefix_count_distributions
+from .base import abstention_penalty
+from .count_distribution import suffix_count_distributions
 
 
 class JaccardBOPPolicy(BoundarySetBOPPolicy):
@@ -27,87 +28,43 @@ class JaccardBOPPolicy(BoundarySetBOPPolicy):
         n_labels = probabilities.size
         order = np.argsort(-probabilities, kind="stable")
         sorted_probabilities = probabilities[order]
-        prefix_counts = prefix_count_distributions(sorted_probabilities)
-
-        best_utility = -np.inf
-        best_action = None
-
-        # When no positive is predicted, Jaccard is one only if all truth
-        # labels in the decided-negative suffix are also zero.
-        if self.allow_abstention:
-            probability_empty_union = 1.0
-            for negative_start in range(n_labels, -1, -1):
-                if negative_start < n_labels:
-                    probability_empty_union *= (
-                        1.0 - sorted_probabilities[negative_start]
-                    )
-                utility = self._generalized_utility(
-                    probability_empty_union,
-                    negative_start,
-                    n_labels,
-                    cost,
-                    penalty,
-                )
-                action = self._action(order, 0, negative_start)
-                if self._is_better(
-                    utility, action, best_utility, best_action
-                ):
-                    best_utility, best_action = utility, action
-        else:
-            probability_empty_union = float(
-                np.prod(1.0 - sorted_probabilities, dtype=np.float64)
-            )
-            best_utility = probability_empty_union
-            best_action = self._action(order, 0, 0)
+        suffix_counts = suffix_count_distributions(sorted_probabilities)
+        suffix_table = np.zeros(
+            (n_labels + 1, n_labels + 1), dtype=np.float64
+        )
+        for start, distribution in enumerate(suffix_counts):
+            suffix_table[start, : distribution.size] = distribution
 
         count_axis = np.arange(n_labels + 1, dtype=np.float64)
+        expected_kernel = np.zeros_like(suffix_table)
+        cumulative_true_positives = np.cumsum(sorted_probabilities)
         for positive_count in range(1, n_labels + 1):
-            positive_distribution = prefix_counts[positive_count]
-            expected_true_positives = float(
-                np.dot(
-                    np.arange(positive_count + 1, dtype=np.float64),
-                    positive_distribution,
+            expected_kernel[positive_count] = (
+                cumulative_true_positives[positive_count - 1]
+                / (positive_count + count_axis)
+            )
+        expected_scores = expected_kernel @ suffix_table.T
+        expected_scores[0] = suffix_table[:, 0]
+
+        utilities = np.full_like(expected_scores, -np.inf)
+        for positive_count in range(n_labels + 1):
+            starts = (
+                np.arange(positive_count, n_labels + 1, dtype=np.int64)
+                if self.allow_abstention
+                else np.array([positive_count], dtype=np.int64)
+            )
+            abstentions = starts - positive_count
+            utilities[positive_count, starts] = (
+                expected_scores[positive_count, starts]
+                - np.asarray(
+                    abstention_penalty(
+                        abstentions, n_labels, cost, penalty
+                    ),
+                    dtype=np.float64,
                 )
             )
-            inverse_union = 1.0 / (positive_count + count_axis)
 
-            # Start with no decided-negative suffix, then add suffix labels
-            # from right to left using the Algorithm-3 expectation recurrence.
-            negative_start = n_labels
-            while True:
-                if self.allow_abstention or negative_start == positive_count:
-                    expected_jaccard = (
-                        expected_true_positives * inverse_union[0]
-                    )
-                    abstentions = negative_start - positive_count
-                    utility = self._generalized_utility(
-                        expected_jaccard,
-                        abstentions,
-                        n_labels,
-                        cost,
-                        penalty,
-                    )
-                    action = self._action(
-                        order, positive_count, negative_start
-                    )
-                    if self._is_better(
-                        utility, action, best_utility, best_action
-                    ):
-                        best_utility, best_action = utility, action
-
-                if negative_start == positive_count:
-                    break
-                negative_start -= 1
-                probability = sorted_probabilities[negative_start]
-                previous = inverse_union
-                updated = previous.copy()
-                updated[:-1] = (
-                    (1.0 - probability) * previous[:-1]
-                    + probability * previous[1:]
-                )
-                inverse_union = updated
-
-        return best_action, float(best_utility)
+        return self._best_boundary_candidate(order, utilities)
 
     def get_config(self):
         return {
@@ -119,7 +76,7 @@ class JaccardBOPPolicy(BoundarySetBOPPolicy):
             "abstain_value": int(self.abstain_value),
             "probability_assumption": "conditional_label_independence",
             "dependent_marginal_interpretation": "BOP under CLI approximation",
-            "algorithm": "Nguyen-Huellermeier Algorithm 3 with empty-union extension",
+            "algorithm": "Nguyen-Huellermeier Algorithm 3 with vectorized count tables and empty-union extension",
             "inference_complexity": "O(K^3) time, O(K^2) count cache",
             "empty_union_jaccard": 1.0,
             "tie_breaking": "more_decisions_then_stable_label_index",

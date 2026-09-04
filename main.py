@@ -84,6 +84,7 @@ def _create_model(
     gsi_beta=1.0,
     gsi_penalty="linear",
     gsi_partition_mode="learned",
+    gsi_partition_random_state=None,
     gsi_fixed_independent_labels=None,
     gsi_final_order="correlation",
 ):
@@ -101,6 +102,7 @@ def _create_model(
             gsi_beta=gsi_beta,
             gsi_penalty=gsi_penalty,
             gsi_partition_mode=gsi_partition_mode,
+            gsi_partition_random_state=gsi_partition_random_state,
             gsi_fixed_independent_labels=gsi_fixed_independent_labels,
             gsi_final_order=gsi_final_order,
         )
@@ -145,6 +147,7 @@ def _create_model(
             beta=gsi_beta,
             penalty=gsi_penalty,
             partition_mode=gsi_partition_mode,
+            partition_random_state=gsi_partition_random_state,
             fixed_independent_labels=gsi_fixed_independent_labels,
             final_order=gsi_final_order,
         )
@@ -197,6 +200,7 @@ def _cache_settings(
     gsi_beta=1.0,
     gsi_penalty="linear",
     gsi_partition_mode="learned",
+    gsi_partition_random_state=None,
     gsi_fixed_independent_labels=None,
     gsi_final_order="correlation",
 ):
@@ -250,6 +254,7 @@ def _cache_settings(
             or float(gsi_beta) != 1.0
             or gsi_penalty != "linear"
             or gsi_partition_mode != "learned"
+            or gsi_partition_random_state is not None
             or gsi_fixed_independent_labels is not None
             or gsi_final_order != "correlation"
         ):
@@ -259,6 +264,11 @@ def _cache_settings(
                 "decision_beta": float(gsi_beta),
                 "decision_penalty": gsi_penalty,
                 "partition_mode": gsi_partition_mode,
+                "partition_random_state": (
+                    None
+                    if gsi_partition_random_state is None
+                    else int(gsi_partition_random_state)
+                ),
                 "fixed_independent_labels": (
                     None
                     if gsi_fixed_independent_labels is None
@@ -605,6 +615,7 @@ def run_experiment(
     critical_labels=None,
     max_new_folds=None,
     gsi_partition_mode="learned",
+    gsi_partition_random_state=None,
     gsi_fixed_independent_labels=None,
     gsi_final_order="correlation",
     label_policy_path=None,
@@ -669,6 +680,7 @@ def run_experiment(
             gsi_beta=gsi_beta,
             gsi_penalty=gsi_penalty,
             gsi_partition_mode=gsi_partition_mode,
+            gsi_partition_random_state=gsi_partition_random_state,
             gsi_fixed_independent_labels=gsi_fixed_independent_labels,
             gsi_final_order=gsi_final_order,
             dataset_loader=load_dataset,
@@ -716,6 +728,7 @@ def run_experiment(
             gsi_beta,
             gsi_penalty,
             gsi_partition_mode,
+            gsi_partition_random_state,
             gsi_fixed_independent_labels,
             gsi_final_order,
         )
@@ -875,6 +888,7 @@ def run_experiment(
                     gsi_beta=gsi_beta,
                     gsi_penalty=gsi_penalty,
                     gsi_partition_mode=gsi_partition_mode,
+                    gsi_partition_random_state=gsi_partition_random_state,
                     gsi_fixed_independent_labels=gsi_fixed_independent_labels,
                     gsi_final_order=gsi_final_order,
                 )
@@ -962,6 +976,7 @@ def run_experiment(
                 gsi_beta,
                 gsi_penalty,
                 gsi_partition_mode,
+                gsi_partition_random_state,
                 gsi_fixed_independent_labels,
                 gsi_final_order,
             )
@@ -1225,6 +1240,15 @@ def main():
         help="Zero-based IL indices required by --gsi_partition_mode fixed.",
     )
     parser.add_argument(
+        "--gsi_partition_random_state",
+        type=int,
+        default=None,
+        help=(
+            "Seed used only for random-matched IL/DL sampling; outer folds, "
+            "inner splits and estimator seeds remain controlled by --random_state."
+        ),
+    )
+    parser.add_argument(
         "--gsi_final_order",
         choices=["correlation", "selection", "natural"],
         default="correlation",
@@ -1254,6 +1278,7 @@ def main():
         gsi_beta=args.gsi_beta,
         gsi_penalty=args.gsi_penalty,
         gsi_partition_mode=args.gsi_partition_mode,
+        gsi_partition_random_state=args.gsi_partition_random_state,
         gsi_fixed_independent_labels=args.gsi_fixed_independent_labels,
         gsi_final_order=args.gsi_final_order,
         result_schema=args.result_schema,

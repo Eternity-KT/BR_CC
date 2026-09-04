@@ -150,6 +150,12 @@ def _manifest_value(value):
 
 
 def _attach_manifest(model, spec):
+    model_parameters = deepcopy(model.get_params(deep=False))
+    # Keep manifests/cache hashes bit-for-bit compatible for the default
+    # behavior introduced before partition_random_state existed.  The field is
+    # material and retained as soon as an ablation supplies a separate seed.
+    if model_parameters.get("partition_random_state") is None:
+        model_parameters.pop("partition_random_state", None)
     manifest = {
         "experiment_config_schema": int(
             load_experiment_config()["schema_version"]
@@ -158,9 +164,7 @@ def _attach_manifest(model, spec):
         "family": spec.family,
         "selective": bool(spec.selective),
         "base_learner": base_learner_manifest(spec.base_learner),
-        "model_parameters": _manifest_value(
-            deepcopy(model.get_params(deep=False))
-        ),
+        "model_parameters": _manifest_value(model_parameters),
     }
     model.model_id_ = spec.model_id
     model.family_ = spec.family
@@ -182,6 +186,7 @@ def create_registered_model(
     gsi_beta=1.0,
     gsi_penalty="linear",
     gsi_partition_mode="learned",
+    gsi_partition_random_state=None,
     gsi_fixed_independent_labels=None,
     gsi_final_order="correlation",
 ):
@@ -214,6 +219,7 @@ def create_registered_model(
             beta=gsi_beta,
             penalty=gsi_penalty,
             partition_mode=gsi_partition_mode,
+            partition_random_state=gsi_partition_random_state,
             fixed_independent_labels=gsi_fixed_independent_labels,
             final_order=gsi_final_order,
             base_learner=spec.base_learner,

@@ -347,6 +347,7 @@ def _pair_config(
     gsi_beta,
     gsi_penalty,
     gsi_partition_mode,
+    gsi_partition_random_state,
     gsi_fixed_independent_labels,
     gsi_final_order,
     critical_labels,
@@ -359,7 +360,7 @@ def _pair_config(
     operating_risk_epsilon,
     operating_validation_size,
 ):
-    return {
+    config = {
         "schema_version": CACHE_SCHEMA_VERSION_V3,
         "metric_contract_version": METRIC_CONTRACT_VERSION,
         "dataset": dataset_name,
@@ -410,6 +411,9 @@ def _pair_config(
             gsi_penalty,
         ),
     }
+    if gsi_partition_random_state is not None:
+        config["gsi_partition_random_state"] = int(gsi_partition_random_state)
+    return config
 
 
 def _model_signature(classifier):
@@ -575,6 +579,7 @@ def run_experiment_v3(
     gsi_beta=1.0,
     gsi_penalty="linear",
     gsi_partition_mode="learned",
+    gsi_partition_random_state=None,
     gsi_fixed_independent_labels=None,
     gsi_final_order="correlation",
     label_policy_path=None,
@@ -638,6 +643,7 @@ def run_experiment_v3(
             gsi_beta=gsi_beta,
             gsi_penalty=gsi_penalty,
             gsi_partition_mode=gsi_partition_mode,
+            gsi_partition_random_state=gsi_partition_random_state,
             gsi_fixed_independent_labels=gsi_fixed_independent_labels,
             gsi_final_order=gsi_final_order,
         )
@@ -692,6 +698,7 @@ def run_experiment_v3(
                 gsi_beta,
                 gsi_penalty,
                 gsi_partition_mode,
+                gsi_partition_random_state,
                 gsi_fixed_independent_labels,
                 gsi_final_order,
                 effective_critical_labels,
@@ -728,6 +735,7 @@ def run_experiment_v3(
                     gsi_beta=gsi_beta,
                     gsi_penalty=gsi_penalty,
                     gsi_partition_mode=gsi_partition_mode,
+                    gsi_partition_random_state=gsi_partition_random_state,
                     gsi_fixed_independent_labels=gsi_fixed_independent_labels,
                     gsi_final_order=gsi_final_order,
                 )
@@ -757,6 +765,9 @@ def run_experiment_v3(
                             "gsi_beta": gsi_beta,
                             "gsi_penalty": gsi_penalty,
                             "gsi_partition_mode": gsi_partition_mode,
+                            "gsi_partition_random_state": (
+                                gsi_partition_random_state
+                            ),
                             "gsi_fixed_independent_labels": (
                                 gsi_fixed_independent_labels
                             ),
@@ -873,6 +884,10 @@ def run_experiment_v3(
             for model_name in models
         },
     }
+    if gsi_partition_random_state is not None:
+        run_config["gsi_partition_random_state"] = int(
+            gsi_partition_random_state
+        )
     every_pair_complete = (
         set(results) == set(datasets)
         and all(set(results[dataset]) == set(models) for dataset in datasets)

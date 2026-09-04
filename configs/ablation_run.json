@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "status": "frozen",
+  "description": "Preregistered Q12 objective and IL/DL partition ablation grid",
+  "preregistration": {
+    "frozen_before_metric_inspection": true,
+    "primary_run_hash": "2a300c396384c5e9",
+    "primary_config_sha256": "4036af255fcdc462f9d5307b924cc0d1a1004b02309f749ac66826a9bc61fd1e",
+    "objective_scope": "Logistic base only; final decision policy fixed to Hamming",
+    "partition_scope": "Logistic, MLP and calibrated SVM with matched folds/policy",
+    "random_partition_rule": "30 independent partition seeds; outer/inner/model seed remains 42"
+  },
+  "common_settings": {
+    "datasets": [
+      "emotions",
+      "music",
+      "scene",
+      "yeast",
+      "genbase",
+      "medical",
+      "enron",
+      "cal500",
+      "bibtex",
+      "reuters-k500"
+    ],
+    "n_splits": 5,
+    "random_state": 42,
+    "abstention_costs": [0.2, 0.25, 0.3, 0.35, 0.4, 0.5],
+    "report_cost": 0.3,
+    "abstention_penalty": "linear",
+    "mlc_pa_base": "logistic",
+    "gsi_validation_size": 0.2,
+    "gsi_selection_objective": "full_macro_f1",
+    "gsi_decision_policy": "hamming",
+    "gsi_beta": 1.0,
+    "gsi_penalty": "linear",
+    "result_schema": 3,
+    "critical_labels": null,
+    "gsi_partition_mode": "learned",
+    "gsi_fixed_independent_labels": null,
+    "gsi_final_order": "correlation",
+    "label_policy_path": "configs/label_policy.json",
+    "operating_point_rule": "min_generalized_loss",
+    "operating_coverage_gamma": 0.8,
+    "operating_risk_epsilon": 0.1,
+    "operating_validation_size": 0.2
+  },
+  "objective_ablation": {
+    "models": ["GSI_MLC_PA_Logistic"],
+    "objectives": [
+      "immediate_instance_f1",
+      "bop_instance_f1",
+      "bop_jaccard",
+      "macro_precision",
+      "macro_recall",
+      "f_beta_0_5",
+      "f_beta_2"
+    ]
+  },
+  "partition_ablation": {
+    "models": [
+      "GSI_MLC_PA_Logistic",
+      "GSI_MLC_PA_MLP",
+      "GSI_MLC_PA_SVM"
+    ],
+    "modes": [
+      "all_il",
+      "all_dl",
+      "learned_no_correlation_order"
+    ]
+  },
+  "random_matched_ablation": {
+    "models": [
+      "GSI_MLC_PA_Logistic",
+      "GSI_MLC_PA_MLP",
+      "GSI_MLC_PA_SVM"
+    ],
+    "partition_seeds": [
+      1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010,
+      1011, 1012, 1013, 1014, 1015, 1016, 1017, 1018, 1019, 1020,
+      1021, 1022, 1023, 1024, 1025, 1026, 1027, 1028, 1029, 1030
+    ]
+  },
+  "output_root": "results_pa_v3_ablation"
+}

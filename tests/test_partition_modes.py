@@ -107,7 +107,15 @@ class GSIPartitionModeTests(unittest.TestCase):
         ).astype(np.int32)
         return features, truth
 
-    def _fit(self, mode, *, fixed=None, final_order="natural", seed=7):
+    def _fit(
+        self,
+        mode,
+        *,
+        fixed=None,
+        final_order="natural",
+        seed=7,
+        partition_seed=None,
+    ):
         features, truth = self._data()
         classifier = GSIMLCPartialAbstentionClassifier(
             validation_size=0.25,
@@ -115,6 +123,7 @@ class GSIPartitionModeTests(unittest.TestCase):
             cc_estimator=_MeanFieldChainEstimator(),
             random_state=seed,
             partition_mode=mode,
+            partition_random_state=partition_seed,
             fixed_independent_labels=fixed,
             final_order=final_order,
         ).fit(features, truth)
@@ -170,6 +179,19 @@ class GSIPartitionModeTests(unittest.TestCase):
         )
         self.assertTrue(first.reference_selection_history_)
         self.assertGreater(first.evaluated_configurations_, 1)
+
+    def test_random_matched_partition_seed_is_separate_from_training_seed(self):
+        default, _, _ = self._fit("random_matched", seed=11)
+        configured, _, _ = self._fit(
+            "random_matched", seed=11, partition_seed=101
+        )
+        self.assertEqual(default.random_state, configured.random_state)
+        self.assertEqual(
+            default.reference_independent_labels_,
+            configured.reference_independent_labels_,
+        )
+        self.assertEqual(default.partition_audit_["random_state"], 11)
+        self.assertEqual(configured.partition_audit_["random_state"], 101)
 
     def test_no_correlation_mode_and_final_order_controls_do_not_change_partition(self):
         with mock.patch.object(
@@ -241,10 +263,12 @@ class GSIPartitionModeTests(unittest.TestCase):
         classifier = _create_model(
             "GSI_MLC_PA",
             gsi_partition_mode="fixed",
+            gsi_partition_random_state=73,
             gsi_fixed_independent_labels=[0, 2],
             gsi_final_order="natural",
         )
         self.assertEqual(classifier.partition_mode, "fixed")
+        self.assertEqual(classifier.partition_random_state, 73)
         self.assertEqual(classifier.fixed_independent_labels, [0, 2])
         self.assertEqual(classifier.final_order, "natural")
         settings = _cache_settings(
@@ -257,10 +281,12 @@ class GSIPartitionModeTests(unittest.TestCase):
             "mlp",
             0.2,
             gsi_partition_mode="fixed",
+            gsi_partition_random_state=73,
             gsi_fixed_independent_labels=[0, 2],
             gsi_final_order="natural",
         )
         self.assertEqual(settings["partition_mode"], "fixed")
+        self.assertEqual(settings["partition_random_state"], 73)
         self.assertEqual(settings["fixed_independent_labels"], [0, 2])
         self.assertEqual(settings["final_order_strategy"], "natural")
 

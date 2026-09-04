@@ -112,6 +112,11 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
     partition_mode : str, default="learned"
         IL/DL provider. Supports learned, learned without correlation reorder,
         all-IL, all-DL, fixed and random-matched ablations.
+    partition_random_state : int or None, default=None
+        Seed used only by ``random_matched``.  ``None`` preserves the legacy
+        behavior by reusing ``random_state``.  A separate seed lets repeated
+        random partitions share identical outer folds, inner splits and base
+        learner fits.
     fixed_independent_labels : sequence of int or None, default=None
         IL indices required only when ``partition_mode="fixed"``.
     final_order : {"correlation", "selection", "natural"}, default="correlation"
@@ -145,6 +150,7 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         beta=1.0,
         penalty="linear",
         partition_mode="learned",
+        partition_random_state=None,
         fixed_independent_labels=None,
         final_order="correlation",
         base_learner="mlp",
@@ -162,6 +168,7 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         self.beta = beta
         self.penalty = penalty
         self.partition_mode = partition_mode
+        self.partition_random_state = partition_random_state
         self.fixed_independent_labels = fixed_independent_labels
         self.final_order = final_order
         self.base_learner = base_learner
@@ -179,6 +186,11 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         canonical_selection_objective(self.selection_objective)
         canonical_policy_name(self.decision_policy)
         canonical_partition_mode(self.partition_mode)
+        if self.partition_random_state is not None and (
+            isinstance(self.partition_random_state, (bool, np.bool_))
+            or not isinstance(self.partition_random_state, (int, np.integer))
+        ):
+            raise ValueError("partition_random_state must be an integer or None.")
         canonical_final_order_strategy(self.final_order)
         canonical_base_learner_name(self.base_learner, default="mlp")
         self._make_decision_policy()
@@ -637,7 +649,11 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             self.n_labels_,
             learned_independent_labels=learned_independent,
             fixed_independent_labels=self.fixed_independent_labels,
-            random_state=self.random_state,
+            random_state=(
+                self.random_state
+                if self.partition_random_state is None
+                else int(self.partition_random_state)
+            ),
         )
         self.independent_labels_ = list(partition.independent_labels)
         self.dependent_labels_ = list(partition.dependent_labels)

@@ -1,6 +1,7 @@
 """Shared mechanics for boundary-set Bayes decision policies."""
 
 from abc import abstractmethod
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 
@@ -72,6 +73,46 @@ class BoundarySetBOPPolicy(DecisionPolicy):
             return decided > best_decided
         return self._tie_signature(action) > self._tie_signature(best_action)
 
+    def _best_boundary_candidate(self, order, utilities):
+        """Select one ``(positive_count, negative_start)`` utility exactly.
+
+        ``utilities`` is a square table with ``-inf`` at ineligible
+        boundaries.  Numerical ties use the same tolerance and deterministic
+        rules as :meth:`_is_better`, without a Python loop over every
+        candidate.  This is important for the O(K^3) F/Jaccard policies at
+        large K, where the probability recurrences are vectorized.
+        """
+
+        table = np.asarray(utilities, dtype=np.float64)
+        if table.ndim != 2 or table.shape[0] != table.shape[1]:
+            raise ValueError("utilities must be a square boundary table.")
+        maximum = float(np.max(table))
+        if not np.isfinite(maximum):
+            raise RuntimeError("No eligible decision boundary was evaluated.")
+        tied = np.argwhere(
+            np.isfinite(table)
+            & np.isclose(table, maximum, rtol=1e-12, atol=1e-12)
+        )
+        decided_counts = order.size - (tied[:, 1] - tied[:, 0])
+        tied = tied[decided_counts == np.max(decided_counts)]
+
+        best_action = None
+        best_utility = None
+        for positive_count, negative_start in tied:
+            action = self._action(
+                order, int(positive_count), int(negative_start)
+            )
+            if (
+                best_action is None
+                or self._tie_signature(action)
+                > self._tie_signature(best_action)
+            ):
+                best_action = action
+                best_utility = float(
+                    table[int(positive_count), int(negative_start)]
+                )
+        return best_action, best_utility
+
     @staticmethod
     def _generalized_utility(
         expected_score, abstentions, n_labels, cost, penalty
@@ -88,10 +129,25 @@ class BoundarySetBOPPolicy(DecisionPolicy):
         matrix = validate_probability_matrix(probabilities)
         predictions = np.empty(matrix.shape, dtype=np.int32)
         utilities = np.empty(matrix.shape[0], dtype=np.float64)
-        for row_index, row in enumerate(matrix):
-            predictions[row_index], utilities[row_index] = self._solve_row(
-                row, cost, penalty
-            )
+        # The vectorized O(K^3) row solvers release the GIL in NumPy/BLAS.
+        # Two workers improve the large-label validation workload without the
+        # oversubscription observed with wider pools.  map() preserves row
+        # order, so actions and tie-breaking remain deterministic.
+        use_workers = matrix.shape[0] >= 64 and matrix.shape[1] >= 64
+        if use_workers:
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                solved = executor.map(
+                    lambda row: self._solve_row(row, cost, penalty),
+                    matrix,
+                )
+                for row_index, (action, utility) in enumerate(solved):
+                    predictions[row_index] = action
+                    utilities[row_index] = utility
+        else:
+            for row_index, row in enumerate(matrix):
+                predictions[row_index], utilities[row_index] = self._solve_row(
+                    row, cost, penalty
+                )
         return predictions, utilities
 
     def predict(self, probabilities, *, cost=None, penalty=None):
