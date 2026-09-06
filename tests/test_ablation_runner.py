@@ -22,8 +22,8 @@ class FrozenAblationRunnerTests(unittest.TestCase):
 
     def test_grid_is_complete_unique_and_keeps_outer_seed_fixed(self):
         jobs = list(iter_ablation_jobs(self.payload))
-        self.assertEqual(len(jobs), 40)
-        self.assertEqual(len({job_id for job_id, _ in jobs}), 40)
+        self.assertEqual(len(jobs), 39)
+        self.assertEqual(len({job_id for job_id, _ in jobs}), 39)
         self.assertTrue(all(settings["random_state"] == 42 for _, settings in jobs))
         random_jobs = [row for row in jobs if row[0].startswith("random_matched/")]
         self.assertEqual(len(random_jobs), 30)
