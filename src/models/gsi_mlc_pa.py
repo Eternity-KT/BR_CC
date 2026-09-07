@@ -38,7 +38,17 @@ from .base_learners import (
     create_binary_estimator,
     create_multilabel_estimator,
 )
-from .classifier_chain import ClassifierChainClassifier
+from .classifier_chain import ClassifierChainClassifier, _ConstantClassifier
+
+
+def _safe_fit_binary(template_factory, X, y):
+    unique_classes = np.unique(y)
+    if len(unique_classes) <= 1:
+        const_val = unique_classes[0] if len(unique_classes) == 1 else 0
+        return _ConstantClassifier(const_val)
+    clf = template_factory()
+    clf.fit(X, y)
+    return clf
 
 
 def _clone_or_copy(estimator):
@@ -154,6 +164,8 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         fixed_independent_labels=None,
         final_order="correlation",
         base_learner="mlp",
+        dependency_structure="chained",
+        selection_fast_backend=True,
     ):
         self.cost = cost
         self.validation_size = validation_size
@@ -172,6 +184,8 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         self.fixed_independent_labels = fixed_independent_labels
         self.final_order = final_order
         self.base_learner = base_learner
+        self.dependency_structure = dependency_structure
+        self.selection_fast_backend = selection_fast_backend
 
     def _validate_parameters(self):
         if not 0.0 <= float(self.cost) <= 1.0:
@@ -193,6 +207,8 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             raise ValueError("partition_random_state must be an integer or None.")
         canonical_final_order_strategy(self.final_order)
         canonical_base_learner_name(self.base_learner, default="mlp")
+        if self.dependency_structure not in ("bipartite", "chained"):
+            raise ValueError("dependency_structure must be 'bipartite' or 'chained'.")
         self._make_decision_policy()
 
     def _validated_order(self, n_labels):
@@ -210,7 +226,13 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             )
         return _clone_or_copy(self.br_estimator)
 
-    def _make_cc_model(self, order=None):
+    def _make_binary_classifier(self, seed=None, use_fast=False):
+        backend = "logistic" if use_fast else self.base_learner
+        return create_binary_estimator(
+            backend, random_state=self.random_state if seed is None else seed
+        )
+
+    def _make_cc_model(self, order=None, predecessor_map=None):
         requested_order = self.order_ if order is None else list(order)
         if self.cc_estimator is None:
             return ClassifierChainClassifier(
@@ -219,11 +241,15 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
                 ),
                 order=requested_order,
                 random_state=self.random_state,
+                predecessor_map=predecessor_map,
             )
         estimator = _clone_or_copy(self.cc_estimator)
         if hasattr(estimator, "set_params"):
             try:
-                estimator.set_params(order=requested_order)
+                params = {"order": requested_order}
+                if hasattr(estimator, "predecessor_map"):
+                    params["predecessor_map"] = predecessor_map
+                estimator.set_params(**params)
             except (TypeError, ValueError):
                 pass
         return estimator
@@ -278,7 +304,10 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
                 "cc_estimator must expose fitted classifiers_ and order_ attributes."
             )
         if list(cc_model.order_) != self.order_:
-            raise ValueError("The fitted CC order does not match the GSI order.")
+            if self.dependency_structure == "bipartite":
+                self.order_ = [int(label) for label in cc_model.order_]
+            else:
+                raise ValueError("The fitted CC order does not match the GSI order.")
         if len(cc_model.classifiers_) != self.n_labels_:
             raise ValueError("The fitted CC must contain one classifier per label.")
 
@@ -295,6 +324,11 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
                 self.n_labels_,
                 "initial probabilities",
             ).copy()
+
+        # Independent labels take direct probabilities
+        for l in independent:
+            probabilities[:, l] = direct_probabilities[:, l]
+
         for position, label_index in enumerate(self.order_):
             if position < start_position:
                 continue
@@ -302,7 +336,13 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
                 probabilities[:, label_index] = direct_probabilities[:, label_index]
                 continue
 
-            predecessors = self.order_[:position]
+            if getattr(cc_model, "predecessor_map", None) is not None:
+                predecessors = sorted(list(independent))
+            elif self.dependency_structure == "bipartite":
+                predecessors = sorted(list(independent))
+            else:
+                predecessors = self.order_[:position]
+
             classifier = cc_model.classifiers_[position]
             if not predecessors:
                 # A DL chain root is the unconditional first CC classifier.
@@ -393,11 +433,34 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         return order
 
     @staticmethod
-    def _dependent_parent_map(correlation, order, dependent_labels):
+    def _dependent_parent_map(
+        correlation,
+        order,
+        dependent_labels,
+        independent_labels=None,
+        dependency_structure="chained",
+    ):
         """Record the strongest preceding parent for every dependent label."""
         correlation = np.asarray(correlation, dtype=np.float64)
         dependent = set(int(label) for label in dependent_labels)
         parent_map = {}
+        if dependency_structure == "bipartite":
+            independent = list(independent_labels) if independent_labels is not None else []
+            for d in dependent:
+                if not independent:
+                    parent_map[int(d)] = None
+                else:
+                    parent_map[int(d)] = int(
+                        min(
+                            independent,
+                            key=lambda p: (
+                                -abs(float(correlation[d, p])),
+                                p,
+                            ),
+                        )
+                    )
+            return parent_map
+
         for position, label in enumerate(order):
             if label not in dependent:
                 continue
@@ -579,6 +642,90 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         self._store_selection_result(current_result)
         return sorted(independent), sorted(dependent), current_score, history
 
+    def _select_bipartite_partition(
+        self, X_sel, Y_sel, X_val, Y_val, val_direct
+    ):
+        """Greedy selection for Bipartite GSI where DL labels depend ONLY on IL.
+
+        Starts with IL = {}, DL = all labels.
+        Tests adding each candidate label k to IL along selection_order_.
+        A label is added to IL if the validation objective strictly improves.
+        """
+        independent = []
+        dependent = list(range(self.n_labels_))
+        use_fast_selection = self.selection_fast_backend
+
+        # Baseline: IL = empty. Every label in DL is an unconditional binary classifier on X.
+        current_probs = np.zeros_like(val_direct)
+        for d in range(self.n_labels_):
+            clf = _safe_fit_binary(
+                lambda: self._make_binary_classifier(
+                    seed=self.random_state + d,
+                    use_fast=use_fast_selection,
+                ),
+                X_sel,
+                Y_sel[:, d],
+            )
+            current_probs[:, d] = _positive_probability(clf, X_val)
+
+        current_result = self._evaluate_configuration(Y_val, current_probs)
+        current_score = float(current_result.score)
+        history = [
+            self._selection_history_record(0, None, True, current_result, 0.0)
+        ]
+
+        for step, label_idx in enumerate(self.selection_order_, start=1):
+            cand_il = independent + [label_idx]
+            cand_dl = [d for d in range(self.n_labels_) if d not in cand_il]
+
+            cand_probs = np.zeros_like(val_direct)
+            for l in cand_il:
+                cand_probs[:, l] = val_direct[:, l]
+
+            if cand_il:
+                X_sel_ext = np.hstack([X_sel, Y_sel[:, cand_il].astype(np.float32)])
+                X_val_ext = np.hstack([X_val, val_direct[:, cand_il].astype(np.float32)])
+            else:
+                X_sel_ext = X_sel
+                X_val_ext = X_val
+
+            for d in cand_dl:
+                clf = _safe_fit_binary(
+                    lambda: self._make_binary_classifier(
+                        seed=self.random_state + label_idx * 100 + d,
+                        use_fast=use_fast_selection,
+                    ),
+                    X_sel_ext,
+                    Y_sel[:, d],
+                )
+                cand_probs[:, d] = _positive_probability(clf, X_val_ext)
+
+            cand_result = self._evaluate_configuration(Y_val, cand_probs)
+            cand_score = float(cand_result.score)
+            improvement = float(cand_score - current_score)
+            accepted = improvement > 1e-12
+
+            if accepted:
+                independent.append(label_idx)
+                dependent.remove(label_idx)
+                current_score = cand_score
+                current_probs = cand_probs
+                current_result = cand_result
+
+            history.append(
+                self._selection_history_record(
+                    step,
+                    label_idx,
+                    accepted,
+                    cand_result,
+                    improvement,
+                )
+            )
+
+        self.evaluated_configurations_ = len(history)
+        self._store_selection_result(current_result)
+        return sorted(independent), sorted(dependent), current_score, history
+
     def fit(self, X, Y):
         """Select IL/DL on validation, freeze it, then optionally refit."""
         self._validate_parameters()
@@ -606,16 +753,21 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         self.validation_size_ = int(len(validation))
 
         selection_br = self._make_br_model()
-        selection_cc = self._make_cc_model(order=self.selection_order_)
-        selection_br.fit(X_array[selection_train], Y_array[selection_train])
-        selection_cc.fit(X_array[selection_train], Y_array[selection_train])
+        if self.dependency_structure == "chained":
+            selection_cc = self._make_cc_model(order=self.selection_order_)
+            selection_br.fit(X_array[selection_train], Y_array[selection_train])
+            selection_cc.fit(X_array[selection_train], Y_array[selection_train])
+            if hasattr(selection_cc, "order_"):
+                self.order_ = [int(label) for label in selection_cc.order_]
+                self.selection_order_ = list(self.order_)
+        else:
+            selection_cc = None
+            selection_br.fit(X_array[selection_train], Y_array[selection_train])
+
         self.selection_calibration_audit_ = {
             "br": getattr(selection_br, "calibration_audit_", None),
-            "cc": getattr(selection_cc, "calibration_audit_", None),
+            "cc": getattr(selection_cc, "calibration_audit_", None) if selection_cc is not None else None,
         }
-        if hasattr(selection_cc, "order_"):
-            self.order_ = [int(label) for label in selection_cc.order_]
-            self.selection_order_ = list(self.order_)
 
         validation_direct = self._direct_probabilities(
             selection_br, X_array[validation]
@@ -631,17 +783,31 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         learned_history = None
         learned_evaluation_count = 0
         if needs_learned_reference:
-            (
-                learned_independent,
-                learned_dependent,
-                learned_score,
-                learned_history,
-            ) = self._select_partition(
-                X_array[validation],
-                Y_array[validation],
-                validation_direct,
-                selection_cc,
-            )
+            if self.dependency_structure == "bipartite":
+                (
+                    learned_independent,
+                    learned_dependent,
+                    learned_score,
+                    learned_history,
+                ) = self._select_bipartite_partition(
+                    X_array[selection_train],
+                    Y_array[selection_train],
+                    X_array[validation],
+                    Y_array[validation],
+                    validation_direct,
+                )
+            else:
+                (
+                    learned_independent,
+                    learned_dependent,
+                    learned_score,
+                    learned_history,
+                ) = self._select_partition(
+                    X_array[validation],
+                    Y_array[validation],
+                    validation_direct,
+                    selection_cc,
+                )
             learned_evaluation_count = int(self.evaluated_configurations_)
 
         partition = provide_partition(
@@ -678,6 +844,19 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             self.validation_objective_ = float(learned_score)
             self.selection_history_ = list(learned_history)
         else:
+            if self.dependency_structure == "bipartite" and selection_cc is None:
+                temp_map = {l: [] for l in self.independent_labels_}
+                il_sorted = sorted(list(self.independent_labels_))
+                for d in self.dependent_labels_:
+                    temp_map[d] = il_sorted
+                temp_order = il_sorted + sorted(list(self.dependent_labels_))
+                self.order_ = list(temp_order)
+                selection_cc = self._make_cc_model(
+                    order=temp_order,
+                    predecessor_map=temp_map,
+                )
+                selection_cc.fit(X_array[selection_train], Y_array[selection_train])
+
             (
                 self.validation_objective_,
                 self.selection_history_,
@@ -747,14 +926,35 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             final_y = Y_array[selection_train]
             self.refit_train_size_ = self.selection_train_size_
 
-        self.cc_model_ = self._make_cc_model(order=desired_final_order)
+        if self.dependency_structure == "bipartite":
+            # For bipartite structure, IL labels must precede DL labels in the chain
+            il_set = set(self.independent_labels_)
+            final_order = [l for l in desired_final_order if l in il_set] + [
+                d for d in desired_final_order if d not in il_set
+            ]
+            predecessor_map = {l: [] for l in self.independent_labels_}
+            il_sorted = sorted(list(self.independent_labels_))
+            for d in self.dependent_labels_:
+                predecessor_map[d] = il_sorted
+        else:
+            final_order = desired_final_order
+            predecessor_map = None
+
+        self.cc_model_ = self._make_cc_model(
+            order=final_order,
+            predecessor_map=predecessor_map,
+        )
         self.cc_model_.fit(final_x, final_y)
         if hasattr(self.cc_model_, "order_"):
             self.order_ = [int(label) for label in self.cc_model_.order_]
         else:
-            self.order_ = list(desired_final_order)
+            self.order_ = list(final_order)
         self.dependent_parent_map_ = self._dependent_parent_map(
-            self.label_correlation_, self.order_, self.dependent_labels_
+            self.label_correlation_,
+            self.order_,
+            self.dependent_labels_,
+            independent_labels=self.independent_labels_,
+            dependency_structure=self.dependency_structure,
         )
         final_calibration_audit = {
             "br": getattr(self.br_model_, "calibration_audit_", None),
@@ -767,6 +967,7 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
                 "outer_test_access": False,
             }
         self.selection_config_.update({
+            "dependency_structure": self.dependency_structure,
             "effective_final_order_strategy": self.final_order_strategy_,
             "selection_order": [int(label) for label in self.selection_order_],
             "correlation_order": [int(label) for label in self.correlation_order_],

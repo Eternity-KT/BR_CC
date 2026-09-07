@@ -189,6 +189,7 @@ def create_registered_model(
     gsi_partition_random_state=None,
     gsi_fixed_independent_labels=None,
     gsi_final_order="correlation",
+    gsi_dependency_structure="bipartite",
 ):
     """Instantiate one of the eight preregistered Logistic/MLP baselines."""
 
@@ -223,5 +224,6 @@ def create_registered_model(
             fixed_independent_labels=gsi_fixed_independent_labels,
             final_order=gsi_final_order,
             base_learner=spec.base_learner,
+            dependency_structure=gsi_dependency_structure,
         )
     return _attach_manifest(model, spec)

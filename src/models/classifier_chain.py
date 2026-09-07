@@ -62,10 +62,13 @@ class ClassifierChainClassifier(BaseEstimator, ClassifierMixin):
         random_state (int, default=42):
             Random seed for reproducibility.
     """
-    def __init__(self, base_estimator=None, order=None, random_state=42):
+    def __init__(
+        self, base_estimator=None, order=None, random_state=42, predecessor_map=None
+    ):
         self.base_estimator = base_estimator
         self.order = order
         self.random_state = random_state
+        self.predecessor_map = predecessor_map
         self.classifiers_ = []
         self.order_ = None
         self.n_labels_ = 0
@@ -99,10 +102,16 @@ class ClassifierChainClassifier(BaseEstimator, ClassifierMixin):
             unique_classes = np.unique(y_j)
 
             # Build extended feature vector
-            if i == 0:
-                X_extended = X
+            if self.predecessor_map is not None:
+                prev_indices = self.predecessor_map.get(label_idx, [])
+            elif i == 0:
+                prev_indices = []
             else:
                 prev_indices = self.order_[:i]
+
+            if not prev_indices:
+                X_extended = X
+            else:
                 prev_ground_truth = Y[:, prev_indices].astype(np.float32)
                 X_extended = np.hstack([X, prev_ground_truth])
 
@@ -140,10 +149,16 @@ class ClassifierChainClassifier(BaseEstimator, ClassifierMixin):
         Y_pred = np.zeros((n_samples, self.n_labels_), dtype=np.int32)
 
         for i, (label_idx, clf) in enumerate(zip(self.order_, self.classifiers_)):
-            if i == 0:
-                X_extended = X
+            if self.predecessor_map is not None:
+                prev_indices = self.predecessor_map.get(label_idx, [])
+            elif i == 0:
+                prev_indices = []
             else:
                 prev_indices = self.order_[:i]
+
+            if not prev_indices:
+                X_extended = X
+            else:
                 prev_preds = Y_pred[:, prev_indices].astype(np.float32)
                 X_extended = np.hstack([X, prev_preds])
 
@@ -168,10 +183,16 @@ class ClassifierChainClassifier(BaseEstimator, ClassifierMixin):
         Y_proba = np.zeros((n_samples, self.n_labels_), dtype=np.float32)
 
         for i, (label_idx, clf) in enumerate(zip(self.order_, self.classifiers_)):
-            if i == 0:
-                X_extended = X
+            if self.predecessor_map is not None:
+                prev_indices = self.predecessor_map.get(label_idx, [])
+            elif i == 0:
+                prev_indices = []
             else:
                 prev_indices = self.order_[:i]
+
+            if not prev_indices:
+                X_extended = X
+            else:
                 prev_preds = Y_pred[:, prev_indices].astype(np.float32)
                 X_extended = np.hstack([X, prev_preds])
 

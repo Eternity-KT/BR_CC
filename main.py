@@ -87,6 +87,7 @@ def _create_model(
     gsi_partition_random_state=None,
     gsi_fixed_independent_labels=None,
     gsi_final_order="correlation",
+    gsi_dependency_structure="bipartite",
 ):
     """Create a supported model from its standardized name."""
     model_key = model_name.upper()
@@ -105,6 +106,7 @@ def _create_model(
             gsi_partition_random_state=gsi_partition_random_state,
             gsi_fixed_independent_labels=gsi_fixed_independent_labels,
             gsi_final_order=gsi_final_order,
+            gsi_dependency_structure=gsi_dependency_structure,
         )
     if model_key in ("BR", "BR_SVC", "BR_LINEARSVC"):
         return BinaryRelevanceClassifier(
@@ -150,6 +152,7 @@ def _create_model(
             partition_random_state=gsi_partition_random_state,
             fixed_independent_labels=gsi_fixed_independent_labels,
             final_order=gsi_final_order,
+            dependency_structure=gsi_dependency_structure,
         )
     raise ValueError(
         f"Unknown model name: {model_name}. Registered: {MATCHED_MODEL_IDS}; "
@@ -203,6 +206,7 @@ def _cache_settings(
     gsi_partition_random_state=None,
     gsi_fixed_independent_labels=None,
     gsi_final_order="correlation",
+    gsi_dependency_structure="bipartite",
 ):
     settings = {
         "n_splits": int(n_splits),
@@ -247,6 +251,7 @@ def _cache_settings(
             "marginalization": "two_state_single_parent+mean_field_multi_parent",
             "chain_order": "post_selection_correlation",
             "refit_after_selection": True,
+            "dependency_structure": gsi_dependency_structure,
         })
         if (
             canonical_objective != "full_macro_f1"
@@ -618,6 +623,7 @@ def run_experiment(
     gsi_partition_random_state=None,
     gsi_fixed_independent_labels=None,
     gsi_final_order="correlation",
+    gsi_dependency_structure="bipartite",
     label_policy_path=None,
     operating_point_rule=None,
     operating_coverage_gamma=0.8,
@@ -731,6 +737,7 @@ def run_experiment(
             gsi_partition_random_state,
             gsi_fixed_independent_labels,
             gsi_final_order,
+            gsi_dependency_structure,
         )
         cache = load_model_cache(tables_dir, model_name)
         legacy_dataset_shape = any(
@@ -891,6 +898,7 @@ def run_experiment(
                     gsi_partition_random_state=gsi_partition_random_state,
                     gsi_fixed_independent_labels=gsi_fixed_independent_labels,
                     gsi_final_order=gsi_final_order,
+                    gsi_dependency_structure=gsi_dependency_structure,
                 )
                 classifier.fit(x_train, y_train)
                 metrics = _evaluate_model(
@@ -979,6 +987,7 @@ def run_experiment(
                 gsi_partition_random_state,
                 gsi_fixed_independent_labels,
                 gsi_final_order,
+                gsi_dependency_structure,
             )
             model_caches[model_name]["settings"] = settings
             cache_path = save_model_cache(
@@ -1254,6 +1263,12 @@ def main():
         default="correlation",
         help="Final GSI chain order after the IL/DL partition is frozen.",
     )
+    parser.add_argument(
+        "--gsi_dependency_structure",
+        choices=["bipartite", "chained"],
+        default="bipartite",
+        help="GSI dependency structure: bipartite (DL depends only on IL) or chained (legacy sequential).",
+    )
     args = parser.parse_args()
 
     resolved_costs = args.abstention_costs
@@ -1281,6 +1296,7 @@ def main():
         gsi_partition_random_state=args.gsi_partition_random_state,
         gsi_fixed_independent_labels=args.gsi_fixed_independent_labels,
         gsi_final_order=args.gsi_final_order,
+        gsi_dependency_structure=args.gsi_dependency_structure,
         result_schema=args.result_schema,
         critical_labels=args.critical_labels,
         max_new_folds=args.max_new_folds,
