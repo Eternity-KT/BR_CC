@@ -1,3 +1,0 @@
-Câu truyện cho phần intro có thể kể là classifier chains tận dụng dependencies để lấy hiệu suất và có thể làm explanation (ví dụ Shapley chains). Nhưng dùng 1 fully connected DAG trên labels nên mô hình phức tạp (tính exact BOPs là NP-hard kể cả BOPs của Hamming accuracy). Chia labels về IL và DL giúp giảm độ phức tạp mô hình => tính BOPs nhanh hơn và dễ explain hơn.
-
-Tham khảo mẫu bài báo ở "https://www.sciencedirect.com/journal/expert-systems-with-applications"
