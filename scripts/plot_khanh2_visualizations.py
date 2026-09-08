@@ -217,11 +217,11 @@ def plot_bipartite_partition(data, out_dir):
 
 
 # =========================================================================
-# FIGURE 3: Multi-Model Benchmark Comparison (BR vs CC vs GSI Full vs GSI Sel)
+# FIGURE 3: Multi-Model Benchmark Comparison (BR vs CC vs MLC-PA vs GSI)
 # =========================================================================
 def plot_model_comparison_dashboard(data, out_dir):
-    models = ["BR_MLP", "CC_MLP", "GSI_Full", "GSI_Selective (c=0.35)"]
-    model_colors = ["#2563EB", "#D97706", "#475569", "#059669"]
+    models = ["BR_MLP", "CC_MLP", "MLC_PA (c=0.35)", "GSI_Full", "GSI_Selective (c=0.35)"]
+    model_colors = ["#2563EB", "#D97706", "#DC2626", "#64748B", "#059669"]
 
     metrics = [
         ("Macro-F1 Score", "Macro-F1", True),
@@ -230,12 +230,12 @@ def plot_model_comparison_dashboard(data, out_dir):
         ("Hamming Loss", "Hamming Loss", False),
     ]
 
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig, axes = plt.subplots(2, 2, figsize=(15, 10.5))
     axes = axes.flatten()
 
     x = np.arange(len(DATASETS))
     n_models = len(models)
-    width = 0.20
+    width = 0.16
 
     for m_idx, (title, metric_name, higher_is_better) in enumerate(metrics):
         ax = axes[m_idx]
@@ -244,9 +244,22 @@ def plot_model_comparison_dashboard(data, out_dir):
             vals = []
             for ds in DATASETS:
                 if m == "BR_MLP":
-                    val = data[ds]["BR_MLP"]["mean"].get(metric_name, 0.0)
+                    val = data[ds]["BR_MLP"]["full"]["mean"].get(metric_name, 0.0)
                 elif m == "CC_MLP":
-                    val = data[ds]["CC_MLP"]["mean"].get(metric_name, 0.0)
+                    val = data[ds]["CC_MLP"]["full"]["mean"].get(metric_name, 0.0)
+                elif m == "MLC_PA (c=0.35)":
+                    if "MLC_PA" in data[ds] and "costs" in data[ds]["MLC_PA"]:
+                        c_mean = data[ds]["MLC_PA"]["costs"]["0.35"]["mean"]
+                        if metric_name == "Macro-F1":
+                            val = c_mean["Selective Macro-F1"]
+                        elif metric_name == "Micro-F1":
+                            val = c_mean["Selective Micro-F1"]
+                        elif metric_name == "Subset Accuracy":
+                            val = data[ds]["MLC_PA"]["full"]["mean"].get("Subset Accuracy", 0.0)
+                        elif metric_name == "Hamming Loss":
+                            val = c_mean["Selective Hamming Loss"]
+                    else:
+                        val = 0.0
                 elif m == "GSI_Full":
                     val = data[ds]["GSI_MLC_PA"]["full"]["mean"].get(metric_name, 0.0)
                 elif m == "GSI_Selective (c=0.35)":
@@ -256,7 +269,6 @@ def plot_model_comparison_dashboard(data, out_dir):
                     elif metric_name == "Micro-F1":
                         val = c_mean["Selective Micro-F1"]
                     elif metric_name == "Subset Accuracy":
-                        # Subset accuracy on accepted subset or full approximation
                         val = data[ds]["GSI_MLC_PA"]["full"]["mean"].get("Subset Accuracy", 0.0)
                     elif metric_name == "Hamming Loss":
                         val = c_mean["Selective Hamming Loss"]
@@ -478,26 +490,27 @@ def plot_eswa_panel(data, out_dir):
             ax_left.set_title("Selective Macro-F1: Full Prediction vs. With Rejection", fontsize=11.5, pad=8, fontweight="bold")
             ax_left.legend(loc="upper right", frameon=False, fontsize=9, ncol=2)
 
-        # --- Right Column: Rejection Extent (ABS & AABS) ---
-        mean_abs = [data[ds]["GSI_MLC_PA"]["costs"][c]["mean"]["ABS"] * 100 for ds in DATASETS]
-        mean_aabs = [data[ds]["GSI_MLC_PA"]["costs"][c]["mean"]["AABS"] * 100 for ds in DATASETS]
+        # --- Right Column: Rejection Extent (ABS & AABS) for MLC-PA vs GSI-MLC-PA ---
+        mlc_abs = np.mean([data[ds]["MLC_PA"]["costs"][c]["mean"]["ABS"] * 100 for ds in DATASETS])
+        mlc_aabs = np.mean([data[ds]["MLC_PA"]["costs"][c]["mean"]["AABS"] * 100 for ds in DATASETS])
+        gsi_abs = np.mean([data[ds]["GSI_MLC_PA"]["costs"][c]["mean"]["ABS"] * 100 for ds in DATASETS])
+        gsi_aabs = np.mean([data[ds]["GSI_MLC_PA"]["costs"][c]["mean"]["AABS"] * 100 for ds in DATASETS])
 
-        avg_abs = np.mean(mean_abs)
-        avg_aabs = np.mean(mean_aabs)
-
-        ax_right.bar([0], [avg_abs], width=0.45, color=COST_COLORS[c], alpha=0.35,
+        ax_right.bar([0, 1], [mlc_abs, gsi_abs], width=0.45, color=COST_COLORS[c], alpha=0.35,
                      hatch="//", edgecolor=COST_COLORS[c], linewidth=1.0, label="ABS" if row == 0 else "")
-        ax_right.scatter([0], [avg_aabs], color="white", edgecolor=COST_COLORS[c],
+        ax_right.scatter([0, 1], [mlc_aabs, gsi_aabs], color="white", edgecolor=COST_COLORS[c],
                          s=55, linewidth=1.5, zorder=5, label="AABS" if row == 0 else "")
 
-        ax_right.text(0, avg_abs + 2.5, f"ABS: {avg_abs:.1f}%\nAABS: {avg_aabs:.1f}%",
-                      ha="center", va="bottom", fontsize=7.5, fontweight="bold", color=COST_COLORS[c])
+        ax_right.text(0, mlc_abs + 2.5, f"ABS: {mlc_abs:.1f}%\nAABS: {mlc_aabs:.1f}%",
+                      ha="center", va="bottom", fontsize=7.0, fontweight="bold", color=COST_COLORS[c])
+        ax_right.text(1, gsi_abs + 2.5, f"ABS: {gsi_abs:.1f}%\nAABS: {gsi_aabs:.1f}%",
+                      ha="center", va="bottom", fontsize=7.0, fontweight="bold", color=COST_COLORS[c])
 
-        ax_right.set_xlim(-0.5, 0.5)
-        ax_right.set_ylim(0, 125)
+        ax_right.set_xlim(-0.6, 1.6)
+        ax_right.set_ylim(0, 130)
         ax_right.set_ylabel("Rate (%)", fontsize=9.5, fontweight="bold")
-        ax_right.set_xticks([0])
-        ax_right.set_xticklabels(["GSI-MLC-PA"], fontweight="bold", fontsize=9)
+        ax_right.set_xticks([0, 1])
+        ax_right.set_xticklabels(["MLC-PA", "GSI-MLC-PA"], fontweight="bold", fontsize=8.0)
         ax_right.grid(axis="y", linestyle="--", alpha=0.35, zorder=0)
 
         if row == 0:
@@ -508,7 +521,7 @@ def plot_eswa_panel(data, out_dir):
 
     # Caption at bottom
     caption = (
-        "Figure: Average Macro-F1 scores (in %, left) and rejection extent (ABS/AABS, right) for Bipartite GSI-MLC-PA across 5 benchmark datasets.\n"
+        "Figure: Average Macro-F1 scores (in %, left) and rejection extent (ABS/AABS comparing MLC-PA vs Bipartite GSI-MLC-PA, right) across 5 datasets.\n"
         "Color-coded with respect to rejection cost c: c=0.20 (red), c=0.25 (blue), c=0.30 (green), c=0.35 (amber), and c=0.40 (slate)."
     )
     fig.text(0.04, 0.01, caption, ha="left", va="bottom", fontsize=9, style="italic", color="#1E293B")
