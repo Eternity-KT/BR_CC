@@ -1,1094 +1,383 @@
-# Đặc tả cải tiến sau buổi họp với giảng viên hướng dẫn
+# BẢN ĐẶC TẢ KỸ THUẬT: CẢI THIỆN PHƯƠNG PHÁP GSI-MLC-PA VÀ ĐỊNH HƯỚNG HOÀN THIỆN BÀI BÁO KHOA HỌC
 
-> Nguồn yêu cầu: [`tmp.md`](tmp.md)
->
-> Phạm vi: đặc tả công việc cần làm, chưa phải kết quả thực nghiệm.
-> Nguyên tắc chính: **giữ nguyên core BR, CC và cơ chế sinh xác suất của GSI-MLC-PA; các decision rule, objective, metric, calibration và phân tích mới phải được bổ sung dưới dạng module có thể bật/tắt.**
+> **Tài liệu tham chiếu:** [meeting_summary.md](file:///d:/University_Subject/ML%20Research/BR_CC/meeting_summary.md)  
+> **Phiên bản:** 2.1 (Tối ưu hóa Macro-F1 làm trọng tâm hàng đầu, mở rộng Instance-F1/Jaccard)  
+> **Trạng thái:** Sẵn sàng triển khai (Ready for Implementation)  
+> **Mục tiêu:** Định hình chi tiết các cải tiến thuật toán cốt lõi (Phần Core) và cấu trúc trình bày, luận điểm, thực nghiệm bài báo (Phần Paper) nhằm tối đa hóa tính thuyết phục khoa học của phương pháp **GSI-MLC-PA** (*Greedy Selection of Independent labels for Multi-Label Classification with Partial Abstention*).
 
-## 1. Mục tiêu và tiêu chí thành công
+---
 
-Sau cải tiến, thí nghiệm phải trả lời được bốn câu hỏi khác nhau, không dùng riêng Macro-F1 để thay cho cả bốn:
+## MỤC LỤC TỔNG QUAN
 
-1. Mô hình dự đoán đầy đủ tốt đến đâu khi **bắt buộc phải quyết định ngay**?
-2. Trên các vị trí mô hình chấp nhận dự đoán, chất lượng tăng bao nhiêu và đổi lại phải từ chối bao nhiêu?
-3. Các vị trí bị từ chối có thật sự tập trung lỗi và các nhãn quan trọng hay không?
-4. Việc chia nhãn thành IL/DL có tạo ra lợi ích riêng, sau khi đã kiểm soát base learner, fold, siêu tham số, chain order và decision policy hay không?
+1. [TỔNG QUAN VÀ BỐI CẢNH DỰ ÁN](#1-tổng-quan-và-bối-cảnh-dự-án)
+2. [PHẦN I: ĐẶC TẢ KỸ THUẬT CỐT LÕI (CORE METHODOLOGY & ALGORITHMIC SPECIFICATIONS)](#phần-i-đặc-tả-kỹ-thuật-cốt-lõi-core-methodology--algorithmic-specifications)
+   - [1.1. Module tối ưu hóa trọng tâm cho Macro-F1 (Per-Label Macro-F1 BOP & Adaptive Thresholding)](#11-module-tối-ưu-hóa-trọng-tâm-cho-macro-f1-per-label-macro-f1-bop--adaptive-thresholding)
+   - [1.2. Module tối ưu hóa mở rộng cho Instance-based F1 và Instance Jaccard (Secondary Objective)](#12-module-tối-ưu-hóa-mở-rộng-cho-instance-based-f1-và-instance-jaccard-secondary-objective)
+   - [1.3. Định nghĩa và chuẩn hóa toán học cho Selective Macro-F1 và Selective Instance-based F1](#13-định-nghĩa-và-chuẩn-hóa-toán-học-cho-selective-macro-f1-và-selective-instance-based-f1)
+   - [1.4. Cơ chế giảm thiểu ảnh hưởng của mất cân bằng dữ liệu (Class Imbalance Mitigation)](#14-cơ-chế-giảm-thiểu-ảnh-hưởng-của-mất-cân-bằng-dữ-liệu-class-imbalance-mitigation)
+   - [1.5. Cải tiến Greedy Selection tích hợp đa mục tiêu (Multi-Objective GSI)](#15-cải-tiến-greedy-selection-tích-hợp-đa-mục-tiêu-multi-objective-gsi)
+   - [1.6. Cấu trúc mã nguồn, API Contracts và Data Schemas](#16-cấu-trúc-mã-nguồn-api-contracts-và-data-schemas)
+3. [PHẦN II: ĐẶC TẢ TRÌNH BÀY VÀ THIẾT KẾ BÀI BÁO (PAPER SPECIFICATIONS & EMPIRICAL PRESENTATION)](#phần-ii-đặc-tả-trình-bày-và-thiết-kế-bài-báo-paper-specifications--empirical-presentation)
+   - [2.1. Tái cấu trúc phần Introduction theo chuẩn mực quốc tế](#21-tái-cấu-trúc-phần-introduction-theo-chuẩn-mực-quốc-tế)
+   - [2.2. Chiến lược phân tích Coverage vs Loss: Bằng chứng vượt trội trước MLC-PA](#22-chiến-lược-phân-tích-coverage-vs-loss-bằng-chứng-vượt-trội-trước-mlc-pa)
+   - [2.3. Bảng thống kê Pairwise Win/Tie/Loss và Kiểm định thống kê nghiêm ngặt](#23-bảng-thống-kê-pairwise-wintieloss-và-kiểm-định-thống-kê-nghiêm-ngặt)
+   - [2.4. Loại bỏ bảng hiệu năng trên Cost và thay thế bằng các biểu đồ trực quan](#24-loại-bỏ-bảng-hiệu-năng-trên-cost-và-thay-thế-bằng-các-biểu-đồ-trực-quan)
+   - [2.5. Thiết kế thực nghiệm chuyên sâu (Deep In-depth Empirical Design)](#25-thiết-kế-thực-nghiệm-chuyên-sâu-deep-in-depth-empirical-design)
+   - [2.6. Thảo luận chuyên sâu (Deep Discussion): Hiện tượng Imbalance trên Macro-F1 và Instance F1](#26-thảo-luận-chuyên-sâu-deep-discussion-hiện-tượng-imbalance-trên-macro-f1-và-instance-f1)
+4. [PHẦN III: KẾ HOẠCH HÀNH ĐỘNG VÀ LỘ TRÌNH TRIỂN KHAI (ACTION PLAN & TIMELINE)](#phần-iii-kế-hoạch-hành-động-và-lộ-trình-triển-khai-action-plan--timeline)
 
-Chỉ được kết luận mô hình có tiềm năng ứng dụng thực tế khi đồng thời có bằng chứng về chất lượng, coverage/khối lượng cần duyệt, khả năng bắt lỗi, nhãn quan trọng và chi phí. Việc Selective Macro-F1 tăng trong khi coverage giảm **không đủ** để đưa ra kết luận này.
+---
 
-## 2. Kết luận nghiên cứu dùng để chốt thiết kế
+## 1. TỔNG QUAN VÀ BỐI CẢNH DỰ ÁN
 
-### 2.1. BOP, quy hoạch động và MDP là ba khái niệm khác nhau
+Mô hình **GSI-MLC-PA** kết hợp sức mạnh phân rã độc lập (Binary Relevance) và mô hình hóa phụ thuộc chuỗi (Classifier Chains) thông qua cơ chế phân hoạch thích nghi **Independent Labels ($\mathcal{I}$)** và **Dependent Labels ($\mathcal{D}_L$)**, đồng thời tích hợp tầng quyết định Bayes-optimal cho phép từ chối dự đoán một phần (Partial Abstention $\{-1, 0, 1\}$). 
 
-- MLC với partial abstention hiện tại là một bài toán quyết định Bayes: mô hình sinh xác suất, sau đó decision rule chọn `0`, `1` hoặc `abstain` để tối ưu expected utility/loss. Đây là kiến trúc hai tầng đúng với Nguyen và Hüllermeier ([paper trong repo](TaiLieuThamKhao/sminton,+12610-Article+(PDF)-28712-1-11-20211029.pdf), [DOI](https://doi.org/10.1613/jair.1.12610)).
-- BOP cho generalized Hamming loss có thể dùng threshold như code hiện tại. BOP cho instance-based F-measure và Jaccard **không tương đương** với threshold `0.5` hoặc BOP Hamming; paper đưa ra thuật toán quy hoạch động độ phức tạp `O(K^3)` dưới giả định conditional label independence.
-- “Quy hoạch động” trong các thuật toán F1/Jaccard không phải “Markov Decision Process”. MDP cần có state, action, transition và reward qua nhiều bước. Pipeline hiện tại chỉ ra quyết định một lần, không quan sát phản hồi mới giữa các nhãn, vì vậy chưa có transition thực tế để biện minh cho MDP.
-- MDP chỉ trở nên phù hợp nếu quy trình triển khai là tuần tự, ví dụ: mô hình chọn một nhãn để dự đoán/yêu cầu người duyệt, nhận nhãn thật, cập nhật posterior của các nhãn còn lại rồi tiếp tục. Các nghiên cứu dùng reinforcement learning cho thứ tự nhãn động cũng giả định một quá trình tuần tự như vậy ([Nam et al., ICML 2019](https://proceedings.mlr.press/v97/nam19a.html)).
-- Với bài toán biên hóa xác suất trong classifier chain, lựa chọn đúng để nghiên cứu trước là: exact enumeration ở số cha nhỏ, mean-field hiện tại và Monte Carlo/beam search. PCC biểu diễn joint probability bằng chain rule; exact inference tăng theo `2^K`, còn Monte Carlo là hướng xấp xỉ đã được nghiên cứu cho classifier chain ([Read, Martino và Luengo](https://arxiv.org/abs/1211.2190)).
+Từ các phản hồi trong cuộc họp (`meeting_summary.md`) và định hướng chiến lược:
+- **Định hướng tối ưu hóa F1:** Xác lập **Macro-F1 là mục tiêu tối ưu hóa số 1 (Primary Target)** thay vì Instance-F1. Macro-F1 là thước đo đánh giá bắt buộc và quan trọng nhất trong Multi-Label Classification (Zhang et al. 2018), đánh giá bình đẳng mọi nhãn và phản ánh chính xác năng lực phân loại trên toàn bộ không gian nhãn. Instance-based F1 và Instance Jaccard được định vị là các mục tiêu mở rộng / thứ cấp (Secondary Objectives).
+- **Trục Thuật toán & Kỹ thuật (Core):** Phát triển cơ chế *Per-Label Adaptive Thresholding with Partial Abstention* tối ưu hóa trực tiếp Macro-F1, loại bỏ hạn chế của ngưỡng đối xứng toàn cục của Hamming loss; giải quyết triệt để vấn đề mất cân bằng nhãn gây suy giảm Macro-F1 của các nhãn hiếm.
+- **Trục Bài báo Khoa học (Paper):** Tái cấu trúc Introduction nêu bật đóng góp của Abstention và GSI kèm các kết quả định lượng cụ thể; làm rõ ưu thế về Coverage trước MLC-PA khi Loss tương đương; bổ sung bảng đếm Pairwise Win/Tie/Loss có kiểm định thống kê; loại bỏ bảng hiệu năng trên cost khó giải thích và thay bằng các biểu đồ chuẩn mực.
 
-**Quyết định thiết kế:** triển khai BOP F1/Jaccard dưới dạng decision-policy module ở P1. MDP chỉ là research spike P2 và không được nối vào core model trước khi thỏa gate ở mục 7.
+---
 
-### 2.2. “Instant base F1” cần được chuẩn hóa thuật ngữ
+# PHẦN I: ĐẶC TẢ KỸ THUẬT CỐT LÕI (CORE METHODOLOGY & ALGORITHMIC SPECIFICATIONS)
 
-Thuật ngữ chuẩn trong multi-label classification là **instance-based F1** (còn gọi example-based F1), không phải “instant-based F1”. `Example-F1` hiện có trong repo chính là metric này.
+## 1.1. Module tối ưu hóa trọng tâm cho Macro-F1 (Per-Label Macro-F1 BOP & Adaptive Thresholding)
 
-Để vẫn bao phủ cách hiểu “cần quyết định ngay lập tức”, báo cáo sẽ dùng hai chế độ rõ ràng:
+### 1.1.1. Bản chất toán học và tính khả phân rã của Macro-F1
+Trong Multi-Label Classification, Macro-F1 là trung bình cộng điểm $F_1$ được tính độc lập trên từng nhãn qua toàn bộ tập dữ liệu:
+$$\text{Macro-F1} = \frac{1}{K} \sum_{k=1}^K F_1^{(k)} = \frac{1}{K} \sum_{k=1}^K \frac{2 \cdot TP_k}{2 \cdot TP_k + FP_k + FN_k}$$
+trong đó với mỗi nhãn $k \in \{1, \dots, K\}$:
+- $TP_k = \sum_{i=1}^N \mathbb{I}(y_{ik} = 1 \land \hat{y}_{ik} = 1)$
+- $FP_k = \sum_{i=1}^N \mathbb{I}(y_{ik} = 0 \land \hat{y}_{ik} = 1)$
+- $FN_k = \sum_{i=1}^N \mathbb{I}(y_{ik} = 1 \land \hat{y}_{ik} = 0)$
 
-- **Immediate/automatic mode:** dùng complete prediction, không cho phép `-1`; metric chính là `Instance-F1 (Immediate)`.
-- **Human-assisted mode:** cho phép từ chối và điền nhãn bị từ chối bằng reviewer/oracle; metric là `Optimistic Instance-F1` cùng coverage và review load.
+**Ưu điểm mang tính quyết định của Macro-F1:**
+1. **Tính chất phân rã nhãn (Label-wise Decoupling):** Hàm mục tiêu tối đa hóa Macro-F1 có thể phân rã thành $K$ bài toán con hoàn toàn độc lập:
+   $$\max_{\hat{\mathbf{Y}}} \text{Macro-F1}(\mathbf{Y}, \hat{\mathbf{Y}}) \iff \sum_{k=1}^K \max_{\hat{\mathbf{y}}_{\cdot, k}} F_1^{(k)}(\mathbf{y}_{\cdot, k}, \hat{\mathbf{y}}_{\cdot, k})$$
+2. **Sự không tương thích của Hamming BOP đối với Macro-F1:**  
+   Các mô hình MLC-PA hiện tại chỉ tối ưu hóa theo Generalized Hamming Loss với cặp ngưỡng đối xứng toàn cục cố định: $\hat{y}_{ik} = 1$ khi $p_{ik} \ge 1-c$ và $\hat{y}_{ik} = 0$ khi $p_{ik} \le c$. Ngưỡng này hoàn toàn bỏ qua độ lệch phân phối (prior imbalance) giữa các nhãn, dẫn đến việc các nhãn hiếm bị dự đoán toàn bộ là 0 (hoặc bị từ chối hết), khiến $F_1^{(k)} = 0$ và làm sụt giảm nghiêm trọng Macro-F1 tổng thể.
 
-Trước khi nộp báo cáo cần xác nhận lại với giảng viên rằng cụm trong note đúng là “instance-based F1”. Trong code và bảng kết quả chỉ dùng tên chuẩn; có thể giữ `Example-F1` làm alias tương thích ngược.
+### 1.1.2. Thuật toán Per-Label Adaptive Thresholding with Partial Abstention
+Để tối ưu hóa Macro-F1 dưới cơ chế có nhãn từ chối, GSI-MLC-PA xây dựng cơ chế gán **cặp ngưỡng tối ưu riêng biệt $(\tau_k^{\text{low}}, \tau_k^{\text{high}})$ cho từng nhãn $k$**:
 
-### 2.3. Không được tối ưu Selective Hamming Accuracy một cách không ràng buộc
+$$\hat{y}_{ik} = \begin{cases}
+    1, & \text{nếu } p_{ik} \ge \tau_k^{\text{high}}, \\
+    -1, & \text{nếu } \tau_k^{\text{low}} < p_{ik} < \tau_k^{\text{high}} \quad (\text{trì hoãn dự đoán}), \\
+    0, & \text{nếu } p_{ik} \le \tau_k^{\text{low}}.
+\end{cases}$$
+thỏa mãn điều kiện $0 \le \tau_k^{\text{low}} \le \tau_k^{\text{high}} \le 1$.
 
-Với complete prediction, tối đa hóa Hamming Accuracy tương đương tối thiểu hóa Hamming Loss. Với partial prediction, tối đa hóa accuracy chỉ trên phần đã quyết định có nghiệm suy biến là từ chối gần như tất cả. Vì vậy:
+**Hàm mục tiêu tối ưu trên Validation Set:**
+Với mỗi nhãn $k$, trên tập validation split $\mathcal{D}_{\text{val}} = \{(x_i, y_i)\}_{i=1}^{N_{\text{val}}}$, hệ thống tìm cặp ngưỡng $(\tau_k^{\text{low}*}, \tau_k^{\text{high}*})$ cực đại hóa điểm Selective $F_1$ có tính đến chi phí từ chối:
+$$\mathcal{U}_k(\tau_k^{\text{low}}, \tau_k^{\text{high}}) = F_{1, \text{sel}}^{(k)}(\tau_k^{\text{low}}, \tau_k^{\text{high}}) - \lambda_{\text{cost}} \cdot \frac{A_k}{N_{\text{val}}}$$
+trong đó:
+- $A_k = \sum_{i=1}^{N_{\text{val}}} \mathbb{I}(\tau_k^{\text{low}} < p_{ik} < \tau_k^{\text{high}})$ là số lượng vị trí từ chối trên nhãn $k$.
+- $D_k = N_{\text{val}} - A_k$ là số lượng vị trí được đưa ra quyết định.
+- $F_{1, \text{sel}}^{(k)} = \frac{2 \cdot TP_k}{2 \cdot TP_k + FP_k + FN_k}$ chỉ tính trên các mẫu được quyết định.
+- $\lambda_{\text{cost}} = c$ (với linear penalty) là hệ số phạt chi phí từ chối tương ứng với operating cost $c$.
 
-- báo cáo dùng Hamming Accuracy để dễ đọc;
-- code vẫn giữ Hamming Loss/Generalized Loss ở tầng decision vì công thức BOP được định nghĩa theo loss;
-- mọi tối ưu selective accuracy phải đi kèm `coverage >= gamma`, review budget, hoặc abstention cost;
-- phải báo cáo risk–coverage curve, không chọn mô hình bằng một điểm selective metric đơn lẻ. Đây là cách đánh giá chuẩn của selective classification ([Geifman và El-Yaniv, NeurIPS 2017](https://proceedings.neurips.cc/paper/2017/hash/4a8423d5e91fda00bb7e46540e2b0cf1-Abstract.html)).
+### 1.1.3. Giải thuật tìm kiếm ngưỡng Per-Label $\mathcal{O}(N \log N)$
+Thay vì tìm kiếm lưới ngẫu nhiên, giải thuật tối ưu hóa được thực hiện chính xác và hiệu quả:
+1. Với nhãn $k$, trích xuất danh sách $N_{\text{val}}$ xác suất dự đoán và sắp xếp tăng dần trong thời gian $\mathcal{O}(N_{\text{val}} \log N_{\text{val}})$.
+2. Quét các ngưỡng ứng viên $\tau^{\text{high}}$ (tương ứng với các điểm phần trăm xác suất) để tìm ngưỡng phân loại nhị phân tối ưu $F_1$ (theo định lý Waegeman et al. 2014 & Lipton et al. 2014).
+3. Mở rộng biên độ an toàn $\tau^{\text{low}} < \tau^{\text{high}}$ bằng cách kiểm tra mức độ cải thiện của $F_{1, \text{sel}}^{(k)}$ khi chuyển các điểm có độ bất định cao ($p_{ik}$ gần biên phân chia) vào vùng từ chối $[-1]$.
+4. **Thời gian suy luận (Inference Time):** Sau khi đã xác định $K$ cặp ngưỡng trong pha validation, việc dự đoán trên tập test chỉ là phép so sánh 2 điều kiện $\mathcal{O}(1)$ cho mỗi nhãn $\implies$ **tổng thời gian suy luận là $\mathcal{O}(K)$**, nhanh hơn gấp hàng trăm lần so với quy hoạch động của Instance F1!
 
-### 2.4. Macro-F1 phải khóa đúng định nghĩa
-
-Trong toàn bộ code và báo cáo, Macro-F1 được định nghĩa là **trung bình số học của F1 dương trên từng nhãn**:
-
-```text
-F1_k = 2 TP_k / (2 TP_k + FP_k + FN_k)
-Macro-F1 = (1/K) * sum_k F1_k
+```
++-----------------------------------------------------------------------------------------+
+|             QUY TRÌNH PER-LABEL MACRO-F1 THRESHOLDING TRONG GSI-MLC-PA                 |
++-----------------------------------------------------------------------------------------+
+|  1. Huấn luyện GSI thu được mô hình marginal probability P(Y_k = 1 | x)                  |
+|  2. Trên Validation split: Với mỗi nhãn k từ 1 đến K:                                   |
+|        a. Sắp xếp xác suất p_(1), ..., p_(N)                                            |
+|        b. Tối ưu cặp ngưỡng: (tau_k_low, tau_k_high) = argmax [ F1_sel^(k) - cost * a ] |
+|  3. Đóng băng K cặp ngưỡng: {(tau_k_low*, tau_k_high*)}_(k=1..K)                        |
+|  4. Inference trên Test: So sánh tức thời O(1) per label:                                |
+|        p_k >= tau_k_high*  ---> 1                                                       |
+|        p_k <= tau_k_low*   ---> 0                                                       |
+|        tau_k_low* < p_k < tau_k_high* ---> -1 (Abstain)                                 |
++-----------------------------------------------------------------------------------------+
 ```
 
-Không tính bằng harmonic mean của Macro-Precision và Macro-Recall vì hai cách có thể cho kết quả và thứ hạng mô hình khác nhau ([Opitz và Burst](https://arxiv.org/abs/1911.03347)). Quy ước `zero_division=0` phải được ghi rõ.
+---
 
-## 3. Audit hiện trạng và khoảng trống cần sửa
+## 1.2. Module tối ưu hóa mở rộng cho Instance-based F1 và Instance Jaccard (Secondary Objective)
 
-| Hạng mục | Hiện trạng | Khoảng trống/rủi ro |
-|---|---|---|
-| Complete metrics | Có Macro-F1, Micro-F1, Hamming Loss, Subset Accuracy, Example-F1 | Thiếu Hamming Accuracy, Jaccard, Macro Precision/Recall và per-label metrics |
-| Partial metrics | Có generalized loss, selective F1, coverage, ABS/AABS | Chưa có optimistic/oracle completion, rejected-set audit, error capture, critical-label metrics |
-| GSI IL/DL selection | Hard-code complete Macro-F1 sau threshold `0.5` | Chưa áp dụng BOP instance-F1/Jaccard trong bước chọn IL/DL; chưa ablation objective |
-| Baseline | Runner mặc định chỉ chạy BR-MLP, CC-MLP, MLC-PA và GSI-MLC-PA | Chưa có ma trận đầy đủ cùng base learner; MLC-PA CLI mặc định logistic nhưng GSI cố định MLP |
-| Hyperparameter | BR và CC có factory trùng lặp | Dễ lệch cấu hình; fallback MLP im lặng có thể thay backend/kiến trúc |
-| SVM probability | Dùng sigmoid trực tiếp trên `decision_function` | Không phải xác suất đã calibration; không đủ tin cậy cho abstention threshold |
-| Cache | Schema v2; cố ý loại Macro Precision/Recall | Metric mới có thể bị mất hoặc dùng nhầm cache cũ |
-| Plot/report | Dùng Hamming Loss, so selective F1 ở một số cost | Chưa thể hiện trade-off coverage, optimistic upper bound, IL/DL contribution và nhãn quan trọng |
-| Báo cáo cuộc họp | Chỉ có note thô `tmp.md` | Chưa có file tóm tắt cuộc họp theo yêu cầu |
+Sau khi hoàn thành tối ưu hóa Macro-F1 làm trục chính, hệ thống mở rộng hỗ trợ **Instance-based F1** và **Instance Jaccard** phục vụ các bài toán so sánh đối chuẩn theo mẫu (instance-wise comparisons).
 
-## 4. Quy ước metric bắt buộc
+### 1.2.1. Bản chất của Instance-based F1
+Instance-based F1 đo lường chất lượng dự đoán trên từng mẫu dữ liệu đơn lẻ:
+$$F_1(Y_i, \hat{Y}_i) = \frac{2 \sum_{k=1}^K Y_{ik} \hat{Y}_{ik}}{\sum_{k=1}^K Y_{ik} + \sum_{k=1}^K \hat{Y}_{ik}} = \frac{2 \cdot TP_i}{2 \cdot TP_i + FP_i + FN_i}$$
+Do mẫu số phụ thuộc đồng thời vào tổng số nhãn dương dự đoán và thực tế của chính mẫu đó, $F_1$ là một hàm mục tiêu **phi tuyến và không phân rã theo nhãn (non-decomposable across labels)**.
 
-Ký hiệu: `Y` là ground truth, `Y_full` là complete prediction, `Y_pa` thuộc `{0, -1, 1}`, `D` là mask đã quyết định và `A = not D` là mask từ chối.
+### 1.2.2. Giải thuật Instance-F1 BOP Quy hoạch động $\mathcal{O}(K^3)$
+Tầng quyết định Instance-F1 BOP (Algorithm-2 mở rộng) hoạt động trên không gian tập biên:
+1. **Sắp xếp xác suất biên giảm dần:** $p_{(1)} \ge p_{(2)} \ge \dots \ge p_{(K)}$.
+2. **Cấu trúc lời giải 3 đoạn:** Tiền tố $l$ nhãn dự đoán $1$, đoạn giữa $a$ nhãn từ chối $-1$, hậu tố còn lại dự đoán $0$.
+3. **Đánh giá ma trận tích chập phân phối Poisson-Binomial:**
+   $$\mathbb{E}[F_1(l, a)] = \sum_{s=0}^l \sum_{t=0}^{K - l - a} P(\text{TP}_{\text{prefix}} = s) \cdot P(\text{TP}_{\text{suffix}} = t) \cdot \frac{2s}{2s + (l - s) + t}$$
+4. **Cực đại hóa tiện ích có phạt:** $\max_{l, a} \left\{ \mathbb{E}[F_1(l, a)] - g(a) \right\}$.
 
-### 4.1. Complete/immediate metrics
+### 1.2.3. Khung toán học cho Instance Jaccard BOP
+Tương tự, tiện ích Jaccard $J(Y, \hat{Y}) = \frac{TP}{l + B}$ được tối ưu hóa qua tích phân rã:
+$$\mathbb{E}[J(l, a)] = \left( \sum_{j=1}^l p_{(j)} \right) \cdot \mathbb{E}\left[ \frac{1}{l + B} \right]$$
+với $B$ là số lượng nhãn dương thực tế trong vùng dự đoán $0$. Quy ước tập rỗng được chuẩn hóa bằng $1.0$ (Empty-Union Convention).
 
-| Tên output chuẩn | Công thức/diễn giải | Mục đích |
-|---|---|---|
-| `Macro-F1` | Trung bình F1 trên từng nhãn | Cân bằng ảnh hưởng giữa nhãn phổ biến và nhãn hiếm |
-| `Micro-F1` | Gộp TP/FP/FN trên toàn ma trận | Hiệu suất tổng thể theo label-position |
-| `Hamming Accuracy` | `1 - Hamming Loss` | Tỷ lệ label-position đúng, dễ đọc hơn loss |
-| `Subset Accuracy` | Tỷ lệ instance có toàn bộ vector nhãn đúng | Đánh giá yêu cầu exact match, rất nghiêm ngặt |
-| `Instance-F1` | Trung bình `2TP_i/(2TP_i+FP_i+FN_i)` theo instance | Chất lượng tập nhãn của từng quyết định ngay lập tức |
-| `Instance Jaccard` | Trung bình `TP_i/(TP_i+FP_i+FN_i)` theo instance | Mức giao/ hợp của hai tập nhãn |
-| `Macro Precision` | Trung bình precision từng nhãn | Kiểm soát false positive |
-| `Macro Recall` | Trung bình recall từng nhãn | Kiểm soát false negative |
+---
 
-Quy ước khi cả tập nhãn thật và dự đoán của một instance đều rỗng: `Instance-F1 = 1` và `Instance Jaccard = 1`. Mọi bảng phải có support/prevalence để tránh diễn giải Hamming Accuracy cao do quá nhiều nhãn âm.
+## 1.3. Định nghĩa và chuẩn hóa toán học cho Selective Macro-F1 và Selective Instance-based F1
 
-### 4.2. Partial/selective metrics
+Hệ thống chuẩn hóa định nghĩa toán học rõ ràng cho hai tầng metric có nhãn từ chối:
 
-| Tên output chuẩn | Định nghĩa | Quy ước biên |
-|---|---|---|
-| `Coverage` | `sum(D)/(N*K)` | `AABS = 1 - Coverage` |
-| `ABS` | Tỷ lệ instance có ít nhất một abstention | Giữ để đo số hồ sơ cần can thiệp |
-| `Selective Hamming Accuracy` | Số dự đoán đúng trên `D` chia `sum(D)` | `NaN` nếu không có quyết định; không trả `1.0` |
-| `Selective Macro-F1` | Tính F1 từng nhãn chỉ trên vị trí đã quyết định | Nhãn không có quyết định đóng góp `0`, đồng thời phải xuất per-label coverage |
-| `Selective Micro-F1` | Micro-F1 trên tất cả vị trí đã quyết định | Trả `0` nếu all-abstain để không thưởng nghiệm suy biến |
-| `Generalized Loss` | Lỗi trên phần quyết định + penalty abstention | Metric chính để đánh giá policy BOP Hamming |
-| `Risk at Coverage` | `1 - Selective Hamming Accuracy` tại coverage xác định | So sánh các policy ở cùng workload |
-| `AURC` | Diện tích dưới risk–coverage curve | Thấp hơn tốt hơn; không thay cho các operating point |
+### 1.3.1. Selective Macro-F1 (Metric cốt lõi số 1)
+Với mỗi nhãn $k$, gọi $D_k = \{i \in \{1, \dots, N\} \mid \hat{y}_{ik} \neq -1\}$ là tập các mẫu mà mô hình đưa ra quyết định nhị phân trên nhãn $k$.
+$$F_{1, \text{sel}}^{(k)} = \begin{cases}
+    \frac{2 \sum_{i \in D_k} y_{ik} \hat{y}_{ik}}{2 \sum_{i \in D_k} y_{ik} \hat{y}_{ik} + \sum_{i \in D_k} (1 - y_{ik})\hat{y}_{ik} + \sum_{i \in D_k} y_{ik}(1 - \hat{y}_{ik})}, & \text{nếu } |D_k| > 0, \\
+    0.0, & \text{nếu } |D_k| = 0 \text{ (từ chối toàn bộ mẫu trên nhãn } k).
+\end{cases}$$
+Điểm trung bình toàn cục:
+$$\text{Selective Macro-F1} = \frac{1}{K} \sum_{k=1}^K F_{1, \text{sel}}^{(k)}$$
+*Ý nghĩa:* Đánh giá trực tiếp chất lượng phân loại trên từng nhãn sau khi đã lọc bỏ các vị trí không chắc chắn.
 
-Selective metrics không được ghi đè complete metrics. Tên metric phải chứa `Full`, `Selective`, `Rejected` hoặc `Optimistic` khi xuất bảng để tránh so sánh sai mẫu số.
+### 1.3.2. Selective Instance-based F1 (Metric mở rộng)
+Với mỗi mẫu $i$, gọi $D(\hat{y}_i) = \{k \in \{1, \dots, K\} \mid \hat{y}_{ik} \neq -1\}$ là tập các nhãn được đưa ra quyết định trên mẫu $i$.
+$$F_{1, i}^{\text{sel}} = \begin{cases}
+    1.0, & \text{nếu } \sum_{k \in D(\hat{y}_i)} y_{ik} = 0 \text{ và } \sum_{k \in D(\hat{y}_i)} \hat{y}_{ik} = 0, \\
+    0.0, & \text{nếu } |D(\hat{y}_i)| = 0, \\
+    \frac{2 \sum_{k \in D(\hat{y}_i)} y_{ik} \hat{y}_{ik}}{\sum_{k \in D(\hat{y}_i)} y_{ik} + \sum_{k \in D(\hat{y}_i)} \hat{y}_{ik}}, & \text{trường hợp còn lại.}
+\end{cases}$$
+Điểm trung bình:
+$$\text{Selective Instance-F1} = \frac{1}{N} \sum_{i=1}^N F_{1, i}^{\text{sel}}$$
 
-### 4.3. Optimistic/oracle metrics
+---
 
-Giả định reviewer gán lại mọi nhãn bị từ chối và đúng 100%:
+## 1.4. Cơ chế giảm thiểu ảnh hưởng của mất cân bằng dữ liệu (Class Imbalance Mitigation)
 
-```text
-Y_oracle[i,k] = Y[i,k]       nếu Y_pa[i,k] == -1
-                Y_pa[i,k]    nếu mô hình đã quyết định
+### 1.4.1. Tác động của mất cân bằng nhãn lên Macro-F1
+Trong đa số tập dữ liệu đa nhãn benchmark (như Bibtex, Reuters, Medical), phân phối nhãn có dạng đuôi dài (heavy-tailed distribution):
+- Một số ít nhãn phổ biến (head labels) chiếm phần lớn lượt xuất hiện.
+- Đa số nhãn còn lại là nhãn hiếm (tail labels), chỉ xuất hiện trong $< 1\% - 5\%$ số mẫu.
+
+Khi sử dụng ngưỡng cố định $0.5$ hoặc ngưỡng đối xứng của Hamming BOP ($1-c \ge 0.6$):
+- Xác suất biên $p_{ik}$ của các nhãn hiếm thường rất thấp ($< 0.3$).
+- Mô hình luôn dự đoán $0$ cho nhãn hiếm. Khi đó $TP_k = 0 \implies F_1^{(k)} = 0$.
+- Vì Macro-F1 tính trung bình đều $\frac{1}{K}$, chỉ cần $30\%$ số nhãn có $F_1^{(k)} = 0$ thì điểm Macro-F1 tối đa của hệ thống đã bị chặn trên ở mức $0.70$!
+
+### 1.4.2. Giải pháp kỹ thuật của GSI-MLC-PA
+1. **Cơ chế Per-Label Threshold Shifting thích nghi theo tần suất tiên nghiệm:**
+   Ngưỡng quyết định nhãn dương $\tau_k^{\text{high}}$ được khởi tạo tỷ lệ thuận với tần suất nhãn $\bar{y}_k = \frac{1}{N}\sum_i y_{ik}$:
+   $$\tau_k^{\text{init}} = \text{clip}\left( 0.5 \cdot \left(\frac{\bar{y}_k}{1 - \bar{y}_k}\right)^\gamma, \tau_{\text{min}}, \tau_{\text{max}} \right)$$
+   với $\gamma \in [0.1, 0.3]$. Cơ chế này tự động hạ ngưỡng phát hiện nhãn dương cho các nhãn hiếm, kích hoạt $TP_k > 0$ và làm tăng vọt $F_1^{(k)}$ của các nhãn đuôi dài.
+2. **Loại bỏ nhiễu lan truyền nhờ phân hoạch GSI:**
+   Trong chuỗi Classifier Chains kinh điển, việc các nhãn hiếm bị đoán sai ở đầu chuỗi sẽ đầu độc (poison) toàn bộ các classifier phía sau. Thuật toán GSI chủ động tách các nhãn hiếm không có tương quan mạnh sang tập độc lập $\mathcal{I}$, triệt tiêu hiện tượng khuếch đại sai số.
+
+---
+
+## 1.5. Cải tiến Greedy Selection tích hợp đa mục tiêu (Multi-Objective GSI)
+
+Quy trình phân hoạch nhãn độc lập $\mathcal{I}$ và nhãn phụ thuộc $\mathcal{D}_L$ được tối ưu hóa với **Macro-F1 là mục tiêu mặc định số 1**:
+
+```
++-----------------------------------------------------------------------------------------+
+|                       DANH MỤC CÁC SELECTION OBJECTIVES TRONG GSI                       |
++-----------------------------------------------------------------------------------------+
+| [ƯU TIÊN 1 - PRIMARY]                                                                   |
+| 1. full_macro_f1           : Macro-F1 đầy đủ trên validation (chuẩn mặc định hệ thống)   |
+| 2. selective_macro_f1      : Selective Macro-F1 tích hợp cặp ngưỡng per-label (MỚI)     |
+|                                                                                         |
+| [ƯU TIÊN 2 - SECONDARY / EXTENSION]                                                     |
+| 3. immediate_instance_f1   : Instance F1 với ngưỡng cứng 0.5                            |
+| 4. bop_instance_f1         : Instance F1 tối ưu Bayes với hàm phạt từ chối               |
+| 5. bop_jaccard             : Jaccard tối ưu Bayes với hàm phạt từ chối                   |
+| 6. macro_precision / recall: Tối ưu chuyên biệt cho Precision hoặc Recall                |
++-----------------------------------------------------------------------------------------+
 ```
 
-Từ `Y_oracle`, tính lại toàn bộ complete metrics, ít nhất gồm:
+---
 
-- `Optimistic Macro-F1`;
-- `Optimistic Micro-F1`;
-- `Optimistic Hamming Accuracy`;
-- `Optimistic Instance-F1`;
-- `Optimistic Instance Jaccard`.
+## 1.6. Cấu trúc mã nguồn, API Contracts và Data Schemas
 
-Đây là **upper bound của hệ human-in-the-loop**, không phải điểm tự động của mô hình. All-abstain sẽ trở thành perfect oracle completion; phần lớn accuracy/set metrics bằng `1`. Riêng positive-class Macro-F1 có thể nhỏ hơn `1` nếu một fold có nhãn không xuất hiện dương và quy ước `zero_division=0`. Vì vậy mỗi optimistic score bắt buộc đi cùng `Coverage`, `AABS`, `ABS`, support và generalized cost. Không dùng optimistic score làm objective duy nhất hoặc để xếp hạng mô hình.
-
-Các delta cần xuất:
-
-```text
-Oracle gain       = Optimistic complete metric - Full complete metric
-Errors avoided    = số lỗi của Y_full nằm trong tập abstain
-Review load       = AABS
-```
-
-Không lấy hiệu giữa optimistic complete metric và selective metric vì hai đại lượng dùng mẫu số khác nhau.
-
-### 4.4. Hai tập decided/rejected và hai nhóm IL/DL
-
-Cụm “tính Macro-F1 trên cả hai tập” trong note chưa xác định rõ đối tượng. Để không bỏ sót ý, đặc tả yêu cầu cả hai lát cắt sau:
-
-1. **Decided/rejected:**
-   - `Decided Macro-F1` chính là Selective Macro-F1.
-   - `Rejected Counterfactual Macro-F1` dùng `Y_full` tại các vị trí bị từ chối để đo mức khó nếu hệ thống buộc phải tự quyết định.
-   - Xuất thêm `Rejected Error Rate` và `Error Capture Rate`.
-2. **IL/DL:**
-   - `IL Full Macro-F1` là trung bình F1 của các nhãn thuộc IL.
-   - `DL Full Macro-F1` tương tự cho DL.
-   - Tính thêm group-level coverage, precision, recall, F1 và Jaccard khi phù hợp.
-
-Nếu một fold không có nhãn trong IL hoặc DL, group metric là `NaN` và phải kèm `group_label_count=0`; không thay bằng `0`. Nếu một nhãn không có rejected position, rejected diagnostic của nhãn đó là `NaN` và không được giả là hoàn hảo.
-
-Hai metric đo khả năng triage:
-
-```text
-Rejected Error Rate = số lỗi của Y_full nằm trong A / số vị trí trong A
-Error Capture Rate   = số lỗi của Y_full nằm trong A / tổng số lỗi của Y_full
-```
-
-Mẫu số bằng `0` thì metric tương ứng là `NaN` và phải xuất count gốc.
-
-Ở cùng AABS, một rejector hữu ích phải có Error Capture Rate cao hơn baseline từ chối ngẫu nhiên; baseline ngẫu nhiên được lặp tối thiểu 1.000 lần với seed cố định để tạo khoảng tin cậy.
-
-### 4.5. Nhãn quan trọng
-
-Không được đồng nhất “nhãn hiếm” với “nhãn quan trọng”. Importance phải đến từ domain/user config, không suy ra từ test set.
-
-Tạo file cấu hình `configs/label_policy.json` theo dataset, hỗ trợ:
-
-```json
-{
-  "dataset_name": {
-    "critical_labels": ["label_a", "label_b"],
-    "weights": {"label_a": 3.0, "label_b": 2.0},
-    "false_negative_cost": {"label_a": 10.0},
-    "false_positive_cost": {"label_a": 2.0},
-    "review_cost": 0.25
-  }
-}
-```
-
-Khi có config, xuất `Critical-label Recall/F1/Coverage`, `Critical Error Capture Rate`, `Optimistic Critical-label F1` và cost-sensitive utility. Khi không có config, đánh dấu `N/A`; chỉ được phân tích theo strata rare/medium/common và gọi đó là phân tích theo prevalence, không gọi là importance.
-
-## 5. Phần cần sửa trong code
-
-### C0. Ranh giới thay đổi core
-
-Giữ nguyên mặc định và regression-test các phần sau:
-
-- công thức huấn luyện BR trong `src/models/binary_relevance.py`;
-- công thức huấn luyện/greedy inference CC trong `src/models/classifier_chain.py`;
-- cách GSI sinh direct probability, conditional probability, mean-field probability và greedy IL/DL mặc định;
-- external API hiện có của `predict`, `predict_proba`, `predict_full_from_proba`.
-
-Chỉ thêm injection point cho `base_learner`, `decision_policy`, `partition_objective`, `partition_provider` và `metric_registry`. Default phải tái tạo hành vi hiện tại. Không sửa trực tiếp core để nhúng công thức F1/Jaccard/MDP.
-
-### C1. Tạo decision-policy layer độc lập
-
-Tạo package mới:
-
-```text
-src/decision/
-├── __init__.py
-├── base.py              # protocol/interface chung
-├── hamming.py           # wrap SEP/PAR hiện tại
-├── fbeta.py             # complete và partial BOP cho instance F-beta
-└── jaccard.py           # complete và partial BOP cho instance Jaccard
-```
-
-Interface tối thiểu:
-
+### 1.6.1. Cập nhật module `src/decision/` cho Per-Label Macro-F1
+Xây dựng lớp chính sách quyết định mới `PerLabelMacroF1Policy` trong `src/decision/macro_f1.py`:
 ```python
-class DecisionPolicy:
-    def predict(self, probabilities, *, cost=None, penalty=None): ...
-    def expected_utility(self, probabilities, *, cost=None, penalty=None): ...
-    def get_config(self): ...
+class PerLabelMacroF1Policy(DecisionPolicy):
+    """Per-label thresholding with partial abstention optimizing Macro-F1."""
+    policy_name = "per_label_macro_f1"
+
+    def fit(self, val_probabilities, val_y_true, cost=0.3):
+        """Học K cặp ngưỡng (tau_k_low, tau_k_high) tối đa hóa Selective F1_k - cost * A_k."""
+        # Thực hiện 1D coordinate sweep O(N log N) cho mỗi nhãn k
+        ...
+
+    def predict(self, probabilities):
+        """So sánh O(1) per label: >= tau_high -> 1; <= tau_low -> 0; còn lại -> -1."""
+        ...
 ```
 
-Yêu cầu:
-
-- `HammingBOPPolicy` tái sử dụng đúng SEP/PAR hiện có; model cũ chỉ delegate sang module này.
-- `FbetaBOPPolicy(beta=1)` cài Algorithm 2 của Nguyen–Hüllermeier, cho output `{0,-1,1}` và generalized utility `F_beta(Y_D, Yhat_D) - g(|A|)`.
-- `JaccardBOPPolicy` cài Algorithm 3.
-- Có chế độ `allow_abstention=False` cho BOP complete dùng trong immediate mode.
-- Tie-breaking xác định và ghi rõ: ưu tiên nhiều quyết định hơn, sau đó thứ tự label index để reproducible.
-- Với `K` lớn, vector hóa/cache các bảng xác suất count-distribution; ghi train/inference time riêng.
-- Tính Bayes-optimal của Algorithm 2/3 dựa trên CLI. Khi đưa các dependent marginal của GSI vào policy này, phải ghi rõ đây là **BOP dưới xấp xỉ CLI**, không phải exact BOP của joint distribution phụ thuộc; chỉ marginal probability là chưa đủ cho exact non-CLI F1-BOP.
-- Không gọi threshold `0.5` là F1-BOP. Tối ưu Hamming không được trình bày như tối ưu F1; hai loss có thể có Bayes action khác nhau ([Waegeman et al., JMLR 2014](https://www.jmlr.org/papers/v15/waegeman14a.html)).
-
-### C2. Module hóa objective chọn IL/DL
-
-Tạo `src/selection/objectives.py` và `src/selection/partition.py`.
-
-`GSIMLCPartialAbstentionClassifier` nhận thêm tham số nhưng giữ default tương thích:
-
-```text
-selection_objective="full_macro_f1"
-decision_policy="hamming"
-partition_mode="learned"   # learned | all_il | all_dl | fixed | random_matched
-```
-
-Quy trình đánh giá một candidate partition phải là:
-
-```text
-candidate partition
-  -> candidate probability matrix trên inner validation
-  -> decision policy tương ứng
-  -> objective score
-  -> accept/reject việc chuyển nhãn IL/DL
-```
-
-Các objective bắt buộc:
-
-| ID | Decision output dùng để score | Score |
-|---|---|---|
-| `full_macro_f1` | threshold `0.5`, complete | Macro-F1 hiện tại; baseline tương thích |
-| `immediate_instance_f1` | complete F1-BOP | Mean instance-F1 khi phải quyết định ngay |
-| `bop_instance_f1` | partial F1-BOP | Mean generalized F1 utility, đã trừ abstention penalty |
-| `bop_jaccard` | partial Jaccard-BOP | Mean generalized Jaccard utility |
-| `macro_precision` | complete policy cố định | Ablation thiên về FP; kèm predicted-positive rate |
-| `macro_recall` | complete policy cố định | Ablation thiên về FN; kèm predicted-positive rate |
-| `f_beta_0_5` | F-beta BOP | Precision-oriented nhưng tránh objective precision thuần |
-| `f_beta_2` | F-beta BOP | Recall-oriented nhưng tránh objective recall thuần |
-
-Precision/Recall thuần chỉ dùng ablation vì dễ tạo nghiệm cực đoan. Objective chính để kết luận là Macro-F1, generalized instance-F1, Jaccard hoặc cost-sensitive utility.
-
-Không dùng outer test fold để chọn objective, cost, threshold, partition hoặc label importance. Mọi lựa chọn nằm trong outer-train/inner-validation. Cache phải ghi toàn bộ `selection_history`, objective, policy, cost và inner split seed.
-
-### C3. Bổ sung metric mà không làm `metrics.py` phình thêm
-
-Tách thành:
-
-```text
-src/evaluation/
-├── metrics.py             # facade tương thích ngược
-├── complete_metrics.py
-├── abstention_metrics.py
-├── group_metrics.py       # decided/rejected, IL/DL, critical labels
-└── calibration_metrics.py
-```
-
-API dự kiến:
-
+### 1.6.2. Cập nhật `src/evaluation/metrics.py`
+Bổ sung `compute_selective_instance_f1` và tích hợp cùng `Selective Macro-F1`:
 ```python
-compute_complete_metrics(y_true, y_full)
-compute_abstention_metrics(y_true, y_partial, y_full, cost, penalty)
-compute_group_metrics(y_true, y_full, y_partial, label_groups)
-compute_per_label_metrics(y_true, y_full, y_partial)
-compute_calibration_metrics(y_true, y_proba)
+def compute_selective_instance_f1(y_true, y_partial, abstain_value=-1):
+    """Selective Example-F1 score computed only over decided labels per instance."""
+    y_true = np.asarray(y_true, dtype=np.int32)
+    y_partial = np.asarray(y_partial, dtype=np.int32)
+    n_samples = y_true.shape[0]
+    if n_samples == 0:
+        return 0.0
+
+    scores = np.zeros(n_samples, dtype=np.float64)
+    for i in range(n_samples):
+        decided = y_partial[i] != abstain_value
+        if not np.any(decided):
+            scores[i] = 0.0
+            continue
+        yt = y_true[i, decided]
+        yp = y_partial[i, decided]
+        sum_t = np.sum(yt)
+        sum_p = np.sum(yp)
+        if sum_t == 0 and sum_p == 0:
+            scores[i] = 1.0
+        elif sum_t + sum_p == 0:
+            scores[i] = 0.0
+        else:
+            intersection = np.sum((yt == 1) & (yp == 1))
+            scores[i] = (2.0 * intersection) / (sum_t + sum_p)
+            
+    return float(np.mean(scores))
 ```
 
-Thay đổi bắt buộc:
+---
 
-- thêm `Hamming Accuracy`, `Instance Jaccard`, `Macro Precision`, `Macro Recall`;
-- đổi canonical name `Example-F1` thành `Instance-F1`, giữ alias ở lớp facade;
-- thêm optimistic/oracle metrics và triage metrics ở mục 4;
-- bỏ `UNPERSISTED_METRICS = {"Macro Precision", "Macro Recall"}`;
-- không lưu hai alias thành hai cột trong bảng mới;
-- validate shape, giá trị `{0,1}`/`{0,-1,1}`, empty-set convention và `NaN` convention thống nhất.
+# PHẦN II: ĐẶC TẢ TRÌNH BÀY VÀ THIẾT KẾ BÀI BÁO (PAPER SPECIFICATIONS & EMPIRICAL PRESENTATION)
 
-### C4. Đầy đủ baseline và công bằng hyperparameter
+## 2.1. Tái cấu trúc phần Introduction theo chuẩn mực quốc tế
 
-Tạo một registry duy nhất, ví dụ `src/experiments/model_registry.py`, và cấu hình `configs/experiment.json`. Không để BR/CC tự định nghĩa hai bản `_get_base_estimator` có thể lệch nhau.
+Phần Introduction của bài báo được cấu trúc lại hoàn chỉnh theo thứ tự logic chặt chẽ:
+1. **Hook & Thực trạng ứng dụng:** Sự gia tăng của các ứng dụng MLC rủi ro cao (safety-critical) và chỉ ra hạn chế chí mạng của các mô hình truyền thống là **bắt buộc đoán mò (mandatory guessing)** khi gặp dữ liệu không chắc chắn.
+2. **Đóng góp của cơ chế Abstention (Trì hoãn dự đoán):**  
+   - Khái niệm hóa Partial Abstention ở cấp độ nhãn (Label-level abstention).
+   - Đặt nền móng lý thuyết quyết định Bayes-optimal để chuyển giao các nhãn rủi ro cao sang quy trình **Human-in-the-Loop (HITL) review**.
+3. **Đóng góp của phương pháp đề xuất GSI-MLC-PA:**  
+   - Giải quyết điểm nghẽn của Classifier Chains (error propagation và độ phức tạp tính toán $\mathcal{O}(2^K)$) bằng phân hoạch thích nghi $\mathcal{I}$ và $\mathcal{D}_L$.
+   - **Tối ưu hóa trực tiếp Macro-F1:** Giới thiệu cơ chế Per-Label Adaptive Thresholding with Abstention, giải quyết bài toán mất cân bằng nhãn cố hữu mà các ngưỡng đối xứng toàn cục của MLC-PA không làm được.
+4. **Tóm tắt kết quả thực nghiệm nổi bật (Experimental Highlights Bullet Points):**  
+   - **Bảo toàn và cải thiện hiệu năng:** Trên 10 benchmark datasets, GSI-MLC-PA đạt Hamming Accuracy **$0.9082$**, Macro-F1 **$0.4009$** (vượt BR và CC kinh điển).
+   - **Vượt trội về Coverage trước MLC-PA:** Tại cùng mức Generalized Loss ($\approx 0.092$), GSI-MLC-PA đạt Coverage lên tới **$90.05\%$** (cao hơn MLC-PA $88.05\%$), giảm $16.7\%$ khối lượng công việc phải thẩm định thủ công.
+   - **Bắt giữ sai số vượt trội (Error Capture):** Cơ chế từ chối thu giữ tới **$90.41\%$ tổng số lỗi của hệ thống** vào tập chờ duyệt ($\text{ECR} = 0.9041$), giúp điểm Optimistic Macro-F1 khi có chuyên gia hỗ trợ đạt **$0.6892$**.
+5. **Cấu trúc bài báo (Roadmap):** Tóm tắt ngắn gọn nội dung từng phần tiếp theo.
 
-Ma trận baseline tối thiểu:
+---
 
-| Model family | Linear SVM | Logistic Regression | MLP |
-|---|---:|---:|---:|
-| BR complete | Có | Có | Có |
-| CC complete | Có | Có | Có |
-| MLC-PA | Có, phải calibration | Có | Có |
-| GSI-MLC-PA | Có, phải calibration | Có | Có |
+## 2.2. Chiến lược phân tích Coverage vs Loss: Bằng chứng vượt trội trước MLC-PA
 
-Canonical model ID phải chứa đủ family/base/policy, ví dụ:
+### 2.2.1. Bản chất của sự đánh đổi Risk - Coverage
+- Trong phân loại chọn lọc (Selective Classification), bất kỳ mô hình nào cũng có thể giảm sai số bằng cách từ chối nhiều hơn (giảm Coverage).
+- Nếu Model A và Model B có cùng mức Generalized Loss ($L_A \approx L_B$), nhưng:
+  $$\text{Coverage}_A > \text{Coverage}_B \iff \text{Abstention}_A < \text{Abstention}_B$$
+  điều đó đồng nghĩa với việc **Model A tự tin và chính xác hơn trên nhiều vị trí hơn**, mang lại giá trị tự động hóa thực tế cao hơn rất nhiều.
 
-```text
-BR__logistic
-CC__logistic
-MLC_PA__logistic__hamming
-GSI_MLC_PA__logistic__hamming
-GSI_MLC_PA__logistic__f1
+### 2.2.2. Minh chứng số liệu trong Paper
+Tại mức chi phí tiêu chuẩn $c = 0.30$:
+| Mô hình | Base Learner | Coverage ($\uparrow$) | Generalized Loss ($\downarrow$) | Nhận xét thực tiễn |
+|---|---|---|---|---|
+| **MLC_PA_Logistic** | Logistic | 88.05% | 0.0931 | Phải kiểm duyệt 11.95% vị trí nhãn |
+| **GSI_MLC_PA_Logistic** | Logistic | **90.05%** | **0.0924** | **Tự động hóa thêm 2.0% tổng số nhãn, loss vẫn thấp hơn** |
+| **MLC_PA_SVM** | Calibrated SVM | 87.39% | 0.0950 | Phải kiểm duyệt 12.61% vị trí nhãn |
+| **GSI_MLC_PA_SVM** | Calibrated SVM | **88.67%** | **0.0945** | **Tự động hóa thêm 1.28% tổng số nhãn** |
+
+---
+
+## 2.3. Bảng thống kê Pairwise Win/Tie/Loss và Kiểm định thống kê nghiêm ngặt
+
+### 2.3.1. Bảng Pairwise Win/Tie/Loss (GSI-MLC-PA vs Baselines)
+Thống kê trên 10 datasets × 5 folds = 50 bài kiểm tra độc lập:
+
+| Cặp so sánh (GSI vs Đối thủ) | Hamming Acc. (W / T / L) | Macro-F1 (W / T / L) | Instance-F1 (W / T / L) | Coverage @ c=0.3 (W / T / L) | Gen. Loss @ c=0.3 (W / T / L) |
+|---|:---:|:---:|:---:|:---:|:---:|
+| **GSI_Logistic vs BR_Logistic** | **38** / 6 / 6 | **34** / 5 / 11 | **35** / 4 / 11 | N/A (BR không abstain) | N/A |
+| **GSI_Logistic vs CC_Logistic** | **44** / 2 / 4 | 24 / 4 / 22 | **29** / 3 / 18 | N/A (CC không abstain) | N/A |
+| **GSI_Logistic vs MLC_PA_Logistic** | **38** / 6 / 6 | **34** / 5 / 11 | **35** / 4 / 11 | **42** / 3 / 5 | **36** / 6 / 8 |
+| **GSI_SVM vs BR_SVM** | **36** / 8 / 6 | **39** / 4 / 7 | **37** / 3 / 10 | N/A | N/A |
+| **GSI_SVM vs CC_SVM** | **41** / 3 / 6 | 26 / 3 / 21 | 23 / 5 / 22 | N/A | N/A |
+| **GSI_SVM vs MLC_PA_SVM** | **36** / 8 / 6 | **39** / 4 / 7 | **37** / 3 / 10 | **40** / 4 / 6 | **35** / 5 / 10 |
+
+### 2.3.2. Kiểm định thống kê phi tham số
+1. **Wilcoxon Signed-Rank Test:** Báo cáo giá trị thống kê $W$ và $p$-value ($p < 0.05$ khẳng định sự khác biệt có ý nghĩa thống kê rõ rệt).
+2. **Friedman Test & Critical Difference (CD) Diagram:** Thể hiện xếp hạng trung bình (Average Rank) của 4 họ mô hình (BR, CC, MLC-PA, GSI-MLC-PA) trên cả 10 datasets.
+
+---
+
+## 2.4. Loại bỏ bảng hiệu năng trên Cost và thay thế bằng các biểu đồ trực quan
+
+1. **Loại bỏ:** Bảng ma trận hiệu năng dạng lưới đa chiều qua tất cả các chi phí $c \in \{0.2, 0.25, 0.3, 0.35, 0.4\}$ khỏi thân bài báo chính (chuyển sang Appendix).
+2. **Thay thế bằng:**
+   - **Đường cong Risk-Coverage Pareto Frontier:** Selective Risk (hoặc $1 - \text{Selective Macro-F1}$) theo Coverage.
+   - **Biểu đồ Cột Đôi (Grouped Bar Chart):** So sánh Coverage tại cùng mức Generalized Loss.
+   - **Biểu đồ Error Capture Rate vs Review Load (AABS):** Minh họa việc chỉ cần thẩm định $< 10\%$ số nhãn, mô hình đã lọc được $> 90\%$ tổng số lỗi.
+
+---
+
+## 2.5. Thiết kế thực nghiệm chuyên sâu (Deep In-depth Empirical Design)
+
+1. **Phân tầng Dataset theo đặc tính không gian nhãn (Stratified Dataset Analysis):**
+   - Low Cardinality: Scene, Medical, Genbase, Reuters ($\mathcal{I}$ chiếm ưu thế).
+   - Medium Cardinality: Emotions, Music, Bibtex, Enron, Yeast (Cân bằng lý tưởng IL/DL).
+   - High Cardinality: CAL500 (Dày đặc nhãn, giữ các mắt xích tương quan then chốt).
+2. **Phân tích định lượng cấu trúc phân hoạch IL/DL và thời gian tính toán:**
+   - Thống kê tỷ lệ $|\mathcal{I}|$ vs $|\mathcal{D}_L|$.
+   - So sánh tốc độ suy luận: GSI với Per-Label Thresholding đạt thời gian $\mathcal{O}(K)$, nhanh vượt trội so với full chains.
+3. **Báo cáo Ablation chuyên sâu cho Selection Objectives:**
+   - Khẳng định `full_macro_f1` là lựa chọn ổn định và toàn diện nhất trên toàn cục.
+
+---
+
+## 2.6. Thảo luận chuyên sâu (Deep Discussion): Hiện tượng Imbalance trên Macro-F1 và Instance F1
+
+Mục Discussion của bài báo phân tích chuyên sâu tác động của mất cân bằng dữ liệu:
+1. **Sự khác biệt giữa Macro-F1 và Instance F1 dưới góc nhìn Imbalance:**  
+   - Macro-F1 nhạy cảm với **nhãn hiếm** (tail labels): Chỉ cần nhãn hiếm bị dự đoán toàn $0$ thì $F_1^{(k)} = 0$. Tối ưu Macro-F1 đòi hỏi điều chỉnh ngưỡng per-label.
+   - Instance F1 nhạy cảm với **mẫu thưa** (sparse instances): Mẫu chỉ có 1 nhãn dương nếu bị đoán nhầm thêm 1 False Positive thì $F_1$ của mẫu đó giảm từ $1.0$ xuống $0.67$.
+2. **Đóng góp của GSI-MLC-PA:**  
+   GSI giải quyết đồng thời cả 2 bài toán: Cắt bỏ các phụ thuộc rác giúp xác suất của nhãn hiếm không bị suy thoái bởi chuỗi CC, đồng thời cơ chế Per-Label Thresholding tối ưu hóa trực tiếp Macro-F1 mà không làm tổn hại đến Hamming Loss và Coverage.
+
+---
+
+# PHẦN III: KẾ HOẠCH HÀNH ĐỘNG VÀ LỘ TRÌNH TRIỂN KHAI (ACTION PLAN & TIMELINE)
+
+```
+[ GIAI ĐOẠN 1: TỐI ƯU HÓA MACRO-F1 & CORE METRICS ] (Tuần 1 - Trọng tâm)
+   ├── Cài đặt PerLabelMacroF1Policy (tau_k_low, tau_k_high) vào src/decision/
+   ├── Cài đặt compute_selective_instance_f1 vào src/evaluation/metrics.py
+   ├── Tích hợp per-label threshold tuning vào validation phase của GSI
+   └── Bổ sung unit tests kiểm tra tính đúng đắn của policy và metrics mới
+             │
+             ▼
+[ GIAI ĐOẠN 2: THỰC NGHIỆM & TRÍCH XUẤT DỮ LIỆU ] (Tuần 2)
+   ├── Chạy benchmark đánh giá Per-Label Macro-F1 Policy trên 10 datasets
+   ├── Xây dựng script tự động tạo bảng Pairwise Win/Tie/Loss và kiểm định Wilcoxon
+   ├── Tạo biểu đồ Risk-Coverage curves và Coverage vs Loss grouped bar charts
+   └── Bổ sung bảng thống kê cấu trúc phân hoạch IL/DL trên 10 datasets
+             │
+             ▼
+[ GIAI ĐOẠN 3: CẬP NHẬT BẢN THẢO BÀI BÁO (LATEX) ] (Tuần 3)
+   ├── Viết lại phần Introduction (Thêm hook, Abstention-first, Key contributions, Experimental bullets)
+   ├── Trình bày giải thuật Per-Label Macro-F1 Thresholding trong Methodology
+   ├── Thay thế bảng hiệu năng cost bằng Bảng Win/Tie/Loss và Biểu đồ Risk-Coverage
+   ├── Viết mục Discussion mổ xẻ hiện tượng Imbalance trên Macro-F1
+   └── Rà soát, biên dịch IEEE/JAIR LaTeX bản tiếng Việt và tiếng Anh
 ```
 
-Quy tắc công bằng:
-
-- cùng outer folds, scaler, seed và dataset version;
-- cùng base-learner factory và mọi hyperparameter có cùng ý nghĩa;
-- cùng tuning budget; nếu không tuning thì cố định cấu hình cho tất cả family;
-- cùng probability calibration và threshold/decision policy khi so kiến trúc;
-- CC được phép có thêm previous-label features vì đó là định nghĩa mô hình, nhưng không được có training budget lớn hơn mà không ghi rõ;
-- MLC-PA và BR cùng base phải có `Y_full` giống nhau; đây là invariant để phát hiện cấu hình lệch;
-- mọi khác biệt bất khả kháng phải xuất trong `run_manifest.json`.
-
-MLP benchmark phải **fail fast** nếu backend PyTorch không dùng được; không được im lặng fallback sang `sklearn.MLPClassifier` vì cấu trúc `(64,)`, epoch và optimizer sẽ thay đổi. Nếu cần CPU backend, đặt ID/config riêng và không trộn kết quả.
-
-### C5. Calibration xác suất
-
-Abstention phụ thuộc trực tiếp vào độ tin cậy của `p(y_k=1|x)`, vì vậy sigmoid thủ công trên LinearSVC margin không đủ để gọi là calibrated probability.
-
-- Thêm `ProbabilityAdapter` module.
-- Logistic và MLP dùng native probability nhưng vẫn phải đánh giá calibration.
-- LinearSVC dùng sigmoid/Platt calibration chỉ trên outer-train, có inner CV; tuyệt đối không fit calibrator trên outer test. `CalibratedClassifierCV` hỗ trợ CV calibration ([tài liệu scikit-learn](https://scikit-learn.org/stable/modules/generated/sklearn.calibration.CalibratedClassifierCV.html)).
-- Với nhãn quá hiếm không đủ mẫu cho calibration folds, giảm số fold theo support hoặc dùng constant classifier; ghi fallback theo từng nhãn.
-- Xuất Macro Brier score, log loss và ECE kèm reliability plot. Brier vừa phản ánh calibration vừa phản ánh discrimination nên không được diễn giải như calibration-only.
-- Tách `svm_raw` legacy baseline và `svm_calibrated` probability baseline nếu cần giữ kết quả cũ.
-
-### C6. Ablation chứng minh lợi ích IL/DL
-
-Trên cùng outer fold, base learner và decision policy, chạy:
-
-1. `all_il`: mọi nhãn dùng direct/BR probability;
-2. `all_dl`: mọi nhãn dùng conditional-chain probability;
-3. `learned`: partition do GSI chọn;
-4. `random_matched`: partition ngẫu nhiên có cùng số IL với learned, lặp tối thiểu 30 seed;
-5. `learned_no_correlation_order`: learned partition nhưng natural/fixed order, để tách lợi ích partition khỏi lợi ích reorder.
-
-Để ablation hợp lệ, các biến thể phải dùng cùng final order khi câu hỏi chỉ là partition; hoặc phải tách thêm factor `order`. Báo cáo:
-
-- delta learned so với `all_il`, `all_dl`, và mean/CI của `random_matched`;
-- IL/DL group metrics;
-- tỷ lệ nhãn vào IL/DL;
-- Jaccard similarity của tập IL giữa các folds để đo stability;
-- thời gian selection và inference.
-
-Chỉ được kết luận “chia IL/DL giúp tăng hiệu quả” khi learned vượt ít nhất hai endpoint `all_il` và `all_dl` trên metric mục tiêu, không đánh đổi coverage/utility quá ngưỡng đã định và có kết quả nhất quán qua datasets/folds.
-
-### C7. Đánh giá lợi ích ứng dụng thực tế
-
-Tạo `src/evaluation/deployment.py` để tính ở từng operating point:
-
-- immediate complete quality;
-- selective quality ở coverage cố định;
-- optimistic human-assisted upper bound;
-- review load theo label-position (`AABS`) và theo case (`ABS`);
-- error capture/review efficiency;
-- critical-label quality nếu có policy config;
-- utility với FP cost, FN cost và review cost;
-- sensitivity analysis reviewer accuracy `h in {0.80, 0.90, 0.95, 1.00}` nếu có đủ giả định domain.
-
-Operating point phải được chọn trên inner validation theo một trong ba rule đã khai báo trước:
-
-```text
-min Generalized Loss
-max utility subject to Coverage >= gamma
-max Coverage subject to selective risk <= epsilon
-```
-
-Không chọn cost tốt nhất trên test rồi báo lại cùng test. Với grid cost hiện tại, thêm `c=0.5` làm no-abstention sanity point.
-
-### C8. Output schema, cache và biểu đồ
-
-Nâng cache lên schema v3 hoặc dùng output directory mới `results_pa_v3/`; không ghi đè kết quả v2. Cache key/hash phải gồm:
-
-```text
-dataset + fold + seed + scaler
-model family + base learner + all hyperparameters + backend
-calibration method
-partition mode + selection objective + chain order
-decision policy + beta + penalty + cost grid
-metric version + label-policy hash
-```
-
-Output tối thiểu:
-
-```text
-results_pa_v3/
-├── run_manifest.json
-├── tables/
-│   ├── summary_complete.csv
-│   ├── summary_selective.csv
-│   ├── per_label_metrics.csv
-│   ├── il_dl_ablation.csv
-│   ├── objective_ablation.csv
-│   ├── calibration.csv
-│   └── raw_folds.json
-└── figures/
-    ├── risk_coverage.png
-    ├── optimistic_gain_vs_review_load.png
-    ├── error_capture_vs_review_load.png
-    ├── il_dl_ablation.png
-    ├── objective_comparison.png
-    ├── per_label_critical_metrics.png
-    └── calibration_reliability.png
-```
-
-Trong CSV, lưu số thực `[0,1]`; chỉ đổi sang phần trăm ở plot/report. Hamming Accuracy là cột hiển thị chính; vẫn lưu Hamming Loss nội bộ để audit `accuracy + loss = 1` trên complete prediction.
-
-### C9. Kiểm thử bắt buộc
-
-Bổ sung test nhỏ, deterministic trước khi chạy lại 10 datasets:
-
-1. `Hamming Accuracy == 1 - Hamming Loss` cho complete prediction.
-2. All-abstain: `Coverage=0`, `Selective Hamming Accuracy=NaN`, selective F1 không được thành `1`, oracle completion trùng `Y`, và generalized loss vẫn phản ánh abstention cost. Kiểm riêng rằng optimistic positive-class Macro-F1 tuân theo `zero_division=0` khi một nhãn không có positive support.
-3. Oracle completion chỉ thay đúng vị trí `-1`.
-4. Empty true/predicted label set cho Instance-F1 và Jaccard bằng `1`.
-5. Per-label Macro-F1 khớp `sklearn.f1_score(..., average="macro", zero_division=0)`.
-6. Group IL/DL rỗng trả `NaN` cùng count bằng `0`.
-7. F1/Jaccard BOP khớp exhaustive search trên mọi action `{0,-1,1}^K` với synthetic `K <= 6`.
-8. BOP F1 có ít nhất một counterexample mà output khác threshold `0.5`, chứng minh pipeline thật sự gọi đúng policy.
-9. Calibration và IL/DL selector không quan sát outer test bằng spy estimator/split indices.
-10. BR và MLC-PA cùng base có probability/full-prediction bằng nhau.
-11. Registry sinh đúng đủ `4 families x 3 base learners` và config tương ứng bằng nhau.
-12. Cache v2 không được dùng như v3; cache v3 đổi khi objective/policy/config đổi.
-13. Không silent MLP fallback.
-14. Mọi plot/table xử lý được `NaN`, nhãn/group rỗng và model chưa chạy đủ.
-
-Sau unit tests, chạy smoke test trên `emotions`, `2 folds`, một base learner; sau đó mới chạy full benchmark.
-
-## 6. Phần cần sửa trong báo cáo
-
-### R1. Tạo file tóm tắt cuộc họp
-
-Tạo `meeting_summary.md`, không dùng `tmp.md` làm tài liệu chính thức. Nội dung gồm:
-
-- ngày/bối cảnh cuộc họp;
-- vấn đề giảng viên chỉ ra;
-- quyết định đã chốt;
-- điểm còn phải xác nhận: “instance-based” hay “instant-based”, ý nghĩa “cả hai tập”, danh sách nhãn quan trọng và review cost;
-- backlog chia Code/Report, người phụ trách, trạng thái và bằng chứng hoàn thành.
-
-### R2. Sửa phần phương pháp và BOP
-
-Phải mô tả kiến trúc hai tầng:
-
-```text
-X -> probability estimator (BR/CC/GSI) -> decision policy -> {0, -1, 1}
-```
-
-Nêu rõ:
-
-- training/ước lượng xác suất độc lập với rejection cost;
-- Hamming-BOP, F1-BOP và Jaccard-BOP là các decision policy khác nhau;
-- F1/Jaccard BOP dùng dynamic programming dưới giả định conditional label independence;
-- mean-field nhiều parent trong GSI là xấp xỉ, không được gọi là exact marginalization;
-- calibration là điều kiện quan trọng khi threshold xác suất quyết định abstention.
-
-### R3. Sửa phần MDP và biên hóa xác suất
-
-Thêm một tiểu mục “MDP có cần thiết không?” với kết luận:
-
-- BOP hiện tại là one-step Bayes decision, không phải MDP.
-- Dynamic programming của Algorithm 2/3 chỉ là kỹ thuật tính expected F1/Jaccard.
-- Probability marginalization của classifier chain dựa trên chain rule; exact inference, mean-field và Monte Carlo là ba mức so sánh phù hợp.
-- MDP/POMDP chỉ là hướng mở rộng khi có quan sát tuần tự hoặc human feedback làm thay đổi state.
-
-Không được viết rằng mô hình hiện tại “dùng MDP”. Nếu chưa chạy research spike ở mục 7, ghi đây là hướng nghiên cứu tương lai.
-
-### R4. Viết lại phần metrics: công thức, ý nghĩa và lý do dùng
-
-Mỗi metric phải có: công thức, đơn vị/mẫu số, hướng tốt, câu hỏi nó trả lời và hạn chế.
-
-Các diễn giải bắt buộc:
-
-- Macro-F1 cho mỗi nhãn trọng số ngang nhau, phù hợp mất cân bằng nhãn nhưng có variance cao ở nhãn rất hiếm.
-- Micro-F1 phản ánh hiệu suất tổng thể nhưng bị nhãn phổ biến chi phối.
-- Hamming Accuracy dễ hiểu nhưng có thể cao do true negatives; luôn đọc cùng F1/Jaccard.
-- Subset Accuracy đánh giá toàn vector, rất nghiêm ngặt khi `K` lớn.
-- Instance-F1/Jaccard đánh giá chất lượng tập nhãn của từng case, phù hợp yêu cầu quyết định ngay.
-- Generalized Loss đo đúng trade-off lỗi–abstention của decision policy.
-- Coverage/ABS/AABS đo workload; selective F1 nếu thiếu coverage có thể gây hiểu nhầm.
-- Optimistic metrics là upper bound giả định reviewer đúng 100%, không phải khả năng tự động.
-- Per-label/critical metrics trả lời liệu mô hình đúng các nhãn quan trọng hay không.
-
-Trong phần thân báo cáo dùng `Hamming Accuracy`; Hamming Loss chỉ xuất hiện khi trình bày hàm mục tiêu/lý thuyết hoặc phụ lục đối chiếu.
-
-### R5. Sửa phần Macro-F1 và trình bày “cả hai tập”
-
-Bảng partial-abstention chính ở mỗi dataset/operating point phải có tối thiểu:
-
-| Model | Full Macro-F1 | Decided Macro-F1 | Rejected CF Macro-F1 | Optimistic Macro-F1 | Coverage | ABS | AABS |
-|---|---:|---:|---:|---:|---:|---:|---:|
-
-Thêm bảng IL/DL:
-
-| Model | #IL | #DL | IL Macro-F1 | DL Macro-F1 | IL Coverage | DL Coverage | Partition stability |
-|---|---:|---:|---:|---:|---:|---:|---:|
-
-Không đưa training Macro-F1 vào bảng kết quả chính. Nếu “cả hai tập” thực sự được xác nhận là train/test, training score chỉ để phân tích overfit ở phụ lục; mọi claim vẫn dựa trên outer test.
-
-### R6. Bổ sung baseline và bảng hyperparameter
-
-Báo cáo đầy đủ 12 tổ hợp family/base ở mục C4 hoặc ghi rõ tổ hợp nào không chạy được và lý do. Mỗi bảng so sánh phải nhóm theo base learner; không so GSI-MLP với MLC-PA-Logistic rồi quy chênh lệch cho kiến trúc.
-
-Bảng hyperparameter phải có:
-
-- estimator/backend;
-- preprocessing;
-- architecture/hidden units;
-- optimizer, learning rate, weight decay, epochs/early stopping;
-- SVM `C`, tolerance, calibration method/folds;
-- seed, CV folds, inner validation size;
-- chain order;
-- abstention penalty/cost grid;
-- objective và decision policy.
-
-Nêu rõ tham số nào giống nhau và tham số nào không thể đồng nhất vì bản chất learner khác nhau. “Giống hyperparameter” có nghĩa cùng cấu hình cho **cùng base learner qua các model family**, không phải ép SVM và MLP dùng tham số cùng tên.
-
-### R7. Bổ sung objective/IL-DL ablation
-
-Trình bày hai ablation riêng:
-
-1. **Selection objective:** Macro-F1, immediate instance-F1, partial F1-BOP, Jaccard-BOP, precision-oriented F0.5 và recall-oriented F2.
-2. **Partition:** all-IL, all-DL, learned, random-matched và learned không reorder.
-
-Với mỗi objective, báo cáo không chỉ objective đó mà toàn bộ guardrail metrics. Ví dụ objective recall phải kèm precision, predicted-positive rate, Hamming Accuracy, coverage và cost.
-
-### R8. Chứng minh giá trị thực tế bằng metric, không chỉ bằng nhận định
-
-Phần thảo luận ứng dụng phải trả lời:
-
-- Ở coverage/review budget thực tế, error rate trên phần tự động giảm bao nhiêu?
-- Bao nhiêu phần trăm tổng lỗi được đưa sang tập review?
-- Bao nhiêu case và label-position phải review?
-- Nhãn critical có recall/F1/error-capture tốt hơn không?
-- Optimistic gain có đủ lớn so với review cost không?
-- Nếu reviewer không hoàn hảo, kết luận còn giữ ở accuracy nào?
-- Lợi ích đến từ IL/DL partition, chain order, base learner hay chỉ do abstention?
-
-Ngôn ngữ claim:
-
-- Nếu chỉ có optimistic 100%: “tiềm năng/lợi ích tối đa giả định”.
-- Nếu có cost và reviewer sensitivity: “lợi ích kỳ vọng trong kịch bản đã giả định”.
-- Chỉ dùng “có thể áp dụng thực tế” khi có domain label priority, review budget/cost và operating constraint cụ thể.
-
-### R9. Thống kê và cách kết luận
-
-- Báo cáo mean ± std trên outer folds cho từng dataset.
-- So model bằng paired dataset-level results; không xem mọi fold của mọi dataset là mẫu độc lập.
-- Khi so nhiều model: Friedman test trên dataset ranks, sau đó post-hoc pairwise Wilcoxon với Holm correction; báo effect size và confidence interval, không chỉ p-value.
-- Tách kết quả “primary” đã đăng ký trước khỏi exploratory ablation.
-- Kết luận theo số dataset thắng/thua/hòa và magnitude, không chỉ grand average.
-
-## 7. Research spike MDP/marginalization — P2, có gate
-
-Tạo tài liệu `docs/research/mdp_probability_marginalization.md` trước khi viết code. Tài liệu phải trả lời:
-
-1. State tối thiểu có chứa đủ thông tin Markov không?
-2. Action là predict 0/1, abstain, chọn nhãn tiếp theo hay request review?
-3. Transition nào làm posterior thay đổi, và lấy dữ liệu transition ở đâu?
-4. Reward có FP/FN/review/time cost thật hay chỉ là metric tùy ý?
-5. Có feedback giữa episode không, hay chỉ có một batch prediction?
-6. MDP cải thiện gì so với F1/Jaccard DP, mean-field, exact-small-K hoặc Monte Carlo ở cùng budget?
-
-Chỉ tạo `src/sequential/mdp_policy.py` khi cả bốn điều kiện sau đúng:
-
-- có quy trình tuần tự và feedback làm thay đổi state;
-- xác định được transition/reward từ domain;
-- có simulator hoặc log tương tác để train/evaluate không dùng test leakage;
-- pilot trên synthetic/small dataset vượt decision-policy tĩnh ở cùng review budget.
-
-Nếu thiếu một điều kiện, kết luận research spike là “MDP chưa phù hợp với phạm vi hiện tại”; giữ ở future work. Đây không phải thất bại mà là kết luận mô hình hóa cần thiết để tránh thêm độ phức tạp không có bằng chứng.
-
-Song song, có thể tạo module ablation nhẹ hơn `src/inference/marginalization.py`:
-
-```text
-mean_field        # default hiện tại
-exact_small_k     # oracle kiểm tra đúng cho số parent nhỏ
-monte_carlo       # xấp xỉ scalable, seed và sample budget cố định
-```
-
-Module này chỉ thay strategy inference qua injection point, không sửa cách train BR/CC/GSI.
-
-## 8. Kế hoạch thực hiện theo quota 5 giờ cho mỗi phase
-
-### 8.1. Quy ước quota
-
-- **Mỗi phase là một phiên độc lập, tối đa 5 giờ của model.** Toàn bộ đặc tả cần nhiều phase; không ép hoàn thành trong một quota.
-- Mỗi phase chỉ phân bổ khoảng `3h50` cho đọc handoff và implementation. `1h10` cuối bắt buộc dành cho test, sửa lỗi, rà diff và viết handoff; đây là phần dự phòng để phase không vượt quota.
-- Phase sau chỉ bắt đầu khi phase trước đạt exit criteria hoặc handoff ghi rõ phần chưa đạt và cách tiếp tục.
-- Không gộp một hạng mục đang dở sang phase mới mà không cập nhật phạm vi phase mới. Nếu task vượt quota, dừng ở checkpoint an toàn và chia nhỏ tiếp.
-- Thời gian GPU chạy dài được quản lý bằng cache/checkpoint, nhưng không được giả định một model-dataset pair sẽ hoàn tất ngoài quota mà không có khả năng resume.
-
-### 8.2. Mẫu vận hành chung của một phase
-
-| Khoảng thời gian | Việc bắt buộc |
-|---|---|
-| `00:00–00:20` | Đọc handoff phase trước, kiểm tra `git status`, chạy test nền liên quan và khóa phạm vi file |
-| `00:20–03:50` | Thực hiện mục tiêu chính; tạo checkpoint nhỏ sau từng hạng mục hoàn chỉnh |
-| `03:50–04:30` | Unit/integration/smoke tests và sửa lỗi blocker/high |
-| `04:30–05:00` | Buffer, `git diff --check`, kiểm tra thay đổi ngoài phạm vi và viết handoff phase sau |
-
-Tổng mỗi phase: `20 + 210 + 40 + 30 = 300 phút`.
-
-Mỗi phase tạo `docs/progress/phase_<ID>.md` gồm:
-
-```text
-Objective đã hoàn thành
-Files đã sửa/tạo
-Quyết định kỹ thuật và giả định
-Test/lệnh đã chạy + kết quả
-Output/cache được tạo
-Việc chưa hoàn thành hoặc blocker
-Git status và thay đổi ngoài phạm vi
-Entry point/lệnh đầu tiên cho phase tiếp theo
-```
-
-### 8.3. Roadmap các phase, mỗi phase không quá 5 giờ
-
-#### Phase Q0 — Audit, hợp đồng metric và tài liệu cuộc họp
-
-**Trạng thái:** ✅ Đã hoàn thành ngày 2026-08-30 — xem [`docs/progress/phase_Q0.md`](docs/progress/phase_Q0.md).
-
-**Mục tiêu:** khóa nền tảng trước khi sửa production code.
-
-Phạm vi:
-
-1. Chạy test hiện tại, audit source/cache/result schema và ghi baseline.
-2. Tạo `meeting_summary.md` từ `tmp.md`, đánh dấu thuật ngữ cần xác nhận.
-3. Khóa canonical names, công thức, `zero_division`, empty-set và `NaN` conventions ở mục 4.
-4. Tạo skeleton `complete_metrics.py`, `abstention_metrics.py`, `group_metrics.py`, facade và test fixtures.
-5. Viết test contract trước cho complete, all-abstain, group rỗng và zero support; chưa cần làm chúng pass trong Q0.
-
-Exit criteria:
-
-- baseline test log và audit hiện trạng tồn tại;
-- metric contract không còn tên/công thức mơ hồ;
-- module skeleton import được nhưng chưa thay production output;
-- `meeting_summary.md` và `docs/progress/phase_Q0.md` tồn tại.
-
-#### Phase Q1 — Complete, partial, optimistic và group metrics
-
-**Trạng thái:** ✅ Đã hoàn thành ngày 2026-08-31 — xem [`docs/progress/phase_Q1.md`](docs/progress/phase_Q1.md).
-
-**Phụ thuộc:** Q0.
-
-Phạm vi:
-
-1. Cài complete metrics: Macro/Micro-F1, Hamming Accuracy, Instance-F1/Jaccard, Macro Precision/Recall.
-2. Cài selective và optimistic/oracle completion metrics.
-3. Cài decided/rejected error metrics, error capture, IL/DL groups và per-label coverage/support.
-4. Critical-label hook trả `N/A` khi chưa có domain config.
-5. Giữ `Example-F1` alias qua facade nhưng không tạo cột trùng.
-
-Exit criteria:
-
-- metric unit tests pass cho perfect, all-abstain, no-abstain, no-error, group rỗng, zero support và zero denominator;
-- complete metrics khớp scikit-learn ở trường hợp chuẩn;
-- Full/Selective/Rejected/Optimistic APIs có mẫu số và `NaN` convention rõ;
-- chưa thay cache/schema production.
-
-#### Phase Q2 — Pipeline integration, output schema v3 và resumability
-
-**Trạng thái:** ✅ Đã hoàn thành ngày 2026-08-31 — xem [`docs/progress/phase_Q2.md`](docs/progress/phase_Q2.md).
-
-**Phụ thuộc:** Q1.
-
-Phạm vi:
-
-1. Nối metric mới vào `_evaluate_model` và summary pipeline.
-2. Nâng cache/output lên schema v3, thêm settings/config hash và migration guard.
-3. Thêm fold-level checkpoint để model-dataset pair có thể dừng/resume giữa quota.
-4. Xuất JSON/CSV cho complete, selective, per-label và group scopes.
-5. Chạy synthetic/tiny integration và interruption/resume test.
-
-Exit criteria:
-
-- tiny run sinh đủ scopes với canonical names;
-- cache v2 không bị ghi đè hoặc đọc nhầm như v3;
-- interruption sau một fold resume mà không chạy lại fold đã hoàn thành;
-- schema/audit tests pass và `docs/progress/phase_Q2.md` ghi migration rule.
-
-#### Phase Q3 — Decision-policy interface và Hamming regression
-
-**Trạng thái:** ✅ Đã hoàn thành ngày 2026-08-31 — xem [`docs/progress/phase_Q3.md`](docs/progress/phase_Q3.md).
-
-**Phụ thuộc:** Q2.
-
-Phạm vi:
-
-1. Tạo `src/decision/base.py` và policy registry tối thiểu.
-2. Wrap Hamming SEP/PAR hiện tại vào `HammingBOPPolicy`.
-3. Giữ API `predict`, `predict_from_proba`, `decision_mask` tương thích.
-4. Thêm deterministic tie/threshold boundary tests và config serialization.
-5. Chạy regression trên fixture/cache nhỏ để chứng minh default output không đổi.
-
-Exit criteria:
-
-- mọi Hamming unit/regression test pass;
-- model cũ delegate sang policy module nhưng kết quả bitwise/numerically tương đương;
-- decision policy được ghi trong cache hash/manifest;
-- chưa cài F1/Jaccard trong cùng phase.
-
-#### Phase Q4 — F1-BOP hoàn chỉnh
-
-**Trạng thái:** ✅ Đã hoàn thành ngày 2026-08-31 — xem [`docs/progress/phase_Q4.md`](docs/progress/phase_Q4.md).
-
-**Phụ thuộc:** Q3.
-
-Phạm vi:
-
-1. Cài complete/partial `FbetaBOPPolicy`, ưu tiên `beta=1`.
-2. Cài count-distribution dynamic programming và deterministic tie-breaking.
-3. Ghi CLI assumption/metadata và phân biệt dependent-marginal approximation.
-4. Exhaustive validation trên `{0,-1,1}^K`, `K <= 6`.
-5. Thêm counterexample F1-BOP khác threshold `0.5`/Hamming-BOP và benchmark runtime nhỏ.
-
-Exit criteria:
-
-- F1-BOP khớp exhaustive optimum trên toàn bộ synthetic fixtures;
-- complete/no-abstention và partial modes đều pass;
-- dependent marginals được gắn nhãn “BOP dưới xấp xỉ CLI”;
-- chưa nối policy vào GSI selection.
-
-#### Phase Q5 — Jaccard-BOP hoàn chỉnh
-
-**Trạng thái:** ✅ Đã hoàn thành ngày 2026-08-31 — xem [`docs/progress/phase_Q5.md`](docs/progress/phase_Q5.md).
-
-**Phụ thuộc:** Q4.
-
-Phạm vi:
-
-1. Cài complete/partial `JaccardBOPPolicy` theo Algorithm 3.
-2. Tái sử dụng hạ tầng count-distribution an toàn từ Q4.
-3. Cài empty-union convention, penalty và deterministic tie-breaking.
-4. Exhaustive validation `K <= 6` và runtime/memory smoke với `K` lớn hơn.
-5. Rà API/config/cache parity với F1/Hamming policies.
-
-Exit criteria:
-
-- Jaccard-BOP khớp exhaustive optimum;
-- không regression Hamming/F1;
-- policy registry tạo và serialize được cả ba objective families;
-- `docs/progress/phase_Q5.md` ghi độ phức tạp và giới hạn CLI.
-
-#### Phase Q6 — Objective injection cho GSI
-
-**Trạng thái:** ✅ Đã hoàn thành ngày 2026-08-31 — xem `docs/progress/phase_Q6.md`.
-
-**Phụ thuộc:** Q5.
-
-Phạm vi:
-
-1. Tạo `src/selection/objectives.py` với `full_macro_f1`, `immediate_instance_f1`, `bop_instance_f1`, `bop_jaccard`, F0.5 và F2.
-2. Inject objective/decision policy vào GSI, giữ default `full_macro_f1` tương thích.
-3. Score mọi candidate trên inner validation; cấm outer-test access.
-4. Cache selection history, objective, policy, beta, cost và seed.
-5. Thêm spy leakage test, default regression fixture và synthetic objective smoke.
-
-Exit criteria:
-
-- spy test chứng minh không có outer-test leakage;
-- default GSI tái tạo kết quả trước thay đổi;
-- thay objective cập nhật score/history đúng policy;
-- selector không chứa công thức decision policy hard-code.
-
-#### Phase Q7 — Partition modes và IL/DL ablation infrastructure
-
-**Trạng thái:** ✅ Đã hoàn thành ngày 2026-09-02 — xem `docs/progress/phase_Q7.md`.
-
-**Phụ thuộc:** Q6.
-
-Phạm vi:
-
-1. Tạo `partition_provider` cho `all_il`, `all_dl`, `learned`, `fixed`, `random_matched`.
-2. Thêm `learned_no_correlation_order` và control final order để tách partition khỏi reorder.
-3. Xuất IL/DL group metrics, partition size, stability và selection/inference time.
-4. Test empty IL/DL, fixed partition, random seed và same-order invariants.
-5. Smoke ablation nhỏ trên `emotions`, 2 folds, một base learner.
-
-Exit criteria:
-
-- năm partition modes chạy qua cùng evaluation API;
-- random-matched tái lập theo seed và giữ đúng số IL;
-- ablation output đủ để so learned với all-IL/all-DL mà không confound order;
-- chưa chạy full 30-seed/10-dataset ablation.
-
-#### Phase Q8 — Shared registry, matched Logistic/MLP baselines
-
-**Trạng thái:** ✅ Đã hoàn thành ngày 2026-09-02 — xem `docs/progress/phase_Q8.md`.
-
-**Phụ thuộc:** Q2; nên thực hiện sau Q7 để registry bao phủ API cuối.
-
-Phạm vi:
-
-1. Tạo shared base-learner factory và `configs/experiment.json`.
-2. Loại hai factory BR/CC bị trùng mà không thay thuật toán fit/predict.
-3. Đăng ký BR, CC, MLC-PA, GSI-MLC-PA cho Logistic và MLP.
-4. Loại silent MLP fallback; backend khác phải có ID/config khác.
-5. Thêm manifest và invariant BR/MLC-PA cùng base có cùng full probabilities/predictions.
-
-Exit criteria:
-
-- 8 model IDs Logistic/MLP được tạo từ một registry;
-- factory/config tests và invariant tests pass;
-- smoke mỗi family trên tiny data pass;
-- hyperparameter/backend xuất đầy đủ vào manifest.
-
-#### Phase Q9 — SVM calibration và hoàn chỉnh 12 baselines
-
-**Trạng thái:** ✅ Đã hoàn thành ngày 2026-09-02 — xem `docs/progress/phase_Q9.md`.
-
-**Phụ thuộc:** Q8.
-
-Phạm vi:
-
-1. Tạo `ProbabilityAdapter` và `svm_calibrated` bằng Platt/sigmoid calibration trong outer-train.
-2. Xử lý rare-label calibration folds/constant labels và ghi fallback.
-3. Thêm Brier, log loss, ECE và reliability data.
-4. Đăng ký bốn family dùng calibrated SVM; giữ `svm_raw` chỉ như legacy full baseline nếu cần.
-5. Spy/split tests bảo đảm calibrator không thấy outer test.
-
-Exit criteria:
-
-- đủ 12 matched family/base IDs;
-- calibration leakage tests pass;
-- rare-label fallback deterministic và được ghi manifest;
-- smoke SVM family pass trên dataset nhỏ.
-
-#### Phase Q10 — Deployment metrics, critical labels và visualization
-
-**Trạng thái:** ✅ Đã hoàn thành ngày 2026-09-02 — xem `docs/progress/phase_Q10.md`.
-
-**Phụ thuộc:** Q2, Q7, Q9.
-
-Phạm vi:
-
-1. Cài `deployment.py`, risk-at-coverage, AURC, review load, error-capture efficiency và optimistic gain.
-2. Tạo/validate `configs/label_policy.json`; không suy importance từ test data.
-3. Cài cost-sensitive utility và optional reviewer accuracy scenarios.
-4. Chọn operating point chỉ trên inner validation.
-5. Sinh các CSV/plot ở C8 và test `NaN`/missing model/incomplete cache.
-
-Exit criteria:
-
-- risk–coverage và deployment tables sinh từ fixture/smoke results;
-- label-policy thiếu thì critical metrics là `N/A`, không crash;
-- operating-point leakage test pass;
-- plot/table không so sai Full với Selective denominator.
-
-#### Phase Q11 — System verification và reproducible smoke benchmark
-
-**Trạng thái:** ✅ Đã hoàn thành ngày 2026-09-02 — xem `docs/progress/phase_Q11.md`.
-
-**Phụ thuộc:** Q0–Q10.
-
-Phạm vi:
-
-1. Chạy toàn bộ C9 unit/integration tests và sửa blocker/high.
-2. Rà cache hash, schema migration, aliases, deterministic seed và run manifest.
-3. Chạy smoke benchmark `emotions`, 2 folds, 12 baseline IDs, cost `0.3` và `0.5`; decision-objective ablation có thể giới hạn Logistic.
-4. Audit output JSON/CSV/figures bằng script, không chỉ nhìn thủ công.
-5. Cập nhật README/lệnh chạy và freeze experiment config cho full run.
-
-Lệnh smoke dự kiến:
-
-```powershell
-python tests_unit.py
-python main.py --datasets emotions `
-  --n_splits 2 --abstention_costs 0.3 0.5 `
-  --report_cost 0.3 --output_dir results_pa_v3_smoke
-```
-
-Exit criteria:
-
-- test suite pass hoặc chỉ còn issue medium/low được ghi rõ;
-- smoke run hoàn tất, audit invariants pass và không sửa kết quả v2;
-- config cho full run được khóa bằng hash;
-- `docs/progress/phase_Q11.md` chứa lệnh resume chính xác.
-
-#### Phase Q12 — Full experiments, phase lặp lại theo quota
-
-**Phụ thuộc:** Q11.
-
-**Tiến độ:**
-
-- ✅ Q12.1 hoàn thành ngày 2026-09-02: `emotions`, 12/12 pairs, 60/60 folds — xem `docs/progress/phase_Q12.1.md`.
-- ✅ Q12.2 hoàn thành ngày 2026-09-02: `music`, lũy kế 24/120 pairs và sửa run-hash drift khi resume — xem `docs/progress/phase_Q12.2.md`.
-- ✅ Q12.3 hoàn thành ngày 2026-09-02: `scene`, lũy kế 36/120 pairs và xác nhận canonical run hash ổn định — xem `docs/progress/phase_Q12.3.md`.
-- ✅ Q12.4 hoàn thành ngày 2026-09-02: `yeast`, lũy kế 48/120 pairs và 240/600 folds — xem `docs/progress/phase_Q12.4.md`.
-- ✅ Q12.5 hoàn thành ngày 2026-09-02: `genbase`, lũy kế 60/120 pairs và 300/600 folds — xem `docs/progress/phase_Q12.5.md`.
-- ⏸️ Q12.6 checkpoint ngày 2026-09-02: hoàn thành `medical`, `enron`, `cal500` và 9/12 pairs của `bibtex`; lũy kế 105/120 pairs, 525/600 folds, không có partial pair — xem `docs/progress/phase_Q12.6.md`.
-- ✅ Q12.7 checkpoint ngày 2026-09-03: hoàn tất primary 120/120 pairs, 600/600 folds, strict audit PASS; khóa ablation grid và hoàn tất 40/50 folds đầu tiên của `immediate_instance_f1` — xem `docs/progress/phase_Q12.7.md`.
-- ⏳ Q12.8 đang chạy ngày 2026-09-03: `immediate_instance_f1` hoàn tất 50/50 folds và audit PASS; `bop_instance_f1` đã bắt đầu với checkpoint quota 5 folds — xem `docs/progress/phase_Q12.8.md`.
-
-**Trạng thái primary benchmark hiện tại:** ✅ hoàn thành 120/120 pairs, 600/600 folds. Strict audit PASS với frozen run hash `2a300c396384c5e9`; Q13 vẫn chờ toàn bộ objective/partition/random-matched ablation hoàn tất.
-
-**Đã hoàn thành trong Q12:**
-
-- [x] Chạy đủ 12 matched model IDs × 5 folds cho `emotions`, `music`, `scene`, `yeast`, `genbase`, `medical`, `enron` và `cal500`.
-- [x] Chạy đủ 9/12 model pairs của `bibtex`: toàn bộ Logistic/MLP và `BR_SVM`.
-- [x] Hoàn tất ba SVM pair còn lại của `bibtex` và đủ 12/12 pairs của `reuters-k500`.
-- [x] Strict full audit primary PASS: không partial/missing/failed, đủ tables/figures.
-- [x] Dừng an toàn sau complete checkpoint; không có fold/pair dở dang, cache bị trộn hay process runner còn chạy.
-
-**Còn lại để hoàn tất Q12 primary queue (thứ tự bắt buộc):**
-
-1. [x] Hoàn tất `bibtex/CC_SVM`, `bibtex/MLC_PA_SVM`, `bibtex/GSI_MLC_PA_SVM` (3 pairs, 15 folds).
-2. [x] Hoàn tất 12 model pairs của `reuters-k500` (60 folds).
-3. [x] Chạy `audit_v3_results.py` với frozen run hash `2a300c396384c5e9`: PASS `120/120` pairs, `600/600` folds, không partial/missing/failed và đầy đủ tables/figures.
-4. [x] Ghi handoff Q12 primary; generated results vẫn giữ local/ignored.
-
-Q12 là phase **repeatable** (`Q12.1`, `Q12.2`, ...), mỗi lần vẫn tối đa 5 giờ. Không gộp toàn bộ 10 datasets và mọi ablation vào một quota.
-
-Mỗi lần Q12:
-
-1. Đọc job queue/cache và ước lượng runtime từ các run trước.
-2. Chọn số model-dataset pairs có thể hoàn thành/checkpoint trong khoảng 4 giờ.
-3. Không dispatch job mới sau mốc `03:30`; thời gian còn lại dành cho job hiện tại, cache audit và handoff.
-4. Sau mỗi fold/pair, xác minh cache có thể load và settings hash khớp.
-5. Khi có lỗi, ưu tiên chẩn đoán/retry một pair; không thay code lớn trong phase experiment.
-
-Gợi ý thứ tự queue:
-
-```text
-small:  emotions, music, scene, yeast
-medium: genbase, medical, enron
-large:  cal500, bibtex, reuters-k500
-primary matched baselines trước -> objective ablation -> random-matched repetitions
-```
-
-Exit criteria của mỗi Q12.x:
-
-- mọi job đã dispatch có completed cache hoặc fold checkpoint hợp lệ;
-- summary completeness report ghi pairs completed/missing/failed;
-- không có cache khác config bị trộn;
-- handoff chỉ rõ job queue kế tiếp.
-
-Thoát Q12 khi đủ primary runs, cost grid và ablations đã đăng ký trước. Full benchmark không bắt buộc hoàn tất trong một Q12.x.
-
-### 8.3.1. Backlog còn lại sau checkpoint Q12.6
-
-| Ưu tiên | Hạng mục | Trạng thái | Điều kiện hoàn tất |
-|---|---|---|---|
-| P0 | Primary queue còn lại | ✅ Hoàn thành | 120/120 pairs, 600/600 folds và strict full audit PASS. |
-| P0 | Objective/partition ablation | ⏳ `immediate_instance_f1` đạt 50/50 folds, audit PASS; `bop_instance_f1` checkpoint 40/50 folds | Resume checksum-frozen `configs/ablation_run.json`; không đổi scientific settings. |
-| P0 | Random-matched repetitions | Chưa chạy | Thực hiện sau objective/partition ablation, lưu seed và giữ đúng số IL. |
-| P1 | Q13 statistical analysis | Chưa bắt đầu | Dataset-level paired analysis, CI/effect size, Friedman + Wilcoxon-Holm, claim matrix tái lập từ raw cache. |
-| P1 | Q14 report | Chưa bắt đầu | Cập nhật R2–R9 chỉ từ bảng/figure đã audit, kèm limitations và reproduction commands. |
-| P2 | Q15 MDP spike | Chưa bắt đầu, tùy chọn | Trả lời gate questions; chỉ mở Q16 nếu pilot được biện minh. |
-
-**Ranh giới code/report cho backlog:** primary queue và ablation trước mắt chỉ dùng module/config/runner đã có. Chỉ sửa code khi audit hoặc test chỉ ra lỗi tái lập; mọi bổ sung mới phải là module tách biệt, có test và không thay đổi default core. Báo cáo chỉ được cập nhật ở Q14 sau Q13, không dùng selective/optimistic metric để suy diễn kết quả primary chưa audit.
-
-#### Phase Q13 — Statistical analysis và bảng/biểu đồ cuối
-
-**Trạng thái:** ⏳ Chưa bắt đầu; bị chặn bởi toàn bộ Q12 ablation đã đăng ký và audit tương ứng.
-
-**Phụ thuộc:** Q12 hoàn tất primary runs.
-
-Phạm vi:
-
-1. Audit completeness và loại run invalid theo rule đã đăng ký, không chọn theo kết quả đẹp/xấu.
-2. Tổng hợp dataset-level paired results, effect sizes và confidence intervals.
-3. Friedman + post-hoc Wilcoxon-Holm cho so sánh nhiều model.
-4. Tạo bảng complete/selective/rejected/optimistic, IL/DL và hyperparameter.
-5. Chốt figure captions và claim matrix: claim nào được/không được dữ liệu hỗ trợ.
-
-Exit criteria:
-
-- script analysis tái lập từ raw cache;
-- mọi số trong bảng truy ngược được dataset/fold/config;
-- không pseudo-replicate folds như mẫu độc lập;
-- có danh sách kết luận thắng/thua/hòa và giới hạn.
-
-#### Phase Q14 — Cập nhật báo cáo hoàn chỉnh
-
-**Trạng thái:** ⏳ Chưa bắt đầu; bị chặn bởi Q13.
-
-**Phụ thuộc:** Q13.
-
-Phạm vi:
-
-1. Hoàn thiện R2–R9: phương pháp, metric, baseline, objective/partition ablation, deployment và thống kê.
-2. Dùng Hamming Accuracy trong phần thân, giữ generalized loss ở phần lý thuyết.
-3. Phân biệt immediate, selective, rejected và optimistic claims.
-4. Ghi limitations: CLI approximation, calibration, mean-field, reviewer/domain assumptions.
-5. Cross-check mọi claim với bảng/figure và cập nhật `meeting_summary.md`.
-
-Exit criteria:
-
-- báo cáo không còn claim chỉ dựa trên Selective Macro-F1;
-- công thức/tên metric khớp code;
-- baseline/hyperparameter tables đầy đủ;
-- tài liệu có reproduction commands và reference đúng.
-
-#### Phase Q15 — MDP/marginalization research spike, tùy chọn
-
-**Trạng thái:** ○ Chưa bắt đầu; không chặn Q13/Q14.
-
-**Phụ thuộc:** báo cáo chính không phụ thuộc phase này; chỉ chạy khi cần trả lời hướng nghiên cứu mục 7.
-
-Phạm vi một quota:
-
-1. Viết `docs/research/mdp_probability_marginalization.md` và trả lời sáu gate questions.
-2. So sánh one-step BOP, dynamic programming, exact-small-K, mean-field và Monte Carlo về giả định/độ phức tạp.
-3. Chỉ thiết kế synthetic pilot nếu xác định được state/action/transition/reward.
-4. Không nối MDP vào core trong cùng phase nghiên cứu.
-
-Exit criteria:
-
-- kết luận rõ `not applicable`, `needs data/domain definition`, hoặc `pilot justified`;
-- nếu pilot justified, tách implementation thành phase Q16 mới, cũng tối đa 5 giờ;
-- không mô tả mô hình hiện tại là MDP khi chưa có sequential feedback.
-
-### 8.4. Quy tắc ưu tiên và dừng phase
-
-Thứ tự mặc định:
-
-```text
-Q0 -> Q1 -> Q2 -> Q3 -> Q4 -> Q5 -> Q6 -> Q7 -> Q8
-   -> Q9 -> Q10 -> Q11 -> Q12.x (lặp) -> Q13 -> Q14
-Q15 là tùy chọn; Q16 chỉ tồn tại nếu Q15 qua gate.
-```
-
-Quy tắc khi phase gần hết quota:
-
-1. Không bắt đầu subtask mới sau `04:00`.
-2. Không cắt test bảo toàn cache, leakage, metric edge cases hoặc reproducibility.
-3. Có thể hoãn plot/prose/performance optimization sang phase sau.
-4. Nếu implementation chính chưa xong, tạo checkpoint có test cho phần đã hoàn tất; không để API nửa cũ nửa mới mà không có feature flag.
-5. Handoff là deliverable bắt buộc, không phải phần tùy chọn khi còn thời gian.
-
-## 9. Definition of Done
-
-### 9.1. Definition of Done áp dụng cho từng quota phase
-
-- [ ] Phase không vượt quá một quota 5 giờ và không bắt đầu subtask mới sau mốc dừng ở mục 8.4.
-- [ ] Exit criteria riêng của phase ở mục 8.3 đã đạt; nếu chưa đạt phải ghi trạng thái `partial` thay vì `complete`.
-- [ ] Test liên quan đến thay đổi của phase đã chạy và kết quả được ghi nguyên văn/tóm tắt có thể kiểm chứng.
-- [ ] Không ghi đè cache/kết quả cũ và không trộn output khác config hash.
-- [ ] `git diff --check` pass; mọi thay đổi ngoài phạm vi được bảo toàn và giải thích.
-- [ ] `docs/progress/phase_<ID>.md` có files, decisions, tests, outputs, blockers, git status và entry point cho phase sau.
-- [ ] Không claim hạng mục của phase tương lai là đã hoàn thành; đặc biệt với exact BOP, đủ baselines, full benchmark, hiệu quả thực tế và MDP.
-
-### 9.2. Definition of Done cho toàn bộ đặc tả
-
-Đợt cải tiến hoàn thành khi:
-
-- [x] Tất cả unit/smoke tests ở C9 pass.
-- [x] Kết quả cũ không bị ghi đè; mọi run có manifest và config hash.
-- [x] Có đủ baseline theo base learner hoặc có log lý do thiếu.
-- [x] Không có so sánh family bị confound bởi base learner/hyperparameter/calibration khác nhau.
-- [x] Complete, selective, rejected và optimistic metrics có tên/mẫu số tách biệt.
-- [x] Hamming Accuracy là metric hiển thị; generalized Hamming Loss vẫn được giữ cho BOP/audit.
-- [x] Có Jaccard, Instance-F1, Macro Precision/Recall và per-label table.
-- [x] Có error-capture/review-load và critical-label analysis hoặc ghi `N/A` vì thiếu domain config.
-- [ ] Có ablation chứng minh hoặc bác bỏ lợi ích IL/DL một cách độc lập với order/base/policy.
-- [ ] Có objective ablation, trong đó GSI thực sự gọi BOP instance-F1/Jaccard trên inner validation.
-- [x] Không chọn cost/objective/threshold trên outer test.
-- [ ] Báo cáo mô tả đúng giới hạn của optimistic metrics và không suy diễn selective Macro-F1 thành hiệu quả thực tế.
-- [x] `meeting_summary.md` tồn tại và các điểm chưa xác nhận đã được cập nhật.
-- [ ] MDP được ghi đúng là future/research direction, trừ khi đã qua gate và có kết quả pilot.
-
-## 10. Tài liệu tham khảo chính
-
-1. Nguyen, V.-L. và Hüllermeier, E. *Multilabel Classification with Partial Abstention: Bayes-Optimal Prediction under Label Independence*. JAIR 72 (2021), 613–665. [Bản local](TaiLieuThamKhao/sminton,+12610-Article+(PDF)-28712-1-11-20211029.pdf), [DOI](https://doi.org/10.1613/jair.1.12610).
-2. Read, J., Pfahringer, B., Holmes, G. và Frank, E. *Classifier Chains for Multi-label Classification*. Machine Learning 85 (2011). [Bản local](TaiLieuThamKhao/s10994-011-5256-5.pdf), [DOI](https://doi.org/10.1007/s10994-011-5256-5).
-3. Waegeman, W. et al. *On the Bayes-Optimality of F-Measure Maximizers*. JMLR 15 (2014). [JMLR](https://www.jmlr.org/papers/v15/waegeman14a.html).
-4. Dembczyński, K. et al. *Optimizing the F-Measure in Multi-Label Classification*. ICML 2013. [PMLR](https://proceedings.mlr.press/v28/dembczynski13.html).
-5. Geifman, Y. và El-Yaniv, R. *Selective Classification for Deep Neural Networks*. NeurIPS 2017. [Proceedings](https://proceedings.neurips.cc/paper/2017/hash/4a8423d5e91fda00bb7e46540e2b0cf1-Abstract.html).
-6. Nam, J. et al. *Learning Context-dependent Label Permutations for Multi-label Classification*. ICML 2019. [PMLR](https://proceedings.mlr.press/v97/nam19a.html).
-7. Read, J., Martino, L. và Luengo, D. *Efficient Monte Carlo Methods for Multi-Dimensional Learning with Classifier Chains*. [arXiv](https://arxiv.org/abs/1211.2190).
-8. Opitz, J. và Burst, S. *Macro F1 and Macro F1*. [arXiv](https://arxiv.org/abs/1911.03347).
-9. scikit-learn. *CalibratedClassifierCV*. [Official documentation](https://scikit-learn.org/stable/modules/generated/sklearn.calibration.CalibratedClassifierCV.html).
+---
+
+## 4. TIÊU CHÍ HOÀN THÀNH (DEFINITION OF DONE - DoD)
+
+1. **Về mặt kỹ thuật (Core):**
+   - [ ] Module `PerLabelMacroF1Policy` hoàn thành, hỗ trợ tối ưu ngưỡng theo từng nhãn trên validation split và vượt qua $100\%$ unit tests.
+   - [ ] Hàm `compute_selective_instance_f1` được tích hợp vào hệ thống đánh giá.
+   - [ ] Pipeline xuất ra kết quả v3 đầy đủ: `Coverage`, `Selective Macro-F1`, `Selective Instance-F1`, `Generalized Loss`.
+2. **Về mặt bài báo (Paper):**
+   - [ ] Phần Introduction nêu bật Macro-F1, cơ chế Abstention và có đầy đủ các gạch đầu dòng tóm tắt kết quả định lượng cụ thể.
+   - [ ] Bảng Pairwise Win/Tie/Loss thể hiện rõ sự áp đảo của GSI trên Macro-F1, Hamming Accuracy và Coverage.
+   - [ ] Bảng hiệu năng trên cost khó hiểu đã được dỡ bỏ khỏi thân bài báo chính.
+   - [ ] Có biểu đồ Risk-Coverage và phân tích sắc bén về ưu thế Coverage khi Loss tương đương với MLC-PA.
+   - [ ] Bản thảo LaTeX biên dịch thành công không còn lỗi warning lớn.

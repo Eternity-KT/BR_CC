@@ -58,6 +58,11 @@ METRICS_INFO = {
         "direction": "higher_better",
         "description": "Micro-F1 computed only over decided label-instance positions"
     },
+    "Selective Instance-F1": {
+        "type": "Partial-abstention",
+        "direction": "higher_better",
+        "description": "Instance-based F1 computed only over decided labels per instance"
+    },
     "Coverage": {
         "type": "Partial-abstention",
         "direction": "descriptive",
@@ -208,6 +213,45 @@ def compute_selective_micro_f1(y_true, y_partial, abstain_value=-1):
     )
 
 
+def compute_selective_instance_f1(y_true, y_partial, abstain_value=-1):
+    """Compute instance-based F1 restricted to decided labels for each sample.
+
+    For each sample i:
+        F1_i = 2 * |Y_{i, D} ∩ Ŷ_{i, D}| / (|Y_{i, D}| + |Ŷ_{i, D}|)
+    Conventions:
+        - If all labels on sample i are abstained (|D| = 0): F1_i = 0.0
+        - If both true and predicted sets are empty on decided labels: F1_i = 1.0
+        - Otherwise, standard harmonic mean of precision and recall on decided positions.
+    """
+    y_true = np.asarray(y_true, dtype=np.int32)
+    y_partial = np.asarray(y_partial, dtype=np.int32)
+    if y_true.shape != y_partial.shape or y_true.ndim != 2:
+        raise ValueError("y_true and y_partial must be identically shaped 2D arrays.")
+    n_samples = y_true.shape[0]
+    if n_samples == 0:
+        return 0.0
+
+    decided = y_partial != abstain_value
+    has_decisions = np.any(decided, axis=1)
+
+    pred_pos = (y_partial == 1) & decided
+    true_pos = (y_true == 1) & decided
+
+    pred_sums = pred_pos.sum(axis=1)
+    true_sums = true_pos.sum(axis=1)
+    intersections = (pred_pos & true_pos).sum(axis=1)
+
+    scores = np.zeros(n_samples, dtype=np.float64)
+    both_empty = has_decisions & (true_sums == 0) & (pred_sums == 0)
+    scores[both_empty] = 1.0
+
+    non_empty = has_decisions & ~both_empty
+    denominators = true_sums[non_empty] + pred_sums[non_empty]
+    scores[non_empty] = (2.0 * intersections[non_empty]) / denominators
+
+    return float(np.mean(scores))
+
+
 def compute_partial_abstention_metrics(
     y_true, y_partial, cost, abstain_value=-1, penalty="linear"
 ):
@@ -287,6 +331,9 @@ def compute_partial_abstention_metrics(
             y_true, y_partial, abstain_value=abstain_value
         ),
         "Selective Micro-F1": compute_selective_micro_f1(
+            y_true, y_partial, abstain_value=abstain_value
+        ),
+        "Selective Instance-F1": compute_selective_instance_f1(
             y_true, y_partial, abstain_value=abstain_value
         ),
         "Coverage": float(coverage),

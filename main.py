@@ -373,19 +373,21 @@ def _evaluate_model_v3(
         inference_seconds = float(time.perf_counter() - inference_started)
         full_prediction = classifier.predict_full_from_proba(probabilities)
         acceptance_confidence = np.abs(probabilities - 0.5) * 2.0
-        decision_policy = create_configured_policy(
-            getattr(classifier, "decision_policy", "hamming"),
-            cost=getattr(classifier, "cost", 0.3),
-            penalty=getattr(classifier, "penalty", "linear"),
-            beta=getattr(classifier, "beta", 1.0),
-            allow_abstention=True,
-            abstain_value=classifier.abstain_value,
-            hamming_boundary=(
-                "symmetric_thresholds"
-                if _is_gsi_model(model_name)
-                else "minimum_loss"
-            ),
-        )
+        decision_policy = getattr(classifier, "decision_policy_", None)
+        if decision_policy is None:
+            decision_policy = create_configured_policy(
+                getattr(classifier, "decision_policy", "hamming"),
+                cost=getattr(classifier, "cost", 0.3),
+                penalty=getattr(classifier, "penalty", "linear"),
+                beta=getattr(classifier, "beta", 1.0),
+                allow_abstention=True,
+                abstain_value=classifier.abstain_value,
+                hamming_boundary=(
+                    "symmetric_thresholds"
+                    if _is_gsi_model(model_name)
+                    else "minimum_loss"
+                ),
+            )
         model_metadata["Decision Policy"] = decision_policy.get_config()
         if _is_gsi_model(model_name):
             model_metadata["Probability Inference Seconds"] = inference_seconds
@@ -1203,7 +1205,7 @@ def main():
     )
     parser.add_argument(
         "--gsi_decision_policy",
-        choices=["hamming", "fbeta", "jaccard"],
+        choices=["hamming", "fbeta", "jaccard", "macro_f1"],
         default="hamming",
         help="Final GSI decision policy used after probability inference.",
     )

@@ -195,7 +195,8 @@ class JaccardBOPTests(unittest.TestCase):
 
     def test_registry_api_and_config_parity_for_all_policy_families(self):
         self.assertEqual(
-            set(available_policies()), {"fbeta", "hamming", "jaccard"}
+            set(available_policies()),
+            {"fbeta", "hamming", "jaccard", "macro_f1"},
         )
         policies = (
             create_policy("hamming", cost=0.2),

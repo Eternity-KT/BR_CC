@@ -507,19 +507,21 @@ def _select_inner_operating_point(
     )
     full_prediction = selector.predict_full_from_proba(probabilities)
     family = model_family(model_name)
-    policy = create_configured_policy(
-        getattr(selector, "decision_policy", "hamming"),
-        cost=getattr(selector, "cost", 0.3),
-        penalty=getattr(selector, "penalty", "linear"),
-        beta=getattr(selector, "beta", 1.0),
-        allow_abstention=True,
-        abstain_value=selector.abstain_value,
-        hamming_boundary=(
-            "symmetric_thresholds"
-            if family == "GSI_MLC_PA"
-            else "minimum_loss"
-        ),
-    )
+    policy = getattr(selector, "decision_policy_", None)
+    if policy is None:
+        policy = create_configured_policy(
+            getattr(selector, "decision_policy", "hamming"),
+            cost=getattr(selector, "cost", 0.3),
+            penalty=getattr(selector, "penalty", "linear"),
+            beta=getattr(selector, "beta", 1.0),
+            allow_abstention=True,
+            abstain_value=selector.abstain_value,
+            hamming_boundary=(
+                "symmetric_thresholds"
+                if family == "GSI_MLC_PA"
+                else "minimum_loss"
+            ),
+        )
     records = []
     for cost in abstention_costs:
         partial = policy.predict_from_proba(probabilities, cost=cost)

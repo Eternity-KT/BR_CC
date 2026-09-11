@@ -40,4 +40,10 @@ def create_configured_policy(
             **common,
             allow_abstention=allow_abstention,
         )
+    if canonical in ("macro_f1", "per_label_macro_f1"):
+        return create_policy(
+            canonical,
+            **common,
+            allow_abstention=allow_abstention,
+        )
     raise ValueError(f"No configuration adapter exists for policy '{canonical}'.")

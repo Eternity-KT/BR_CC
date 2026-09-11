@@ -418,7 +418,10 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
 
     def _apply_bop(self, probabilities, cost=None):
         """Apply BOP once, after all final probabilities have been produced."""
-        return self._make_decision_policy().predict_from_proba(
+        policy = getattr(self, "decision_policy_", None)
+        if policy is None:
+            policy = self._make_decision_policy()
+        return policy.predict_from_proba(
             probabilities, cost=cost
         )
 
@@ -773,6 +776,24 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             "final_order": [int(label) for label in self.order_],
             "selection_time_seconds": self.selection_time_seconds_,
         })
+
+        self.decision_policy_ = self._make_decision_policy()
+        if hasattr(self.decision_policy_, "fit"):
+            val_direct = self._direct_probabilities(
+                self.br_model_, X_array[validation]
+            )
+            val_probs = self._configured_probabilities(
+                X_array[validation],
+                val_direct,
+                self.cc_model_,
+                self.independent_labels_,
+            )
+            self.decision_policy_.fit(
+                val_probs,
+                Y_array[validation],
+                cost=self.cost,
+                penalty=self.penalty,
+            )
 
         self.is_fitted_ = True
         return self

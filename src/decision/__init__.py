@@ -5,6 +5,7 @@ from .configuration import create_configured_policy
 from .fbeta import FbetaBOPPolicy
 from .hamming import HammingBOPPolicy
 from .jaccard import JaccardBOPPolicy
+from .macro_f1 import PerLabelMacroF1Policy
 from .registry import (
     available_policies,
     canonical_policy_name,
@@ -28,6 +29,11 @@ register_policy(
     JaccardBOPPolicy,
     aliases=("jaccard_bop", "iou", "intersection_over_union"),
 )
+register_policy(
+    "macro_f1",
+    PerLabelMacroF1Policy,
+    aliases=("per_label_macro_f1", "macro_f1_bop", "per_label_f1"),
+)
 
 
 __all__ = [
@@ -35,6 +41,7 @@ __all__ = [
     "FbetaBOPPolicy",
     "HammingBOPPolicy",
     "JaccardBOPPolicy",
+    "PerLabelMacroF1Policy",
     "available_policies",
     "canonical_policy_name",
     "create_configured_policy",
