@@ -1,0 +1,2171 @@
+{
+  "config": {
+    "abstention_costs": [
+      0.2,
+      0.25,
+      0.3,
+      0.35,
+      0.4,
+      0.5
+    ],
+    "abstention_penalty": "linear",
+    "critical_labels": null,
+    "dataset": "emotions",
+    "dataset_fingerprint": "79ce0116ef5f3eb0",
+    "dataset_shape": {
+      "features": 72,
+      "labels": 6,
+      "samples": 593
+    },
+    "evaluation_policy": {
+      "acceptance_confidence": "2*abs(probability-0.5)",
+      "calibration": "none",
+      "full_threshold": 0.5,
+      "partial_policy": null
+    },
+    "gsi_beta": 1.0,
+    "gsi_decision_policy": "hamming",
+    "gsi_final_order": "correlation",
+    "gsi_fixed_independent_labels": null,
+    "gsi_partition_mode": "learned",
+    "gsi_penalty": "linear",
+    "gsi_selection_objective": "full_macro_f1",
+    "gsi_validation_size": 0.2,
+    "label_names": [
+      "amazed-suprised",
+      "happy-pleased",
+      "relaxing-calm",
+      "quiet-still",
+      "sad-lonely",
+      "angry-aggresive"
+    ],
+    "label_policy_hash": null,
+    "metric_contract_version": "3.0-contract",
+    "mlc_pa_base": "logistic",
+    "model": "CC_SVM",
+    "model_signature": {
+      "backend": "sklearn.svm.LinearSVC+CalibratedClassifierCV",
+      "class": "src.models.classifier_chain.ClassifierChainClassifier",
+      "experiment_manifest": {
+        "base_learner": {
+          "backend": "sklearn.svm.LinearSVC+CalibratedClassifierCV",
+          "binary_parameters": {
+            "C": 1.0,
+            "dual": "auto",
+            "max_iter": 5000,
+            "tol": 0.001
+          },
+          "calibration": {
+            "cv": 3,
+            "method": "sigmoid",
+            "rare_label_strategy": "smoothed_prior",
+            "scope": "nested_in_training_fold"
+          },
+          "name": "svm_calibrated"
+        },
+        "experiment_config_schema": 1,
+        "family": "CC",
+        "model_id": "CC_SVM",
+        "model_parameters": {
+          "base_estimator": "svm_calibrated",
+          "order": null,
+          "random_state": 42
+        },
+        "selective": false
+      },
+      "parameters": {
+        "base_estimator": "svm_calibrated",
+        "order": null,
+        "random_state": 42
+      }
+    },
+    "n_splits": 5,
+    "operating_point": {
+      "coverage_gamma": 0.8,
+      "risk_epsilon": 0.1,
+      "rule": "min_generalized_loss",
+      "selection_scope": "inner_validation",
+      "validation_size": 0.2
+    },
+    "random_state": 42,
+    "report_cost": 0.3,
+    "scaler": "MaxAbsScaler",
+    "schema_version": 3,
+    "split_hash": "f67e1d753b27165a"
+  },
+  "config_hash": "b3f35bd314912885",
+  "created_at": "2026-09-02T11:51:28.568690+00:00",
+  "dataset": "emotions",
+  "folds": {
+    "1": {
+      "metadata": {
+        "Test Size": 122,
+        "Train And Evaluate Seconds": 0.06893229484558105,
+        "Train Size": 471
+      },
+      "metrics": {
+        "Calibration": {
+          "Bin Count": 10,
+          "Metrics": {
+            "Brier Score": 0.15537640427003707,
+            "ECE": 0.06325801444923253,
+            "Log Loss": 0.4783813364804403
+          },
+          "Per Label": [
+            {
+              "Brier Score": 0.1468349482495732,
+              "ECE": 0.0888271471141975,
+              "Label Index": 0,
+              "Label Name": "amazed-suprised",
+              "Log Loss": 0.4521721025980284
+            },
+            {
+              "Brier Score": 0.197459859662452,
+              "ECE": 0.04888240425068825,
+              "Label Index": 1,
+              "Label Name": "happy-pleased",
+              "Log Loss": 0.581155325974119
+            },
+            {
+              "Brier Score": 0.1895259541087723,
+              "ECE": 0.09202798920851507,
+              "Label Index": 2,
+              "Label Name": "relaxing-calm",
+              "Log Loss": 0.5615443149356626
+            },
+            {
+              "Brier Score": 0.08247722187153902,
+              "ECE": 0.05224675036375446,
+              "Label Index": 3,
+              "Label Name": "quiet-still",
+              "Log Loss": 0.27225863607979645
+            },
+            {
+              "Brier Score": 0.15654974860577767,
+              "ECE": 0.1511050244090987,
+              "Label Index": 4,
+              "Label Name": "sad-lonely",
+              "Log Loss": 0.507433092552748
+            },
+            {
+              "Brier Score": 0.15941069312210807,
+              "ECE": 0.1531232806036031,
+              "Label Index": 5,
+              "Label Name": "angry-aggresive",
+              "Log Loss": 0.4957245467422866
+            }
+          ],
+          "Reliability": [
+            {
+              "Absolute Gap": 0.013051810773629248,
+              "Bin": 0,
+              "Count": 181,
+              "Lower Bound": 0.0,
+              "Mean Predicted Probability": 0.03114708425399506,
+              "Observed Positive Rate": 0.04419889502762431,
+              "Upper Bound": 0.1
+            },
+            {
+              "Absolute Gap": 0.031657367612102194,
+              "Bin": 1,
+              "Count": 112,
+              "Lower Bound": 0.1,
+              "Mean Predicted Probability": 0.1558426323878978,
+              "Observed Positive Rate": 0.1875,
+              "Upper Bound": 0.2
+            },
+            {
+              "Absolute Gap": 0.07243919262760562,
+              "Bin": 2,
+              "Count": 95,
+              "Lower Bound": 0.2,
+              "Mean Predicted Probability": 0.25138656104865825,
+              "Observed Positive Rate": 0.17894736842105263,
+              "Upper Bound": 0.3
+            },
+            {
+              "Absolute Gap": 0.06019289826237878,
+              "Bin": 3,
+              "Count": 86,
+              "Lower Bound": 0.3,
+              "Mean Predicted Probability": 0.35089057268098345,
+              "Observed Positive Rate": 0.29069767441860467,
+              "Upper Bound": 0.4
+            },
+            {
+              "Absolute Gap": 0.11613996602870802,
+              "Bin": 4,
+              "Count": 54,
+              "Lower Bound": 0.4,
+              "Mean Predicted Probability": 0.44947329936204133,
+              "Observed Positive Rate": 0.3333333333333333,
+              "Upper Bound": 0.5
+            },
+            {
+              "Absolute Gap": 0.11196764655735186,
+              "Bin": 5,
+              "Count": 46,
+              "Lower Bound": 0.5,
+              "Mean Predicted Probability": 0.546750255253004,
+              "Observed Positive Rate": 0.43478260869565216,
+              "Upper Bound": 0.6
+            },
+            {
+              "Absolute Gap": 0.04414326133150037,
+              "Bin": 6,
+              "Count": 33,
+              "Lower Bound": 0.6,
+              "Mean Predicted Probability": 0.6502038673921064,
+              "Observed Positive Rate": 0.6060606060606061,
+              "Upper Bound": 0.7
+            },
+            {
+              "Absolute Gap": 0.04891976824513189,
+              "Bin": 7,
+              "Count": 27,
+              "Lower Bound": 0.7,
+              "Mean Predicted Probability": 0.7526234719488356,
+              "Observed Positive Rate": 0.7037037037037037,
+              "Upper Bound": 0.8
+            },
+            {
+              "Absolute Gap": 0.18598975906980808,
+              "Bin": 8,
+              "Count": 47,
+              "Lower Bound": 0.8,
+              "Mean Predicted Probability": 0.8455642271549144,
+              "Observed Positive Rate": 0.6595744680851063,
+              "Upper Bound": 0.9
+            },
+            {
+              "Absolute Gap": 0.10583139517728024,
+              "Bin": 9,
+              "Count": 51,
+              "Lower Bound": 0.9,
+              "Mean Predicted Probability": 0.948968650079241,
+              "Observed Positive Rate": 0.8431372549019608,
+              "Upper Bound": 1.0
+            }
+          ],
+          "Sample Label Count": 732
+        },
+        "Costs": {},
+        "Critical Labels": {
+          "Reason": "critical_labels is not configured by the domain",
+          "Records": [],
+          "Status": "N/A"
+        },
+        "Full": {
+          "Hamming Accuracy": 0.7814207650273224,
+          "Hamming Loss": 0.2185792349726776,
+          "Instance Jaccard": 0.5286885245901639,
+          "Instance-F1": 0.5967213114754099,
+          "Macro Precision": 0.6360783424077435,
+          "Macro Recall": 0.5871372466413065,
+          "Macro-F1": 0.576146178239184,
+          "Micro-F1": 0.6244131455399061,
+          "Subset Accuracy": 0.319672131147541
+        },
+        "Groups": {},
+        "Metric Contract Version": "3.0-contract",
+        "Model Metadata": {
+          "Calibration Audit": {
+            "calibrated_label_count": 6,
+            "fallback_label_count": 0,
+            "fit_sample_counts": [
+              471
+            ],
+            "labels": [
+              {
+                "class_counts": {
+                  "0": 332,
+                  "1": 139
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 471,
+                "label_index": 0,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 338,
+                  "1": 133
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 471,
+                "label_index": 1,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 260,
+                  "1": 211
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 471,
+                "label_index": 2,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 353,
+                  "1": 118
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 471,
+                "label_index": 3,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 337,
+                  "1": 134
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 471,
+                "label_index": 4,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 320,
+                  "1": 151
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 471,
+                "label_index": 5,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              }
+            ],
+            "outer_test_access": false
+          },
+          "Experiment Manifest": {
+            "base_learner": {
+              "backend": "sklearn.svm.LinearSVC+CalibratedClassifierCV",
+              "binary_parameters": {
+                "C": 1.0,
+                "dual": "auto",
+                "max_iter": 5000,
+                "tol": 0.001
+              },
+              "calibration": {
+                "cv": 3,
+                "method": "sigmoid",
+                "rare_label_strategy": "smoothed_prior",
+                "scope": "nested_in_training_fold"
+              },
+              "name": "svm_calibrated"
+            },
+            "experiment_config_schema": 1,
+            "family": "CC",
+            "model_id": "CC_SVM",
+            "model_parameters": {
+              "base_estimator": "svm_calibrated",
+              "order": null,
+              "random_state": 42
+            },
+            "selective": false
+          }
+        },
+        "Per Label": [
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.56,
+            "Full Hamming Accuracy": 0.819672131147541,
+            "Full Precision": 0.875,
+            "Full Recall": 0.4117647058823529,
+            "Label Index": 0,
+            "Label Name": "amazed-suprised",
+            "Negative Support": 88,
+            "Positive Support": 34,
+            "Prevalence": 0.2786885245901639,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.56,
+            "Selective Precision": 0.875,
+            "Selective Recall": 0.4117647058823529
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.10256410256410256,
+            "Full Hamming Accuracy": 0.7131147540983607,
+            "Full Precision": 0.3333333333333333,
+            "Full Recall": 0.06060606060606061,
+            "Label Index": 1,
+            "Label Name": "happy-pleased",
+            "Negative Support": 89,
+            "Positive Support": 33,
+            "Prevalence": 0.27049180327868855,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.10256410256410256,
+            "Selective Precision": 0.3333333333333333,
+            "Selective Recall": 0.06060606060606061
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.6728971962616822,
+            "Full Hamming Accuracy": 0.7131147540983607,
+            "Full Precision": 0.6666666666666666,
+            "Full Recall": 0.6792452830188679,
+            "Label Index": 2,
+            "Label Name": "relaxing-calm",
+            "Negative Support": 69,
+            "Positive Support": 53,
+            "Prevalence": 0.4344262295081967,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.6728971962616822,
+            "Selective Precision": 0.6666666666666666,
+            "Selective Recall": 0.6792452830188679
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.7741935483870968,
+            "Full Hamming Accuracy": 0.8852459016393442,
+            "Full Precision": 0.75,
+            "Full Recall": 0.8,
+            "Label Index": 3,
+            "Label Name": "quiet-still",
+            "Negative Support": 92,
+            "Positive Support": 30,
+            "Prevalence": 0.2459016393442623,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.7741935483870968,
+            "Selective Precision": 0.75,
+            "Selective Recall": 0.8
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.6388888888888888,
+            "Full Hamming Accuracy": 0.7868852459016393,
+            "Full Precision": 0.6052631578947368,
+            "Full Recall": 0.6764705882352942,
+            "Label Index": 4,
+            "Label Name": "sad-lonely",
+            "Negative Support": 88,
+            "Positive Support": 34,
+            "Prevalence": 0.2786885245901639,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.6388888888888888,
+            "Selective Precision": 0.6052631578947368,
+            "Selective Recall": 0.6764705882352942
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.7083333333333334,
+            "Full Hamming Accuracy": 0.7704918032786885,
+            "Full Precision": 0.5862068965517241,
+            "Full Recall": 0.8947368421052632,
+            "Label Index": 5,
+            "Label Name": "angry-aggresive",
+            "Negative Support": 84,
+            "Positive Support": 38,
+            "Prevalence": 0.3114754098360656,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.7083333333333334,
+            "Selective Precision": 0.5862068965517241,
+            "Selective Recall": 0.8947368421052632
+          }
+        ],
+        "Schema Version": 3
+      }
+    },
+    "2": {
+      "metadata": {
+        "Test Size": 119,
+        "Train And Evaluate Seconds": 0.06648063659667969,
+        "Train Size": 474
+      },
+      "metrics": {
+        "Calibration": {
+          "Bin Count": 10,
+          "Metrics": {
+            "Brier Score": 0.1545508080530238,
+            "ECE": 0.05688426988654204,
+            "Log Loss": 0.4647188391395434
+          },
+          "Per Label": [
+            {
+              "Brier Score": 0.16122698720886197,
+              "ECE": 0.09277518102977454,
+              "Label Index": 0,
+              "Label Name": "amazed-suprised",
+              "Log Loss": 0.48057332144777376
+            },
+            {
+              "Brier Score": 0.17776435405945545,
+              "ECE": 0.13428169589082734,
+              "Label Index": 1,
+              "Label Name": "happy-pleased",
+              "Log Loss": 0.5330639925288679
+            },
+            {
+              "Brier Score": 0.2013502976287861,
+              "ECE": 0.10568972293897963,
+              "Label Index": 2,
+              "Label Name": "relaxing-calm",
+              "Log Loss": 0.5830898824745193
+            },
+            {
+              "Brier Score": 0.06559674189802887,
+              "ECE": 0.07770049537291068,
+              "Label Index": 3,
+              "Label Name": "quiet-still",
+              "Log Loss": 0.21791368919648813
+            },
+            {
+              "Brier Score": 0.15536786379083045,
+              "ECE": 0.08599576527378013,
+              "Label Index": 4,
+              "Label Name": "sad-lonely",
+              "Log Loss": 0.47707474167892844
+            },
+            {
+              "Brier Score": 0.16599860373217992,
+              "ECE": 0.12365186651444704,
+              "Label Index": 5,
+              "Label Name": "angry-aggresive",
+              "Log Loss": 0.49659740751068315
+            }
+          ],
+          "Reliability": [
+            {
+              "Absolute Gap": 0.0120050595701147,
+              "Bin": 0,
+              "Count": 163,
+              "Lower Bound": 0.0,
+              "Mean Predicted Probability": 0.0365449368707282,
+              "Observed Positive Rate": 0.024539877300613498,
+              "Upper Bound": 0.1
+            },
+            {
+              "Absolute Gap": 0.06540250073197068,
+              "Bin": 1,
+              "Count": 93,
+              "Lower Bound": 0.1,
+              "Mean Predicted Probability": 0.15142400610831477,
+              "Observed Positive Rate": 0.08602150537634409,
+              "Upper Bound": 0.2
+            },
+            {
+              "Absolute Gap": 0.06690016271252383,
+              "Bin": 2,
+              "Count": 114,
+              "Lower Bound": 0.2,
+              "Mean Predicted Probability": 0.2511106890283133,
+              "Observed Positive Rate": 0.18421052631578946,
+              "Upper Bound": 0.3
+            },
+            {
+              "Absolute Gap": 0.0704614754234042,
+              "Bin": 3,
+              "Count": 98,
+              "Lower Bound": 0.3,
+              "Mean Predicted Probability": 0.34790587151537133,
+              "Observed Positive Rate": 0.41836734693877553,
+              "Upper Bound": 0.4
+            },
+            {
+              "Absolute Gap": 0.03861223366753813,
+              "Bin": 4,
+              "Count": 58,
+              "Lower Bound": 0.4,
+              "Mean Predicted Probability": 0.44414638702211706,
+              "Observed Positive Rate": 0.4827586206896552,
+              "Upper Bound": 0.5
+            },
+            {
+              "Absolute Gap": 0.03417348030001621,
+              "Bin": 5,
+              "Count": 43,
+              "Lower Bound": 0.5,
+              "Mean Predicted Probability": 0.5458013872767604,
+              "Observed Positive Rate": 0.5116279069767442,
+              "Upper Bound": 0.6
+            },
+            {
+              "Absolute Gap": 0.12050406065854169,
+              "Bin": 6,
+              "Count": 55,
+              "Lower Bound": 0.6,
+              "Mean Predicted Probability": 0.6477767879312689,
+              "Observed Positive Rate": 0.5272727272727272,
+              "Upper Bound": 0.7
+            },
+            {
+              "Absolute Gap": 0.15658350087500905,
+              "Bin": 7,
+              "Count": 37,
+              "Lower Bound": 0.7,
+              "Mean Predicted Probability": 0.7511780954696037,
+              "Observed Positive Rate": 0.5945945945945946,
+              "Upper Bound": 0.8
+            },
+            {
+              "Absolute Gap": 0.03398322336601478,
+              "Bin": 8,
+              "Count": 33,
+              "Lower Bound": 0.8,
+              "Mean Predicted Probability": 0.852165041547833,
+              "Observed Positive Rate": 0.8181818181818182,
+              "Upper Bound": 0.9
+            },
+            {
+              "Absolute Gap": 0.03962699174880979,
+              "Bin": 9,
+              "Count": 20,
+              "Lower Bound": 0.9,
+              "Mean Predicted Probability": 0.9396269917488098,
+              "Observed Positive Rate": 0.9,
+              "Upper Bound": 1.0
+            }
+          ],
+          "Sample Label Count": 714
+        },
+        "Costs": {},
+        "Critical Labels": {
+          "Reason": "critical_labels is not configured by the domain",
+          "Records": [],
+          "Status": "N/A"
+        },
+        "Full": {
+          "Hamming Accuracy": 0.7591036414565826,
+          "Hamming Loss": 0.24089635854341737,
+          "Instance Jaccard": 0.47647058823529415,
+          "Instance-F1": 0.5501400560224089,
+          "Macro Precision": 0.5351338880824138,
+          "Macro Recall": 0.5322944699986443,
+          "Macro-F1": 0.5270942400579857,
+          "Micro-F1": 0.5784313725490197,
+          "Subset Accuracy": 0.25210084033613445
+        },
+        "Groups": {},
+        "Metric Contract Version": "3.0-contract",
+        "Model Metadata": {
+          "Calibration Audit": {
+            "calibrated_label_count": 6,
+            "fallback_label_count": 0,
+            "fit_sample_counts": [
+              474
+            ],
+            "labels": [
+              {
+                "class_counts": {
+                  "0": 336,
+                  "1": 138
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 474,
+                "label_index": 0,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 341,
+                  "1": 133
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 474,
+                "label_index": 1,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 262,
+                  "1": 212
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 474,
+                "label_index": 2,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 355,
+                  "1": 119
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 474,
+                "label_index": 3,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 339,
+                  "1": 135
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 474,
+                "label_index": 4,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 323,
+                  "1": 151
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 474,
+                "label_index": 5,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              }
+            ],
+            "outer_test_access": false
+          },
+          "Experiment Manifest": {
+            "base_learner": {
+              "backend": "sklearn.svm.LinearSVC+CalibratedClassifierCV",
+              "binary_parameters": {
+                "C": 1.0,
+                "dual": "auto",
+                "max_iter": 5000,
+                "tol": 0.001
+              },
+              "calibration": {
+                "cv": 3,
+                "method": "sigmoid",
+                "rare_label_strategy": "smoothed_prior",
+                "scope": "nested_in_training_fold"
+              },
+              "name": "svm_calibrated"
+            },
+            "experiment_config_schema": 1,
+            "family": "CC",
+            "model_id": "CC_SVM",
+            "model_parameters": {
+              "base_estimator": "svm_calibrated",
+              "order": null,
+              "random_state": 42
+            },
+            "selective": false
+          }
+        },
+        "Per Label": [
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.5483870967741935,
+            "Full Hamming Accuracy": 0.7647058823529411,
+            "Full Precision": 0.6296296296296297,
+            "Full Recall": 0.4857142857142857,
+            "Label Index": 0,
+            "Label Name": "amazed-suprised",
+            "Negative Support": 84,
+            "Positive Support": 35,
+            "Prevalence": 0.29411764705882354,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.5483870967741935,
+            "Selective Precision": 0.6296296296296297,
+            "Selective Recall": 0.4857142857142857
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.7142857142857143,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 1,
+            "Label Name": "happy-pleased",
+            "Negative Support": 86,
+            "Positive Support": 33,
+            "Prevalence": 0.2773109243697479,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.5918367346938775,
+            "Full Hamming Accuracy": 0.6638655462184874,
+            "Full Precision": 0.6304347826086957,
+            "Full Recall": 0.5576923076923077,
+            "Label Index": 2,
+            "Label Name": "relaxing-calm",
+            "Negative Support": 67,
+            "Positive Support": 52,
+            "Prevalence": 0.4369747899159664,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.5918367346938775,
+            "Selective Precision": 0.6304347826086957,
+            "Selective Recall": 0.5576923076923077
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.7931034482758621,
+            "Full Hamming Accuracy": 0.8991596638655462,
+            "Full Precision": 0.7931034482758621,
+            "Full Recall": 0.7931034482758621,
+            "Label Index": 3,
+            "Label Name": "quiet-still",
+            "Negative Support": 90,
+            "Positive Support": 29,
+            "Prevalence": 0.24369747899159663,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.7931034482758621,
+            "Selective Precision": 0.7931034482758621,
+            "Selective Recall": 0.7931034482758621
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.5483870967741935,
+            "Full Hamming Accuracy": 0.7647058823529411,
+            "Full Precision": 0.5862068965517241,
+            "Full Recall": 0.5151515151515151,
+            "Label Index": 4,
+            "Label Name": "sad-lonely",
+            "Negative Support": 86,
+            "Positive Support": 33,
+            "Prevalence": 0.2773109243697479,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.5483870967741935,
+            "Selective Precision": 0.5862068965517241,
+            "Selective Recall": 0.5151515151515151
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.6808510638297872,
+            "Full Hamming Accuracy": 0.7478991596638656,
+            "Full Precision": 0.5714285714285714,
+            "Full Recall": 0.8421052631578947,
+            "Label Index": 5,
+            "Label Name": "angry-aggresive",
+            "Negative Support": 81,
+            "Positive Support": 38,
+            "Prevalence": 0.31932773109243695,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.6808510638297872,
+            "Selective Precision": 0.5714285714285714,
+            "Selective Recall": 0.8421052631578947
+          }
+        ],
+        "Schema Version": 3
+      }
+    },
+    "3": {
+      "metadata": {
+        "Test Size": 123,
+        "Train And Evaluate Seconds": 0.06642293930053711,
+        "Train Size": 470
+      },
+      "metrics": {
+        "Calibration": {
+          "Bin Count": 10,
+          "Metrics": {
+            "Brier Score": 0.1542099358577248,
+            "ECE": 0.06230104432235,
+            "Log Loss": 0.4763884381902939
+          },
+          "Per Label": [
+            {
+              "Brier Score": 0.13456779302981847,
+              "ECE": 0.0801007816628591,
+              "Label Index": 0,
+              "Label Name": "amazed-suprised",
+              "Log Loss": 0.4249053326818293
+            },
+            {
+              "Brier Score": 0.20104746064936566,
+              "ECE": 0.06057760997758648,
+              "Label Index": 1,
+              "Label Name": "happy-pleased",
+              "Log Loss": 0.59204508558117
+            },
+            {
+              "Brier Score": 0.1480922872525094,
+              "ECE": 0.11218134061683241,
+              "Label Index": 2,
+              "Label Name": "relaxing-calm",
+              "Log Loss": 0.45354021755060014
+            },
+            {
+              "Brier Score": 0.09413385166433452,
+              "ECE": 0.06334776838758949,
+              "Label Index": 3,
+              "Label Name": "quiet-still",
+              "Log Loss": 0.30076556428379886
+            },
+            {
+              "Brier Score": 0.14808270104336432,
+              "ECE": 0.13999778921980927,
+              "Label Index": 4,
+              "Label Name": "sad-lonely",
+              "Log Loss": 0.47453849437318346
+            },
+            {
+              "Brier Score": 0.19933552150695633,
+              "ECE": 0.17582341666180523,
+              "Label Index": 5,
+              "Label Name": "angry-aggresive",
+              "Log Loss": 0.6125359346711821
+            }
+          ],
+          "Reliability": [
+            {
+              "Absolute Gap": 0.026665776855962053,
+              "Bin": 0,
+              "Count": 181,
+              "Lower Bound": 0.0,
+              "Mean Predicted Probability": 0.03410770380702137,
+              "Observed Positive Rate": 0.06077348066298342,
+              "Upper Bound": 0.1
+            },
+            {
+              "Absolute Gap": 0.056949740633941606,
+              "Bin": 1,
+              "Count": 104,
+              "Lower Bound": 0.1,
+              "Mean Predicted Probability": 0.15310358678778777,
+              "Observed Positive Rate": 0.09615384615384616,
+              "Upper Bound": 0.2
+            },
+            {
+              "Absolute Gap": 0.06740399646871495,
+              "Bin": 2,
+              "Count": 106,
+              "Lower Bound": 0.2,
+              "Mean Predicted Probability": 0.24664927948758286,
+              "Observed Positive Rate": 0.1792452830188679,
+              "Upper Bound": 0.3
+            },
+            {
+              "Absolute Gap": 0.03964653066018731,
+              "Bin": 3,
+              "Count": 82,
+              "Lower Bound": 0.3,
+              "Mean Predicted Probability": 0.3445245794406751,
+              "Observed Positive Rate": 0.3048780487804878,
+              "Upper Bound": 0.4
+            },
+            {
+              "Absolute Gap": 0.06614515781402586,
+              "Bin": 4,
+              "Count": 55,
+              "Lower Bound": 0.4,
+              "Mean Predicted Probability": 0.4479633396322077,
+              "Observed Positive Rate": 0.38181818181818183,
+              "Upper Bound": 0.5
+            },
+            {
+              "Absolute Gap": 0.1198797601720561,
+              "Bin": 5,
+              "Count": 46,
+              "Lower Bound": 0.5,
+              "Mean Predicted Probability": 0.5546623688677083,
+              "Observed Positive Rate": 0.43478260869565216,
+              "Upper Bound": 0.6
+            },
+            {
+              "Absolute Gap": 0.0076031228329273,
+              "Bin": 6,
+              "Count": 47,
+              "Lower Bound": 0.6,
+              "Mean Predicted Probability": 0.6459009951733529,
+              "Observed Positive Rate": 0.6382978723404256,
+              "Upper Bound": 0.7
+            },
+            {
+              "Absolute Gap": 0.11967349197806376,
+              "Bin": 7,
+              "Count": 41,
+              "Lower Bound": 0.7,
+              "Mean Predicted Probability": 0.7538198334414784,
+              "Observed Positive Rate": 0.6341463414634146,
+              "Upper Bound": 0.8
+            },
+            {
+              "Absolute Gap": 0.22079532593488693,
+              "Bin": 8,
+              "Count": 40,
+              "Lower Bound": 0.8,
+              "Mean Predicted Probability": 0.8457953259348869,
+              "Observed Positive Rate": 0.625,
+              "Upper Bound": 0.9
+            },
+            {
+              "Absolute Gap": 0.04402298066351151,
+              "Bin": 9,
+              "Count": 36,
+              "Lower Bound": 0.9,
+              "Mean Predicted Probability": 0.9329118695524004,
+              "Observed Positive Rate": 0.8888888888888888,
+              "Upper Bound": 1.0
+            }
+          ],
+          "Sample Label Count": 738
+        },
+        "Costs": {},
+        "Critical Labels": {
+          "Reason": "critical_labels is not configured by the domain",
+          "Records": [],
+          "Status": "N/A"
+        },
+        "Full": {
+          "Hamming Accuracy": 0.7791327913279132,
+          "Hamming Loss": 0.22086720867208673,
+          "Instance Jaccard": 0.497289972899729,
+          "Instance-F1": 0.5772357723577236,
+          "Macro Precision": 0.5762716977629259,
+          "Macro Recall": 0.5907925964089613,
+          "Macro-F1": 0.5698511055867169,
+          "Micro-F1": 0.62004662004662,
+          "Subset Accuracy": 0.25203252032520324
+        },
+        "Groups": {},
+        "Metric Contract Version": "3.0-contract",
+        "Model Metadata": {
+          "Calibration Audit": {
+            "calibrated_label_count": 6,
+            "fallback_label_count": 0,
+            "fit_sample_counts": [
+              470
+            ],
+            "labels": [
+              {
+                "class_counts": {
+                  "0": 331,
+                  "1": 139
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 470,
+                "label_index": 0,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 337,
+                  "1": 133
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 470,
+                "label_index": 1,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 259,
+                  "1": 211
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 470,
+                "label_index": 2,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 351,
+                  "1": 119
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 470,
+                "label_index": 3,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 335,
+                  "1": 135
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 470,
+                "label_index": 4,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 318,
+                  "1": 152
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 470,
+                "label_index": 5,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              }
+            ],
+            "outer_test_access": false
+          },
+          "Experiment Manifest": {
+            "base_learner": {
+              "backend": "sklearn.svm.LinearSVC+CalibratedClassifierCV",
+              "binary_parameters": {
+                "C": 1.0,
+                "dual": "auto",
+                "max_iter": 5000,
+                "tol": 0.001
+              },
+              "calibration": {
+                "cv": 3,
+                "method": "sigmoid",
+                "rare_label_strategy": "smoothed_prior",
+                "scope": "nested_in_training_fold"
+              },
+              "name": "svm_calibrated"
+            },
+            "experiment_config_schema": 1,
+            "family": "CC",
+            "model_id": "CC_SVM",
+            "model_parameters": {
+              "base_estimator": "svm_calibrated",
+              "order": null,
+              "random_state": 42
+            },
+            "selective": false
+          }
+        },
+        "Per Label": [
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.6129032258064516,
+            "Full Hamming Accuracy": 0.8048780487804879,
+            "Full Precision": 0.6785714285714286,
+            "Full Recall": 0.5588235294117647,
+            "Label Index": 0,
+            "Label Name": "amazed-suprised",
+            "Negative Support": 89,
+            "Positive Support": 34,
+            "Prevalence": 0.2764227642276423,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.6129032258064516,
+            "Selective Precision": 0.6785714285714286,
+            "Selective Recall": 0.5588235294117647
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.05128205128205128,
+            "Full Hamming Accuracy": 0.6991869918699187,
+            "Full Precision": 0.16666666666666666,
+            "Full Recall": 0.030303030303030304,
+            "Label Index": 1,
+            "Label Name": "happy-pleased",
+            "Negative Support": 90,
+            "Positive Support": 33,
+            "Prevalence": 0.2682926829268293,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.05128205128205128,
+            "Selective Precision": 0.16666666666666666,
+            "Selective Recall": 0.030303030303030304
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.7663551401869159,
+            "Full Hamming Accuracy": 0.7967479674796748,
+            "Full Precision": 0.7592592592592593,
+            "Full Recall": 0.7735849056603774,
+            "Label Index": 2,
+            "Label Name": "relaxing-calm",
+            "Negative Support": 70,
+            "Positive Support": 53,
+            "Prevalence": 0.43089430894308944,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.7663551401869159,
+            "Selective Precision": 0.7592592592592593,
+            "Selective Recall": 0.7735849056603774
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.7457627118644068,
+            "Full Hamming Accuracy": 0.8780487804878049,
+            "Full Precision": 0.7333333333333333,
+            "Full Recall": 0.7586206896551724,
+            "Label Index": 3,
+            "Label Name": "quiet-still",
+            "Negative Support": 94,
+            "Positive Support": 29,
+            "Prevalence": 0.23577235772357724,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.7457627118644068,
+            "Selective Precision": 0.7333333333333333,
+            "Selective Recall": 0.7586206896551724
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.6470588235294118,
+            "Full Hamming Accuracy": 0.8048780487804879,
+            "Full Precision": 0.6285714285714286,
+            "Full Recall": 0.6666666666666666,
+            "Label Index": 4,
+            "Label Name": "sad-lonely",
+            "Negative Support": 90,
+            "Positive Support": 33,
+            "Prevalence": 0.2682926829268293,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.6470588235294118,
+            "Selective Precision": 0.6285714285714286,
+            "Selective Recall": 0.6666666666666666
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.5957446808510638,
+            "Full Hamming Accuracy": 0.6910569105691057,
+            "Full Precision": 0.49122807017543857,
+            "Full Recall": 0.7567567567567568,
+            "Label Index": 5,
+            "Label Name": "angry-aggresive",
+            "Negative Support": 86,
+            "Positive Support": 37,
+            "Prevalence": 0.3008130081300813,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.5957446808510638,
+            "Selective Precision": 0.49122807017543857,
+            "Selective Recall": 0.7567567567567568
+          }
+        ],
+        "Schema Version": 3
+      }
+    },
+    "4": {
+      "metadata": {
+        "Test Size": 120,
+        "Train And Evaluate Seconds": 0.06835246086120605,
+        "Train Size": 473
+      },
+      "metrics": {
+        "Calibration": {
+          "Bin Count": 10,
+          "Metrics": {
+            "Brier Score": 0.15447035706392256,
+            "ECE": 0.05163673001783277,
+            "Log Loss": 0.46874284909355246
+          },
+          "Per Label": [
+            {
+              "Brier Score": 0.1479953078758861,
+              "ECE": 0.11521812301749984,
+              "Label Index": 0,
+              "Label Name": "amazed-suprised",
+              "Log Loss": 0.46064519023279105
+            },
+            {
+              "Brier Score": 0.18584487864670357,
+              "ECE": 0.0405245503100256,
+              "Label Index": 1,
+              "Label Name": "happy-pleased",
+              "Log Loss": 0.5514803707160567
+            },
+            {
+              "Brier Score": 0.17471048527668526,
+              "ECE": 0.10311654064183434,
+              "Label Index": 2,
+              "Label Name": "relaxing-calm",
+              "Log Loss": 0.5213995368740745
+            },
+            {
+              "Brier Score": 0.08838062713332152,
+              "ECE": 0.055206913098078306,
+              "Label Index": 3,
+              "Label Name": "quiet-still",
+              "Log Loss": 0.2884997568987424
+            },
+            {
+              "Brier Score": 0.17738507280082066,
+              "ECE": 0.10561834470136092,
+              "Label Index": 4,
+              "Label Name": "sad-lonely",
+              "Log Loss": 0.5255129538570793
+            },
+            {
+              "Brier Score": 0.15250577065011814,
+              "ECE": 0.11263300295892502,
+              "Label Index": 5,
+              "Label Name": "angry-aggresive",
+              "Log Loss": 0.46491928598257054
+            }
+          ],
+          "Reliability": [
+            {
+              "Absolute Gap": 0.014315208798708536,
+              "Bin": 0,
+              "Count": 157,
+              "Lower Bound": 0.0,
+              "Mean Predicted Probability": 0.033423489053485606,
+              "Observed Positive Rate": 0.01910828025477707,
+              "Upper Bound": 0.1
+            },
+            {
+              "Absolute Gap": 0.04031627900102765,
+              "Bin": 1,
+              "Count": 103,
+              "Lower Bound": 0.1,
+              "Mean Predicted Probability": 0.147112395505882,
+              "Observed Positive Rate": 0.10679611650485436,
+              "Upper Bound": 0.2
+            },
+            {
+              "Absolute Gap": 0.052977386169728996,
+              "Bin": 2,
+              "Count": 113,
+              "Lower Bound": 0.2,
+              "Mean Predicted Probability": 0.24766765165645466,
+              "Observed Positive Rate": 0.19469026548672566,
+              "Upper Bound": 0.3
+            },
+            {
+              "Absolute Gap": 0.003112421479336047,
+              "Bin": 3,
+              "Count": 86,
+              "Lower Bound": 0.3,
+              "Mean Predicted Probability": 0.34572478782298954,
+              "Observed Positive Rate": 0.3488372093023256,
+              "Upper Bound": 0.4
+            },
+            {
+              "Absolute Gap": 0.03575229548638864,
+              "Bin": 4,
+              "Count": 62,
+              "Lower Bound": 0.4,
+              "Mean Predicted Probability": 0.4551071341960661,
+              "Observed Positive Rate": 0.41935483870967744,
+              "Upper Bound": 0.5
+            },
+            {
+              "Absolute Gap": 0.05891970104100752,
+              "Bin": 5,
+              "Count": 49,
+              "Lower Bound": 0.5,
+              "Mean Predicted Probability": 0.5533251969181762,
+              "Observed Positive Rate": 0.6122448979591837,
+              "Upper Bound": 0.6
+            },
+            {
+              "Absolute Gap": 0.012288987636566162,
+              "Bin": 6,
+              "Count": 44,
+              "Lower Bound": 0.6,
+              "Mean Predicted Probability": 0.6468019214543429,
+              "Observed Positive Rate": 0.6590909090909091,
+              "Upper Bound": 0.7
+            },
+            {
+              "Absolute Gap": 0.25442667092595783,
+              "Bin": 7,
+              "Count": 28,
+              "Lower Bound": 0.7,
+              "Mean Predicted Probability": 0.7544266709259578,
+              "Observed Positive Rate": 0.5,
+              "Upper Bound": 0.8
+            },
+            {
+              "Absolute Gap": 0.21951758168464486,
+              "Bin": 8,
+              "Count": 43,
+              "Lower Bound": 0.8,
+              "Mean Predicted Probability": 0.8474245584288309,
+              "Observed Positive Rate": 0.627906976744186,
+              "Upper Bound": 0.9
+            },
+            {
+              "Absolute Gap": 0.06618977955409466,
+              "Bin": 9,
+              "Count": 35,
+              "Lower Bound": 0.9,
+              "Mean Predicted Probability": 0.9519040652683803,
+              "Observed Positive Rate": 0.8857142857142857,
+              "Upper Bound": 1.0
+            }
+          ],
+          "Sample Label Count": 720
+        },
+        "Costs": {},
+        "Critical Labels": {
+          "Reason": "critical_labels is not configured by the domain",
+          "Records": [],
+          "Status": "N/A"
+        },
+        "Full": {
+          "Hamming Accuracy": 0.7777777777777778,
+          "Hamming Loss": 0.2222222222222222,
+          "Instance Jaccard": 0.5023611111111111,
+          "Instance-F1": 0.5875,
+          "Macro Precision": 0.6430627548552077,
+          "Macro Recall": 0.5723634077626718,
+          "Macro-F1": 0.5721042935234072,
+          "Micro-F1": 0.6208530805687204,
+          "Subset Accuracy": 0.25
+        },
+        "Groups": {},
+        "Metric Contract Version": "3.0-contract",
+        "Model Metadata": {
+          "Calibration Audit": {
+            "calibrated_label_count": 6,
+            "fallback_label_count": 0,
+            "fit_sample_counts": [
+              473
+            ],
+            "labels": [
+              {
+                "class_counts": {
+                  "0": 335,
+                  "1": 138
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 473,
+                "label_index": 0,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 340,
+                  "1": 133
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 473,
+                "label_index": 1,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 262,
+                  "1": 211
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 473,
+                "label_index": 2,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 355,
+                  "1": 118
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 473,
+                "label_index": 3,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 339,
+                  "1": 134
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 473,
+                "label_index": 4,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 322,
+                  "1": 151
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 473,
+                "label_index": 5,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              }
+            ],
+            "outer_test_access": false
+          },
+          "Experiment Manifest": {
+            "base_learner": {
+              "backend": "sklearn.svm.LinearSVC+CalibratedClassifierCV",
+              "binary_parameters": {
+                "C": 1.0,
+                "dual": "auto",
+                "max_iter": 5000,
+                "tol": 0.001
+              },
+              "calibration": {
+                "cv": 3,
+                "method": "sigmoid",
+                "rare_label_strategy": "smoothed_prior",
+                "scope": "nested_in_training_fold"
+              },
+              "name": "svm_calibrated"
+            },
+            "experiment_config_schema": 1,
+            "family": "CC",
+            "model_id": "CC_SVM",
+            "model_parameters": {
+              "base_estimator": "svm_calibrated",
+              "order": null,
+              "random_state": 42
+            },
+            "selective": false
+          }
+        },
+        "Per Label": [
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.47058823529411764,
+            "Full Hamming Accuracy": 0.775,
+            "Full Precision": 0.75,
+            "Full Recall": 0.34285714285714286,
+            "Label Index": 0,
+            "Label Name": "amazed-suprised",
+            "Negative Support": 85,
+            "Positive Support": 35,
+            "Prevalence": 0.2916666666666667,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.47058823529411764,
+            "Selective Precision": 0.75,
+            "Selective Recall": 0.34285714285714286
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.1951219512195122,
+            "Full Hamming Accuracy": 0.725,
+            "Full Precision": 0.5,
+            "Full Recall": 0.12121212121212122,
+            "Label Index": 1,
+            "Label Name": "happy-pleased",
+            "Negative Support": 87,
+            "Positive Support": 33,
+            "Prevalence": 0.275,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.1951219512195122,
+            "Selective Precision": 0.5,
+            "Selective Recall": 0.12121212121212122
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.7358490566037735,
+            "Full Hamming Accuracy": 0.7666666666666667,
+            "Full Precision": 0.7358490566037735,
+            "Full Recall": 0.7358490566037735,
+            "Label Index": 2,
+            "Label Name": "relaxing-calm",
+            "Negative Support": 67,
+            "Positive Support": 53,
+            "Prevalence": 0.44166666666666665,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.7358490566037735,
+            "Selective Precision": 0.7358490566037735,
+            "Selective Recall": 0.7358490566037735
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.7692307692307693,
+            "Full Hamming Accuracy": 0.875,
+            "Full Precision": 0.7142857142857143,
+            "Full Recall": 0.8333333333333334,
+            "Label Index": 3,
+            "Label Name": "quiet-still",
+            "Negative Support": 90,
+            "Positive Support": 30,
+            "Prevalence": 0.25,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.7692307692307693,
+            "Selective Precision": 0.7142857142857143,
+            "Selective Recall": 0.8333333333333334
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.5507246376811594,
+            "Full Hamming Accuracy": 0.7416666666666667,
+            "Full Precision": 0.5428571428571428,
+            "Full Recall": 0.5588235294117647,
+            "Label Index": 4,
+            "Label Name": "sad-lonely",
+            "Negative Support": 86,
+            "Positive Support": 34,
+            "Prevalence": 0.2833333333333333,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.5507246376811594,
+            "Selective Precision": 0.5428571428571428,
+            "Selective Recall": 0.5588235294117647
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.7111111111111111,
+            "Full Hamming Accuracy": 0.7833333333333333,
+            "Full Precision": 0.6153846153846154,
+            "Full Recall": 0.8421052631578947,
+            "Label Index": 5,
+            "Label Name": "angry-aggresive",
+            "Negative Support": 82,
+            "Positive Support": 38,
+            "Prevalence": 0.31666666666666665,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.7111111111111111,
+            "Selective Precision": 0.6153846153846154,
+            "Selective Recall": 0.8421052631578947
+          }
+        ],
+        "Schema Version": 3
+      }
+    },
+    "5": {
+      "metadata": {
+        "Test Size": 109,
+        "Train And Evaluate Seconds": 0.06889057159423828,
+        "Train Size": 484
+      },
+      "metrics": {
+        "Calibration": {
+          "Bin Count": 10,
+          "Metrics": {
+            "Brier Score": 0.1558698921015807,
+            "ECE": 0.04580387929186269,
+            "Log Loss": 0.46901246971165605
+          },
+          "Per Label": [
+            {
+              "Brier Score": 0.16635883166937485,
+              "ECE": 0.08829597551204744,
+              "Label Index": 0,
+              "Label Name": "amazed-suprised",
+              "Log Loss": 0.5051329923981921
+            },
+            {
+              "Brier Score": 0.19512331678603925,
+              "ECE": 0.073644435938892,
+              "Label Index": 1,
+              "Label Name": "happy-pleased",
+              "Log Loss": 0.571788134346618
+            },
+            {
+              "Brier Score": 0.15824313367638204,
+              "ECE": 0.12983093982767482,
+              "Label Index": 2,
+              "Label Name": "relaxing-calm",
+              "Log Loss": 0.48042384442064906
+            },
+            {
+              "Brier Score": 0.09394600654776547,
+              "ECE": 0.06718320601262057,
+              "Label Index": 3,
+              "Label Name": "quiet-still",
+              "Log Loss": 0.28126039695064653
+            },
+            {
+              "Brier Score": 0.15252605511967812,
+              "ECE": 0.09457908987725547,
+              "Label Index": 4,
+              "Label Name": "sad-lonely",
+              "Log Loss": 0.47076033734907335
+            },
+            {
+              "Brier Score": 0.16902200881024457,
+              "ECE": 0.13159810469142447,
+              "Label Index": 5,
+              "Label Name": "angry-aggresive",
+              "Log Loss": 0.5047091128047568
+            }
+          ],
+          "Reliability": [
+            {
+              "Absolute Gap": 0.011117411691467776,
+              "Bin": 0,
+              "Count": 144,
+              "Lower Bound": 0.0,
+              "Mean Predicted Probability": 0.03195074502480111,
+              "Observed Positive Rate": 0.020833333333333332,
+              "Upper Bound": 0.1
+            },
+            {
+              "Absolute Gap": 0.011719591487413167,
+              "Bin": 1,
+              "Count": 87,
+              "Lower Bound": 0.1,
+              "Mean Predicted Probability": 0.14965062597017179,
+              "Observed Positive Rate": 0.13793103448275862,
+              "Upper Bound": 0.2
+            },
+            {
+              "Absolute Gap": 0.04471509238438948,
+              "Bin": 2,
+              "Count": 112,
+              "Lower Bound": 0.2,
+              "Mean Predicted Probability": 0.2500722352415323,
+              "Observed Positive Rate": 0.20535714285714285,
+              "Upper Bound": 0.3
+            },
+            {
+              "Absolute Gap": 0.05433741172154749,
+              "Bin": 3,
+              "Count": 75,
+              "Lower Bound": 0.3,
+              "Mean Predicted Probability": 0.34566258827845253,
+              "Observed Positive Rate": 0.4,
+              "Upper Bound": 0.4
+            },
+            {
+              "Absolute Gap": 0.09672015561507297,
+              "Bin": 4,
+              "Count": 52,
+              "Lower Bound": 0.4,
+              "Mean Predicted Probability": 0.44174138284646547,
+              "Observed Positive Rate": 0.5384615384615384,
+              "Upper Bound": 0.5
+            },
+            {
+              "Absolute Gap": 0.060030678908030155,
+              "Bin": 5,
+              "Count": 51,
+              "Lower Bound": 0.5,
+              "Mean Predicted Probability": 0.5478124583468718,
+              "Observed Positive Rate": 0.6078431372549019,
+              "Upper Bound": 0.6
+            },
+            {
+              "Absolute Gap": 0.01944032973713339,
+              "Bin": 6,
+              "Count": 36,
+              "Lower Bound": 0.6,
+              "Mean Predicted Probability": 0.6472263369295332,
+              "Observed Positive Rate": 0.6666666666666666,
+              "Upper Bound": 0.7
+            },
+            {
+              "Absolute Gap": 0.030909138066428032,
+              "Bin": 7,
+              "Count": 35,
+              "Lower Bound": 0.7,
+              "Mean Predicted Probability": 0.7451948523521423,
+              "Observed Positive Rate": 0.7142857142857143,
+              "Upper Bound": 0.8
+            },
+            {
+              "Absolute Gap": 0.15953298807144167,
+              "Bin": 8,
+              "Count": 30,
+              "Lower Bound": 0.8,
+              "Mean Predicted Probability": 0.8595329880714416,
+              "Observed Positive Rate": 0.7,
+              "Upper Bound": 0.9
+            },
+            {
+              "Absolute Gap": 0.11228609457612038,
+              "Bin": 9,
+              "Count": 32,
+              "Lower Bound": 0.9,
+              "Mean Predicted Probability": 0.9560360945761204,
+              "Observed Positive Rate": 0.84375,
+              "Upper Bound": 1.0
+            }
+          ],
+          "Sample Label Count": 654
+        },
+        "Costs": {},
+        "Critical Labels": {
+          "Reason": "critical_labels is not configured by the domain",
+          "Records": [],
+          "Status": "N/A"
+        },
+        "Full": {
+          "Hamming Accuracy": 0.7675840978593272,
+          "Hamming Loss": 0.2324159021406728,
+          "Instance Jaccard": 0.49954128440366974,
+          "Instance-F1": 0.5859327217125382,
+          "Macro Precision": 0.6590533794162826,
+          "Macro Recall": 0.5547531889286665,
+          "Macro-F1": 0.5637931304885476,
+          "Micro-F1": 0.6274509803921569,
+          "Subset Accuracy": 0.25688073394495414
+        },
+        "Groups": {},
+        "Metric Contract Version": "3.0-contract",
+        "Model Metadata": {
+          "Calibration Audit": {
+            "calibrated_label_count": 6,
+            "fallback_label_count": 0,
+            "fit_sample_counts": [
+              484
+            ],
+            "labels": [
+              {
+                "class_counts": {
+                  "0": 346,
+                  "1": 138
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 484,
+                "label_index": 0,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 352,
+                  "1": 132
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 484,
+                "label_index": 1,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 273,
+                  "1": 211
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 484,
+                "label_index": 2,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 366,
+                  "1": 118
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 484,
+                "label_index": 3,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 350,
+                  "1": 134
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 484,
+                "label_index": 4,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 333,
+                  "1": 151
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 484,
+                "label_index": 5,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              }
+            ],
+            "outer_test_access": false
+          },
+          "Experiment Manifest": {
+            "base_learner": {
+              "backend": "sklearn.svm.LinearSVC+CalibratedClassifierCV",
+              "binary_parameters": {
+                "C": 1.0,
+                "dual": "auto",
+                "max_iter": 5000,
+                "tol": 0.001
+              },
+              "calibration": {
+                "cv": 3,
+                "method": "sigmoid",
+                "rare_label_strategy": "smoothed_prior",
+                "scope": "nested_in_training_fold"
+              },
+              "name": "svm_calibrated"
+            },
+            "experiment_config_schema": 1,
+            "family": "CC",
+            "model_id": "CC_SVM",
+            "model_parameters": {
+              "base_estimator": "svm_calibrated",
+              "order": null,
+              "random_state": 42
+            },
+            "selective": false
+          }
+        },
+        "Per Label": [
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.4727272727272727,
+            "Full Hamming Accuracy": 0.7339449541284404,
+            "Full Precision": 0.65,
+            "Full Recall": 0.37142857142857144,
+            "Label Index": 0,
+            "Label Name": "amazed-suprised",
+            "Negative Support": 74,
+            "Positive Support": 35,
+            "Prevalence": 0.3211009174311927,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.4727272727272727,
+            "Selective Precision": 0.65,
+            "Selective Recall": 0.37142857142857144
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.05555555555555555,
+            "Full Hamming Accuracy": 0.6880733944954128,
+            "Full Precision": 0.5,
+            "Full Recall": 0.029411764705882353,
+            "Label Index": 1,
+            "Label Name": "happy-pleased",
+            "Negative Support": 75,
+            "Positive Support": 34,
+            "Prevalence": 0.3119266055045872,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.05555555555555555,
+            "Selective Precision": 0.5,
+            "Selective Recall": 0.029411764705882353
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.7920792079207921,
+            "Full Hamming Accuracy": 0.8073394495412844,
+            "Full Precision": 0.8333333333333334,
+            "Full Recall": 0.7547169811320755,
+            "Label Index": 2,
+            "Label Name": "relaxing-calm",
+            "Negative Support": 56,
+            "Positive Support": 53,
+            "Prevalence": 0.48623853211009177,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.7920792079207921,
+            "Selective Precision": 0.8333333333333334,
+            "Selective Recall": 0.7547169811320755
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.7213114754098361,
+            "Full Hamming Accuracy": 0.8440366972477065,
+            "Full Precision": 0.7096774193548387,
+            "Full Recall": 0.7333333333333333,
+            "Label Index": 3,
+            "Label Name": "quiet-still",
+            "Negative Support": 79,
+            "Positive Support": 30,
+            "Prevalence": 0.27522935779816515,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.7213114754098361,
+            "Selective Precision": 0.7096774193548387,
+            "Selective Recall": 0.7333333333333333
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.6666666666666666,
+            "Full Hamming Accuracy": 0.7889908256880734,
+            "Full Precision": 0.6571428571428571,
+            "Full Recall": 0.6764705882352942,
+            "Label Index": 4,
+            "Label Name": "sad-lonely",
+            "Negative Support": 75,
+            "Positive Support": 34,
+            "Prevalence": 0.3119266055045872,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.6666666666666666,
+            "Selective Precision": 0.6571428571428571,
+            "Selective Recall": 0.6764705882352942
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.6744186046511628,
+            "Full Hamming Accuracy": 0.7431192660550459,
+            "Full Precision": 0.6041666666666666,
+            "Full Recall": 0.7631578947368421,
+            "Label Index": 5,
+            "Label Name": "angry-aggresive",
+            "Negative Support": 71,
+            "Positive Support": 38,
+            "Prevalence": 0.3486238532110092,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.6744186046511628,
+            "Selective Precision": 0.6041666666666666,
+            "Selective Recall": 0.7631578947368421
+          }
+        ],
+        "Schema Version": 3
+      }
+    }
+  },
+  "metric_contract_version": "3.0-contract",
+  "model": "CC_SVM",
+  "schema_version": 3,
+  "status": "complete",
+  "updated_at": "2026-09-02T11:51:28.932878+00:00"
+}
