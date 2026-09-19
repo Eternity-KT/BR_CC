@@ -6,8 +6,13 @@ import numpy as np
 def generate_markdown():
     # 1. Load Data
     df_v2 = pd.read_csv("results_pa/tables/summary_results_pa.csv")
-    df_v3_full = pd.read_csv("results_pa_v3_full/tables/2a300c396384c5e9/selective_metrics.csv")
-    df_v3_mf1 = pd.read_csv("results_pa_v3_macro_f1/tables/160a86fd323b9451/selective_metrics.csv")
+    df_v3_full_base = pd.read_csv("results_pa_v3_full/tables/2a300c396384c5e9/selective_metrics.csv")
+    df_v3_full_mlp = pd.read_csv("results_pa_v3_full/tables/ba54aced018ecb98/selective_metrics.csv")
+    df_v3_full = pd.concat([
+        df_v3_full_base[~df_v3_full_base["Model"].isin(["MLC_PA_MLP", "GSI_MLC_PA_MLP"])],
+        df_v3_full_mlp
+    ], ignore_index=True)
+    df_v3_mf1 = pd.read_csv("results_pa_v3_macro_f1/tables/0cecd94e04babce7/selective_metrics.csv")
 
     out = []
     w = out.append
