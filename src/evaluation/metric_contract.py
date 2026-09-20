@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 TARGET_RESULT_SCHEMA_VERSION = 3
 METRIC_CONTRACT_VERSION = "3.0-contract"
+BSS_SPCC_METRIC_PROFILE_VERSION = "bss_ug_spcc_pa_v1"
 DEFAULT_ABSTAIN_VALUE = -1
 ZERO_DIVISION_VALUE = 0
 EMPTY_INSTANCE_SCORE = 1.0
@@ -26,6 +27,27 @@ COMPLETE_METRIC_NAMES = (
     "Instance Jaccard",
     "Macro Precision",
     "Macro Recall",
+)
+
+# Narrow reporting profile used by BSS-UG-SPCC-PA.  It intentionally does
+# not mutate the schema-v3 contract above, so existing caches remain valid.
+BSS_SPCC_FULL_METRIC_NAMES = (
+    "Hamming Accuracy",
+    "Subset Accuracy",
+    "Macro-F1",
+    "Micro-F1",
+    "Instance-F1",
+)
+
+BSS_SPCC_SELECTIVE_METRIC_NAMES = (
+    "Coverage",
+    "AABS",
+    "ABS",
+    "Generalized Loss",
+    "Selective Macro-F1",
+    "Selective Micro-F1",
+    "Selective Instance-F1",
+    "Selective Hamming Accuracy",
 )
 
 SELECTIVE_METRIC_NAMES = (

@@ -2,6 +2,7 @@
 
 import argparse
 import csv
+import hashlib
 import json
 import math
 import sys
@@ -13,7 +14,16 @@ if str(WORKSPACE_ROOT) not in sys.path:
     sys.path.insert(0, str(WORKSPACE_ROOT))
 
 from src.evaluation.cache_v3 import compute_config_hash  # noqa: E402
+from src.evaluation.metric_contract import (  # noqa: E402
+    BSS_SPCC_FULL_METRIC_NAMES,
+    BSS_SPCC_METRIC_PROFILE_VERSION,
+    BSS_SPCC_SELECTIVE_METRIC_NAMES,
+)
 from src.models.registry import MATCHED_MODEL_IDS, model_family  # noqa: E402
+from src.visualization.plots import (  # noqa: E402
+    BSS_DATASET_FIGURES,
+    BSS_REJECTION_FIGURES,
+)
 
 
 TABLE_FILES = {
@@ -90,6 +100,165 @@ def _find_manifest(output_root, config_hash=None):
         + ", ".join(path.parent.name for path in candidates),
     )
     return candidates[0]
+
+
+def _find_bss_manifest(output_root, config_hash=None):
+    candidates = sorted(output_root.glob("tables/*/results.json"))
+    _require(candidates, f"No BSS results.json found below {output_root}.")
+    if config_hash is not None:
+        candidates = [path for path in candidates if path.parent.name == str(config_hash)]
+        _require(candidates, f"Config hash {config_hash} was not found.")
+    _require(
+        len(candidates) == 1,
+        "Multiple BSS manifests found; pass --config-hash explicitly: "
+        + ", ".join(path.parent.name for path in candidates),
+    )
+    return candidates[0]
+
+
+def audit_bss_results(
+    output_dir,
+    *,
+    config_hash=None,
+    expected_datasets=None,
+    expected_models=None,
+    expected_folds=None,
+    expected_costs=None,
+):
+    """Audit the narrow BSS profile, checkpoints, tables and 15 figures."""
+
+    output_root = Path(output_dir).resolve()
+    manifest_path = _find_bss_manifest(output_root, config_hash)
+    document = _load_strict_json(manifest_path)
+    settings = document.get("Settings", {})
+    run_hash = document.get("Config Hash")
+    _require(document.get("Schema Version") == 3, "Manifest schema is not v3.")
+    _require(
+        document.get("Metric Profile") == BSS_SPCC_METRIC_PROFILE_VERSION,
+        "Unexpected BSS metric profile.",
+    )
+    _require(document.get("Status") == "complete", "Run manifest is not complete.")
+    _require(compute_config_hash(settings) == run_hash, "Run config hash mismatch.")
+    _require(manifest_path.parent.name == run_hash, "Manifest directory/hash mismatch.")
+    datasets = list(expected_datasets or settings.get("datasets", []))
+    models = list(expected_models or settings.get("models", []))
+    folds = int(expected_folds or settings.get("n_splits", 0))
+    costs = [float(value) for value in (
+        expected_costs or settings.get("abstention_costs", [])
+    )]
+    _require(datasets and models and folds > 0 and costs, "Expected dimensions are empty.")
+    _require(set(document.get("Results", {})) == set(datasets), "Dataset matrix mismatch.")
+    for dataset in datasets:
+        _require(set(document["Results"][dataset]) == set(models), f"Model matrix mismatch: {dataset}.")
+        for model in models:
+            summary = document["Results"][dataset][model]
+            _require(summary.get("Status") == "complete", f"Incomplete pair: {dataset}/{model}.")
+            _require(summary.get("Completed Folds") == list(range(1, folds + 1)), "Fold list mismatch.")
+            full = summary.get("Full", {})
+            _require(set(full.get("Mean", {})) == set(BSS_SPCC_FULL_METRIC_NAMES), "Full metric allowlist mismatch.")
+            _require(len(full.get("Raw Folds", [])) == folds, "Full fold count mismatch.")
+            _require(set(summary.get("Costs", {})) == {_cost_key(cost) for cost in costs}, "Cost grid mismatch.")
+            for cost, cost_summary in summary["Costs"].items():
+                selective = cost_summary.get("Selective", {})
+                _require(
+                    set(selective.get("Mean", {})) == set(BSS_SPCC_SELECTIVE_METRIC_NAMES),
+                    f"Selective metric allowlist mismatch at c={cost}.",
+                )
+                rows = selective.get("Raw Folds", [])
+                _require(len(rows) == folds, f"Selective fold count mismatch at c={cost}.")
+                for row in rows:
+                    _require(
+                        math.isclose(
+                            float(row["AABS"]),
+                            1.0 - float(row["Coverage"]),
+                            abs_tol=1e-12,
+                        ),
+                        f"AABS/Coverage identity failed: {dataset}/{model}/c={cost}.",
+                    )
+            _audit_checkpoint(output_root, dataset, model, summary, folds, settings)
+
+    table_dir = output_root / "tables" / run_hash
+    figure_dir = output_root / "figures" / run_hash
+    table_files = {
+        "fold_results_csv": "fold_results.csv",
+        "summary_results_csv": "summary_results.csv",
+        "structure_audit_json": "structure_audit.json",
+        "artifact_manifest_json": "artifact_manifest.json",
+    }
+    comparison_enabled = bool(settings.get("comparison", {}).get("enabled"))
+    if comparison_enabled:
+        table_files["comparison_audit_json"] = "comparison_audit.json"
+    expected_figures = set(BSS_DATASET_FIGURES.values()) | set(BSS_REJECTION_FIGURES.values())
+    for filename in expected_figures:
+        path = figure_dir / filename
+        _require(path.is_file() and path.stat().st_size > 0, f"Missing figure: {path}.")
+    _require(
+        {path.name for path in figure_dir.glob("*.png")} == expected_figures,
+        "Figure set contains missing or unexpected PNG files.",
+    )
+    for filename in table_files.values():
+        path = table_dir / filename
+        _require(path.is_file() and path.stat().st_size > 0, f"Missing table: {path}.")
+    if comparison_enabled:
+        comparison = _load_strict_json(table_dir / "comparison_audit.json")
+        _require(
+            comparison.get("Base Learner") == "logistic",
+            "Comparison audit does not use the Logistic base learner.",
+        )
+        _require(
+            comparison.get("Model Order")
+            == ["BR_Logistic", "CC_Logistic", "MLC_PA_Logistic"],
+            "Comparison model order/identity mismatch.",
+        )
+        for model, missing in comparison.get("Missing", {}).items():
+            _require(not missing, f"Missing comparison datasets for {model}: {missing}.")
+        if settings.get("comparison", {}).get(
+            "require_mlc_pa_selective_instance_f1", False
+        ):
+            missing_instance = comparison.get(
+                "Missing Selective Instance-F1", {}
+            ).get("MLC_PA_Logistic")
+            _require(
+                missing_instance == [],
+                "MLC_PA Selective Instance-F1 is incomplete: "
+                f"{missing_instance}.",
+            )
+    allowed_columns = {
+        "Dataset", "Model", "Scope", "Cost", "Fold",
+        *BSS_SPCC_FULL_METRIC_NAMES,
+        *BSS_SPCC_SELECTIVE_METRIC_NAMES,
+    }
+    header, rows = _read_csv(table_dir / "fold_results.csv")
+    _require(set(header) <= allowed_columns, "fold_results.csv has metrics outside the allowlist.")
+    _require(
+        len(rows) == len(datasets) * len(models) * folds * (1 + len(costs)),
+        "fold_results.csv row count mismatch.",
+    )
+    artifact_manifest = _load_strict_json(table_dir / "artifact_manifest.json")
+    _require(
+        artifact_manifest.get("Completed Datasets") == datasets,
+        "Artifact manifest completed-dataset list mismatch.",
+    )
+    for name, expected_hash in artifact_manifest.get("SHA-256", {}).items():
+        recorded = document.get("Artifacts", {}).get(name)
+        _require(recorded is not None, f"Artifact hash has no recorded path: {name}.")
+        candidate = Path(recorded)
+        if not candidate.is_absolute():
+            candidate = WORKSPACE_ROOT / candidate
+        digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
+        _require(digest == expected_hash, f"Artifact SHA-256 mismatch: {name}.")
+    return {
+        "status": "PASS",
+        "profile": BSS_SPCC_METRIC_PROFILE_VERSION,
+        "config_hash": run_hash,
+        "datasets": len(datasets),
+        "models": len(models),
+        "folds_per_pair": folds,
+        "costs": costs,
+        "table_artifacts": len(table_files),
+        "figure_artifacts": len(expected_figures),
+        "manifest": str(manifest_path),
+    }
 
 
 def _audit_checkpoint(output_root, dataset, model, summary, folds, settings):
@@ -287,13 +456,24 @@ def main():
     parser.add_argument("--folds", type=int, default=None)
     parser.add_argument("--costs", nargs="+", type=float, default=None)
     parser.add_argument(
+        "--profile",
+        choices=["standard", BSS_SPCC_METRIC_PROFILE_VERSION],
+        default="standard",
+        help="Metric/artifact profile to audit.",
+    )
+    parser.add_argument(
         "--expect-primary-models",
         action="store_true",
         help="Require the frozen 12-ID matched model order.",
     )
     args = parser.parse_args()
     expected_models = list(MATCHED_MODEL_IDS) if args.expect_primary_models else args.models
-    summary = audit_results(
+    audit_function = (
+        audit_bss_results
+        if args.profile == BSS_SPCC_METRIC_PROFILE_VERSION
+        else audit_results
+    )
+    summary = audit_function(
         args.output_dir,
         config_hash=args.config_hash,
         expected_datasets=args.datasets,

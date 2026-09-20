@@ -27,10 +27,14 @@ class HammingBOPPolicy(DecisionPolicy):
         self.penalty = validate_penalty(penalty)
         if abstain_value in (0, 1):
             raise ValueError("abstain_value must be different from 0 and 1.")
-        if linear_boundary not in ("minimum_loss", "symmetric_thresholds"):
+        if linear_boundary not in (
+            "minimum_loss",
+            "symmetric_thresholds",
+            "strict_symmetric_thresholds",
+        ):
             raise ValueError(
                 "linear_boundary must be 'minimum_loss' or "
-                "'symmetric_thresholds'."
+                "'symmetric_thresholds' or 'strict_symmetric_thresholds'."
             )
         self.abstain_value = int(abstain_value)
         self.linear_boundary = linear_boundary
@@ -43,6 +47,8 @@ class HammingBOPPolicy(DecisionPolicy):
         return resolved_cost, resolved_penalty
 
     def _linear_mask(self, probabilities, cost):
+        if self.linear_boundary == "strict_symmetric_thresholds":
+            return (probabilities < cost) | (probabilities > 1.0 - cost)
         if self.linear_boundary == "symmetric_thresholds":
             if cost >= 0.5:
                 return np.ones(probabilities.shape, dtype=bool)

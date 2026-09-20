@@ -9,6 +9,9 @@ Generates:
 """
 
 import os
+import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -37,6 +40,8 @@ COLORS = {
     "CC_Logistic": "#D97706",  # Amber
     "CC_MLP": "#E11D48",       # Rose / Crimson
     "MLC_PA": "#0891B2",       # Cyan
+    "MLC_PA_Logistic": "#C2410C",  # Burnt orange
+    "BSS_UG_SPCC_PA_Logistic": "#4D7C0F",  # Olive green
     "GSI_MLC_PA": "#16A34A"    # Green
 }
 
@@ -50,6 +55,8 @@ MODEL_LABELS = {
     "CC_Logistic": "CC (Logistic Reg)",
     "CC_MLP": "CC (MLP)",
     "MLC_PA": "MLC-PA",
+    "MLC_PA_Logistic": "MLC-PA (Logistic)",
+    "BSS_UG_SPCC_PA_Logistic": "BSS-UG-SPCC-PA (Logistic)",
     "GSI_MLC_PA": "GSI-MLC-PA"
 }
 
@@ -823,3 +830,451 @@ def generate_pa_plots(
     csv_path = os.path.join(tables_dir, "summary_results_pa.csv")
     export_pa_results_table(all_results, csv_path)
     return generated, csv_path
+
+
+BSS_DATASET_FIGURES = {
+    "Hamming Accuracy": "dataset_hamming_accuracy_comparison.png",
+    "Subset Accuracy": "dataset_subset_accuracy_comparison.png",
+    "Macro-F1": "dataset_macro_f1_comparison.png",
+    "Micro-F1": "dataset_micro_f1_comparison.png",
+    "Instance-F1": "dataset_instance_f1_comparison.png",
+    "Generalized Loss": "dataset_generalized_loss_comparison.png",
+    "Selective Macro-F1": "dataset_selective_macro_f1_comparison.png",
+    "Selective Micro-F1": "dataset_selective_micro_f1_comparison.png",
+    "Selective Instance-F1": "dataset_selective_instance_f1_comparison.png",
+    "Selective Hamming Accuracy": "dataset_selective_hamming_accuracy_comparison.png",
+}
+
+BSS_REJECTION_FIGURES = {
+    "Generalized Loss": "rejection_cost_generalized_loss.png",
+    "Selective Macro-F1": "rejection_cost_selective_macro_f1.png",
+    "Selective Micro-F1": "rejection_cost_selective_micro_f1.png",
+    "Selective Instance-F1": "rejection_cost_selective_instance_f1.png",
+    "Selective Hamming Accuracy": "rejection_cost_selective_hamming_accuracy.png",
+}
+
+
+def _atomic_save_figure(figure, target):
+    path = Path(target)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(
+        prefix=f".{path.stem}_", suffix=".png", dir=path.parent
+    )
+    os.close(descriptor)
+    try:
+        figure.savefig(temporary, dpi=300, facecolor="white", bbox_inches="tight")
+        os.replace(temporary, path)
+    except Exception:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+        raise
+    finally:
+        plt.close(figure)
+    return str(path)
+
+
+def _completed_bss_datasets(run_document):
+    requested_models = list(run_document.get("Settings", {}).get("models", []))
+    completed = []
+    for dataset, models in run_document.get("Results", {}).items():
+        if not requested_models or not all(model in models for model in requested_models):
+            continue
+        valid = True
+        for model in requested_models:
+            summary = models[model]
+            expected = int(summary.get("Expected Fold Count", 0))
+            if (
+                summary.get("Status") != "complete"
+                or expected <= 0
+                or summary.get("Completed Folds") != list(range(1, expected + 1))
+            ):
+                valid = False
+                break
+        if valid:
+            completed.append(dataset)
+    return completed, requested_models
+
+
+def _bss_plot_models(run_document, bss_models):
+    comparison = run_document.get("Comparison", {})
+    ordered = [
+        model
+        for model in comparison.get("Model Order", [])
+        if model in comparison.get("Models", {})
+    ]
+    return ordered + [model for model in bss_models if model not in ordered]
+
+
+def _bss_model_record(run_document, dataset, model):
+    if model in run_document.get("Results", {}).get(dataset, {}):
+        return {
+            "Kind": "selective",
+            "Data": run_document["Results"][dataset][model],
+        }
+    source = run_document.get("Comparison", {}).get("Models", {}).get(model)
+    if source is None or dataset not in source.get("Datasets", {}):
+        return None
+    return {"Kind": source.get("Kind"), "Data": source["Datasets"][dataset]}
+
+
+def _bss_model_kind(run_document, model):
+    if model in run_document.get("Settings", {}).get("models", []):
+        return "selective"
+    return (
+        run_document.get("Comparison", {})
+        .get("Models", {})
+        .get(model, {})
+        .get("Kind")
+    )
+
+
+def _full_counterpart_summary(full, selective_metric):
+    mapping = {
+        "Selective Macro-F1": "Macro-F1",
+        "Selective Micro-F1": "Micro-F1",
+        "Selective Instance-F1": "Instance-F1",
+        "Selective Hamming Accuracy": "Hamming Accuracy",
+    }
+    source_metric = (
+        "Hamming Accuracy"
+        if selective_metric == "Generalized Loss"
+        else mapping.get(selective_metric)
+    )
+    if source_metric is None or source_metric not in full.get("Mean", {}):
+        return None
+    transform = (
+        (lambda value: 1.0 - float(value))
+        if selective_metric == "Generalized Loss"
+        else (lambda value: float(value))
+    )
+    rows = []
+    for source in full.get("Raw Folds", []):
+        if source.get(source_metric) is None:
+            continue
+        rows.append({
+            "Fold": source.get("Fold"),
+            selective_metric: transform(source[source_metric]),
+        })
+    return {
+        "Mean": {selective_metric: transform(full["Mean"][source_metric])},
+        # std(1-X) == std(X), so this complement is exact.
+        "Std": {
+            selective_metric: float(full.get("Std", {}).get(source_metric, 0.0))
+        },
+        "Raw Folds": rows,
+    }
+
+
+def _bss_summary(run_document, dataset, model, metric, report_cost):
+    record = _bss_model_record(run_document, dataset, model)
+    if record is None:
+        return None
+    data = record["Data"]
+    full = data.get("Full", {})
+    if metric in full.get("Mean", {}):
+        return full
+    if record["Kind"] == "complete_only":
+        return _full_counterpart_summary(full, metric)
+    cost_key = f"{float(report_cost):.2f}"
+    selective = data.get("Costs", {}).get(cost_key, {}).get("Selective", {})
+    if metric not in selective.get("Mean", {}):
+        return None
+    return selective
+
+
+def _plot_bss_dataset_metric(
+    run_document, completed, models, metric, report_cost, target
+):
+    x = np.arange(len(completed), dtype=np.float64)
+    width = 0.78 / max(len(models), 1)
+    figure, axis = plt.subplots(figsize=(max(10.5, len(completed) * 1.25), 6.2))
+    values_for_limits = []
+    for model_index, model in enumerate(models):
+        positions, means, stds = [], [], []
+        for dataset_index, dataset in enumerate(completed):
+            summary = _bss_summary(run_document, dataset, model, metric, report_cost)
+            if summary is None or summary.get("Mean", {}).get(metric) is None:
+                continue
+            positions.append(dataset_index)
+            means.append(float(summary["Mean"][metric]))
+            stds.append(float(summary.get("Std", {}).get(metric, 0.0)))
+        offset = (model_index - (len(models) - 1) / 2.0) * width
+        if not means:
+            axis.bar(
+                [],
+                [],
+                color=_get_model_color(model, model_index),
+                edgecolor="#1F2937",
+                linewidth=0.7,
+                label=f"{_get_model_label(model)} (N/A)",
+            )
+            for dataset_index in range(len(completed)):
+                axis.text(
+                    dataset_index + offset,
+                    0.015,
+                    "N/A",
+                    rotation=90,
+                    ha="center",
+                    va="bottom",
+                    fontsize=7,
+                    color="#64748B",
+                )
+            continue
+        values_for_limits.extend(
+            value + max(error, 0.0) for value, error in zip(means, stds)
+        )
+        axis.bar(
+            np.asarray(positions, dtype=np.float64) + offset,
+            means,
+            width * 0.92,
+            yerr=stds,
+            capsize=3,
+            color=_get_model_color(model, model_index),
+            edgecolor="#1F2937",
+            linewidth=0.7,
+            label=_get_model_label(model),
+        )
+        for dataset_index in sorted(set(range(len(completed))) - set(positions)):
+            axis.text(
+                dataset_index + offset,
+                0.015,
+                "N/A",
+                rotation=90,
+                ha="center",
+                va="bottom",
+                fontsize=7,
+                color="#64748B",
+            )
+    lower = metric == "Generalized Loss"
+    scope_note = (
+        "full prediction"
+        if metric in ("Hamming Accuracy", "Subset Accuracy", "Macro-F1", "Micro-F1", "Instance-F1")
+        else f"selective prediction at c={float(report_cost):.2f}"
+    )
+    axis.set_title(
+        f"{metric} across completed datasets\n"
+        f"{scope_note}; mean ± std over outer folds; "
+        f"{'lower' if lower else 'higher'} is better; "
+        f"updated {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
+    )
+    axis.set_ylabel(metric)
+    axis.set_xlabel(f"Completed datasets (n={len(completed)})")
+    axis.set_xticks(x)
+    axis.set_xticklabels([name.upper() for name in completed], rotation=30, ha="right")
+    upper = max(values_for_limits) if values_for_limits else 1.0
+    axis.set_ylim(0.0, max(0.1, upper * 1.18))
+    axis.grid(axis="y", linestyle="--", alpha=0.35)
+    axis.legend(frameon=False)
+    figure.tight_layout()
+    return _atomic_save_figure(figure, target)
+
+
+def _full_counterpart_row(row, selective_metric):
+    if selective_metric == "Generalized Loss":
+        return 1.0 - float(row["Hamming Accuracy"])
+    mapping = {
+        "Selective Macro-F1": "Macro-F1",
+        "Selective Micro-F1": "Micro-F1",
+        "Selective Instance-F1": "Instance-F1",
+        "Selective Hamming Accuracy": "Hamming Accuracy",
+    }
+    return float(row[mapping[selective_metric]])
+
+
+def _plot_bss_rejection_cost(
+    run_document, completed, models, metric, costs, target
+):
+    def finite_values(rows, name):
+        values = []
+        for row in rows:
+            value = row.get(name)
+            if value is None:
+                continue
+            numeric = float(value)
+            if np.isfinite(numeric):
+                values.append(numeric)
+        return values
+
+    def mean_std(values):
+        return (
+            (float(np.mean(values)), float(np.std(values)))
+            if values
+            else (float("nan"), 0.0)
+        )
+
+    figure, axes = plt.subplots(
+        len(costs), 2, figsize=(13.0, max(3.1 * len(costs), 5.8)), squeeze=False
+    )
+    lower = metric == "Generalized Loss"
+    selective_models = [
+        model for model in models if _bss_model_kind(run_document, model) == "selective"
+    ]
+    for row_index, cost in enumerate(costs):
+        cost_key = f"{float(cost):.2f}"
+        left, right = axes[row_index]
+        full_legend_added = False
+        selective_legend_added = False
+        for model_index, model in enumerate(models):
+            full_values, selective_values = [], []
+            for dataset in completed:
+                record = _bss_model_record(run_document, dataset, model)
+                if record is None:
+                    continue
+                for fold_row in record["Data"].get("Full", {}).get("Raw Folds", []):
+                    try:
+                        full_values.append(_full_counterpart_row(fold_row, metric))
+                    except (KeyError, TypeError, ValueError):
+                        continue
+                if record["Kind"] == "selective":
+                    selective_rows = (
+                        record["Data"]
+                        .get("Costs", {})
+                        .get(cost_key, {})
+                        .get("Selective", {})
+                        .get("Raw Folds", [])
+                    )
+                    selective_values.extend(finite_values(selective_rows, metric))
+            is_selective = model in selective_models
+            full_mean, full_std = mean_std(full_values)
+            if np.isfinite(full_mean):
+                left.bar(
+                    model_index - (0.16 if is_selective else 0.0),
+                    full_mean,
+                    width=0.50,
+                    yerr=full_std,
+                    color="#D7E5EE",
+                    edgecolor="#475569",
+                    capsize=2,
+                    label="Full prediction" if not full_legend_added else None,
+                )
+                full_legend_added = True
+            if not is_selective:
+                continue
+            selective_mean, selective_std = mean_std(selective_values)
+            if np.isfinite(selective_mean):
+                left.bar(
+                    model_index + 0.16,
+                    selective_mean,
+                    width=0.50,
+                    yerr=selective_std,
+                    color=_get_model_color(model, model_index),
+                    edgecolor="#1F2937",
+                    hatch="//",
+                    capsize=2,
+                    label="With rejection"
+                    if not selective_legend_added
+                    else None,
+                )
+                selective_legend_added = True
+            else:
+                left.text(
+                    model_index + 0.16,
+                    0.02,
+                    "N/A",
+                    rotation=90,
+                    ha="center",
+                    va="bottom",
+                    fontsize=8,
+                    color="#64748B",
+                )
+        left.set_xticks(np.arange(len(models)))
+        left.set_xticklabels(
+            [_get_model_label(model) for model in models], rotation=12
+        )
+        left.set_ylabel(f"{metric}\nc={float(cost):.2f}")
+        left.set_ylim(0.0, 1.05)
+        left.grid(axis="y", linestyle="--", alpha=0.3)
+        for selective_index, model in enumerate(selective_models):
+            abs_values, aabs_values = [], []
+            for dataset in completed:
+                record = _bss_model_record(run_document, dataset, model)
+                if record is None:
+                    continue
+                rows = (
+                    record["Data"]
+                    .get("Costs", {})
+                    .get(cost_key, {})
+                    .get("Selective", {})
+                    .get("Raw Folds", [])
+                )
+                abs_values.extend(finite_values(rows, "ABS"))
+                aabs_values.extend(finite_values(rows, "AABS"))
+            abs_mean, _ = mean_std(abs_values)
+            aabs_mean, _ = mean_std(aabs_values)
+            if np.isfinite(abs_mean):
+                right.bar(
+                    selective_index,
+                    abs_mean,
+                    width=0.55,
+                    color=_get_model_color(model, selective_index),
+                    edgecolor="#1F2937",
+                    hatch="//",
+                    label="ABS" if selective_index == 0 else None,
+                )
+            if np.isfinite(aabs_mean):
+                right.scatter(
+                    selective_index,
+                    aabs_mean,
+                    color="white",
+                    edgecolor="#1F2937",
+                    linewidth=1.2,
+                    s=55,
+                    zorder=3,
+                    label="AABS" if selective_index == 0 else None,
+                )
+        right.set_xticks(np.arange(len(selective_models)))
+        right.set_xticklabels(
+            [_get_model_label(model) for model in selective_models], rotation=12
+        )
+        right.set_ylim(0.0, 1.05)
+        right.grid(axis="y", linestyle="--", alpha=0.3)
+        if row_index == 0:
+            left.set_title(f"Full vs selective {metric}")
+            right.set_title("ABS and AABS")
+            left.legend(frameon=False, loc="upper left")
+            right.legend(frameon=False, loc="upper right")
+    figure.suptitle(
+        f"Rejection-cost profile: {metric}\n"
+        f"{len(completed)} completed datasets; costs={list(costs)}; means across "
+        f"outer-fold observations by model; "
+        f"{'lower' if lower else 'higher'} is better; "
+        f"updated {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
+        y=1.002,
+    )
+    figure.tight_layout()
+    return _atomic_save_figure(figure, target)
+
+
+def generate_bss_spcc_plots(run_document, output_dir):
+    """Atomically rebuild the locked 10 dataset and 5 rejection-cost figures."""
+
+    completed, bss_models = _completed_bss_datasets(run_document)
+    if not completed:
+        return {}
+    models = _bss_plot_models(run_document, bss_models)
+    settings = run_document.get("Settings", {})
+    report_cost = float(settings.get("report_cost", 0.3))
+    costs = tuple(float(cost) for cost in settings.get("abstention_costs", ()))
+    output_path = Path(output_dir)
+    artifacts = {}
+    for metric, filename in BSS_DATASET_FIGURES.items():
+        artifacts[filename] = _plot_bss_dataset_metric(
+            run_document,
+            completed,
+            models,
+            metric,
+            report_cost,
+            output_path / filename,
+        )
+    for metric, filename in BSS_REJECTION_FIGURES.items():
+        artifacts[filename] = _plot_bss_rejection_cost(
+            run_document,
+            completed,
+            models,
+            metric,
+            costs,
+            output_path / filename,
+        )
+    return artifacts

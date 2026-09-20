@@ -12,7 +12,8 @@ from sklearn.preprocessing import MaxAbsScaler
 
 from ..decision import create_configured_policy
 from ..models.registry import model_family
-from ..visualization import generate_deployment_plots
+from ..visualization import generate_bss_spcc_plots, generate_deployment_plots
+from .bss_comparison import load_bss_comparison_bundle
 from .deployment import (
     OPERATING_POINT_RULES,
     compute_deployment_metrics,
@@ -32,8 +33,11 @@ from .cache_v3 import (
     mark_checkpoint_complete,
     save_completed_fold,
 )
-from .export_v3 import export_v3_artifacts
-from .metric_contract import METRIC_CONTRACT_VERSION
+from .export_v3 import export_bss_spcc_artifacts, export_v3_artifacts
+from .metric_contract import (
+    BSS_SPCC_METRIC_PROFILE_VERSION,
+    METRIC_CONTRACT_VERSION,
+)
 
 
 class V3OutputIsolationError(ValueError):
@@ -57,12 +61,16 @@ def _evaluation_policy_config(
         "partial_policy": None,
     }
     family = model_family(model_name)
-    if family in ("MLC_PA", "GSI_MLC_PA"):
+    if family in ("MLC_PA", "GSI_MLC_PA", "BSS_UG_SPCC_PA"):
         policy_name = (
-            "hamming" if family == "MLC_PA" else gsi_decision_policy
+            "hamming"
+            if family in ("MLC_PA", "BSS_UG_SPCC_PA")
+            else gsi_decision_policy
         )
         penalty = (
-            abstention_penalty if family == "MLC_PA" else gsi_penalty
+            abstention_penalty
+            if family in ("MLC_PA", "BSS_UG_SPCC_PA")
+            else gsi_penalty
         )
         configuration["partial_policy"] = create_configured_policy(
             policy_name,
@@ -73,9 +81,15 @@ def _evaluation_policy_config(
             hamming_boundary=(
                 "symmetric_thresholds"
                 if family == "GSI_MLC_PA"
-                else "minimum_loss"
+                else (
+                    "strict_symmetric_thresholds"
+                    if family == "BSS_UG_SPCC_PA"
+                    else "minimum_loss"
+                )
             ),
         ).get_config()
+        if family == "BSS_UG_SPCC_PA":
+            configuration["calibration"] = "platt_oof_gated"
     return configuration
 
 
@@ -359,6 +373,9 @@ def _pair_config(
     operating_coverage_gamma,
     operating_risk_epsilon,
     operating_validation_size,
+    bss_parameters=None,
+    metric_profile=None,
+    include_selective_instance_f1=False,
 ):
     config = {
         "schema_version": CACHE_SCHEMA_VERSION_V3,
@@ -380,6 +397,8 @@ def _pair_config(
         "report_cost": float(report_cost),
         "abstention_penalty": abstention_penalty,
         "mlc_pa_base": mlc_pa_base,
+        "metric_profile": metric_profile,
+        "bss_parameters": dict(bss_parameters or {}),
         "gsi_validation_size": float(gsi_validation_size),
         "gsi_selection_objective": gsi_selection_objective,
         "gsi_decision_policy": gsi_decision_policy,
@@ -413,6 +432,8 @@ def _pair_config(
     }
     if gsi_partition_random_state is not None:
         config["gsi_partition_random_state"] = int(gsi_partition_random_state)
+    if include_selective_instance_f1:
+        config["include_selective_instance_f1"] = True
     return config
 
 
@@ -587,10 +608,34 @@ def run_experiment_v3(
     operating_coverage_gamma=0.8,
     operating_risk_epsilon=0.1,
     operating_validation_size=0.2,
+    bss_parameters=None,
+    metric_profile=None,
+    refresh_artifacts_per_dataset=False,
+    comparison_config=None,
+    include_selective_instance_f1=False,
 ):
     """Run/resume schema-v3 folds and export strict JSON plus scope CSVs."""
 
     output_path = ensure_v3_output_directory(output_dir)
+    has_bss_model = any(
+        model_family(model_name) == "BSS_UG_SPCC_PA" for model_name in models
+    )
+    if has_bss_model:
+        if any(
+            model_family(model_name) != "BSS_UG_SPCC_PA"
+            for model_name in models
+        ):
+            raise ValueError(
+                "The narrow BSS metric profile cannot be mixed with standard "
+                "schema-v3 models in one run."
+            )
+        if metric_profile is None:
+            metric_profile = BSS_SPCC_METRIC_PROFILE_VERSION
+        if metric_profile != BSS_SPCC_METRIC_PROFILE_VERSION:
+            raise ValueError(
+                "BSS-UG-SPCC-PA requires metric_profile="
+                f"{BSS_SPCC_METRIC_PROFILE_VERSION}."
+            )
     if operating_point_rule == "none":
         operating_point_rule = None
     if (
@@ -646,8 +691,102 @@ def run_experiment_v3(
             gsi_partition_random_state=gsi_partition_random_state,
             gsi_fixed_independent_labels=gsi_fixed_independent_labels,
             gsi_final_order=gsi_final_order,
+            bss_parameters=bss_parameters,
         )
         model_signatures[model_name] = _model_signature(prototype)
+
+    run_config = {
+        "schema_version": CACHE_SCHEMA_VERSION_V3,
+        "metric_contract_version": METRIC_CONTRACT_VERSION,
+        "datasets": list(datasets),
+        "models": list(models),
+        "n_splits": int(n_splits),
+        "random_state": int(random_state),
+        "abstention_costs": [float(cost) for cost in abstention_costs],
+        "report_cost": float(report_cost),
+        "abstention_penalty": abstention_penalty,
+        "mlc_pa_base": mlc_pa_base,
+        "metric_profile": metric_profile,
+        "bss_parameters": dict(bss_parameters or {}),
+        "refresh_artifacts_per_dataset": bool(refresh_artifacts_per_dataset),
+        "gsi_validation_size": float(gsi_validation_size),
+        "gsi_selection_objective": gsi_selection_objective,
+        "gsi_decision_policy": gsi_decision_policy,
+        "gsi_beta": float(gsi_beta),
+        "gsi_penalty": gsi_penalty,
+        "gsi_partition_mode": gsi_partition_mode,
+        "gsi_fixed_independent_labels": (
+            None
+            if gsi_fixed_independent_labels is None
+            else [int(label) for label in gsi_fixed_independent_labels]
+        ),
+        "gsi_final_order": gsi_final_order,
+        "critical_labels": critical_labels,
+        "label_policy_status": label_policy_config.get("status"),
+        "label_policy_hashes": dataset_policy_hashes,
+        "operating_point": {
+            "rule": operating_point_rule,
+            "coverage_gamma": float(operating_coverage_gamma),
+            "risk_epsilon": float(operating_risk_epsilon),
+            "validation_size": float(operating_validation_size),
+            "selection_scope": "inner_validation",
+        },
+        "scaler": "MaxAbsScaler",
+        "model_signatures": model_signatures,
+        "evaluation_policy": {
+            model_name: _evaluation_policy_config(
+                model_name,
+                report_cost,
+                abstention_penalty,
+                gsi_decision_policy,
+                gsi_beta,
+                gsi_penalty,
+            )
+            for model_name in models
+        },
+    }
+    if comparison_config is not None:
+        run_config["comparison"] = dict(comparison_config)
+    if include_selective_instance_f1:
+        run_config["include_selective_instance_f1"] = True
+    if gsi_partition_random_state is not None:
+        run_config["gsi_partition_random_state"] = int(
+            gsi_partition_random_state
+        )
+    run_config_hash = compute_config_hash(run_config)
+
+    def refresh_bss_artifacts(status):
+        document = {
+            "Schema Version": CACHE_SCHEMA_VERSION_V3,
+            "Metric Profile": BSS_SPCC_METRIC_PROFILE_VERSION,
+            "Config Hash": run_config_hash,
+            "Status": status,
+            "Generated At": datetime.now(timezone.utc).isoformat(),
+            "Settings": run_config,
+            "Label Policy Source": label_policy_config.get("source_path"),
+            "Results": results,
+        }
+        if comparison_config is not None:
+            document["Comparison"] = load_bss_comparison_bundle(
+                comparison_config,
+                datasets,
+                {
+                    "n_splits": n_splits,
+                    "random_state": random_state,
+                    "abstention_costs": abstention_costs,
+                    "report_cost": report_cost,
+                    "abstention_penalty": abstention_penalty,
+                },
+            )
+        document["Artifacts"] = generate_bss_spcc_plots(
+            document, output_path / "figures" / run_config_hash
+        )
+        document["Artifacts"] = export_bss_spcc_artifacts(
+            document, output_path / "tables" / run_config_hash
+        )
+        return document
+
+    last_bss_document = None
 
     for dataset_name in datasets:
         x_data, y_data, _, label_names = dataset_loader(dataset_name)
@@ -710,6 +849,9 @@ def run_experiment_v3(
                 operating_coverage_gamma,
                 operating_risk_epsilon,
                 operating_validation_size,
+                bss_parameters,
+                metric_profile,
+                include_selective_instance_f1,
             )
             checkpoint_path, checkpoint = load_or_create_fold_checkpoint(
                 checkpoints_dir, model_name, dataset_name, config
@@ -738,6 +880,7 @@ def run_experiment_v3(
                     gsi_partition_random_state=gsi_partition_random_state,
                     gsi_fixed_independent_labels=gsi_fixed_independent_labels,
                     gsi_final_order=gsi_final_order,
+                    bss_parameters=bss_parameters,
                 )
                 operating_selection = None
                 if (
@@ -788,6 +931,7 @@ def run_experiment_v3(
                     label_names=label_names,
                     critical_labels=effective_critical_labels,
                     label_policy=dataset_label_policy,
+                    include_selective_instance_f1=include_selective_instance_f1,
                 )
                 if operating_selection is not None:
                     metrics.setdefault("Model Metadata", {})[
@@ -834,60 +978,38 @@ def run_experiment_v3(
             results[dataset_name][model_name] = summarize_v3_checkpoint(checkpoint)
             if stopped_early:
                 break
+        dataset_complete = (
+            set(results.get(dataset_name, {})) == set(models)
+            and all(
+                summary.get("Status") == "complete"
+                and summary.get("Completed Folds")
+                == list(
+                    range(1, summary.get("Expected Fold Count", 0) + 1)
+                )
+                for summary in results.get(dataset_name, {}).values()
+            )
+        )
+        if (
+            has_bss_model
+            and refresh_artifacts_per_dataset
+            and dataset_complete
+        ):
+            queue_complete = (
+                set(results) == set(datasets)
+                and all(
+                    set(results.get(name, {})) == set(models)
+                    and all(
+                        summary.get("Status") == "complete"
+                        for summary in results[name].values()
+                    )
+                    for name in datasets
+                )
+            )
+            last_bss_document = refresh_bss_artifacts(
+                "complete" if queue_complete else "partial"
+            )
         if stopped_early:
             break
-
-    run_config = {
-        "schema_version": CACHE_SCHEMA_VERSION_V3,
-        "metric_contract_version": METRIC_CONTRACT_VERSION,
-        "datasets": list(datasets),
-        "models": list(models),
-        "n_splits": int(n_splits),
-        "random_state": int(random_state),
-        "abstention_costs": [float(cost) for cost in abstention_costs],
-        "report_cost": float(report_cost),
-        "abstention_penalty": abstention_penalty,
-        "mlc_pa_base": mlc_pa_base,
-        "gsi_validation_size": float(gsi_validation_size),
-        "gsi_selection_objective": gsi_selection_objective,
-        "gsi_decision_policy": gsi_decision_policy,
-        "gsi_beta": float(gsi_beta),
-        "gsi_penalty": gsi_penalty,
-        "gsi_partition_mode": gsi_partition_mode,
-        "gsi_fixed_independent_labels": (
-            None
-            if gsi_fixed_independent_labels is None
-            else [int(label) for label in gsi_fixed_independent_labels]
-        ),
-        "gsi_final_order": gsi_final_order,
-        "critical_labels": critical_labels,
-        "label_policy_status": label_policy_config.get("status"),
-        "label_policy_hashes": dataset_policy_hashes,
-        "operating_point": {
-            "rule": operating_point_rule,
-            "coverage_gamma": float(operating_coverage_gamma),
-            "risk_epsilon": float(operating_risk_epsilon),
-            "validation_size": float(operating_validation_size),
-            "selection_scope": "inner_validation",
-        },
-        "scaler": "MaxAbsScaler",
-        "model_signatures": model_signatures,
-        "evaluation_policy": {
-            model_name: _evaluation_policy_config(
-                model_name,
-                report_cost,
-                abstention_penalty,
-                gsi_decision_policy,
-                gsi_beta,
-                gsi_penalty,
-            )
-            for model_name in models
-        },
-    }
-    if gsi_partition_random_state is not None:
-        run_config["gsi_partition_random_state"] = int(
-            gsi_partition_random_state
-        )
     every_pair_complete = (
         set(results) == set(datasets)
         and all(set(results[dataset]) == set(models) for dataset in datasets)
@@ -899,7 +1021,15 @@ def run_experiment_v3(
             for summary in dataset_results.values()
         )
     )
-    run_config_hash = compute_config_hash(run_config)
+    if has_bss_model:
+        final_status = "complete" if every_pair_complete else "partial"
+        if (
+            last_bss_document is not None
+            and last_bss_document.get("Status") == final_status
+        ):
+            return last_bss_document
+        return refresh_bss_artifacts(final_status)
+
     document = {
         "Schema Version": CACHE_SCHEMA_VERSION_V3,
         "Metric Contract Version": METRIC_CONTRACT_VERSION,

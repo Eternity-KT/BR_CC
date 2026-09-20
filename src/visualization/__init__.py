@@ -9,6 +9,7 @@ from .plots import (
     generate_pa_plots,
     plot_pa_metric_comparison,
     plot_rejection_cost_comparison,
+    generate_bss_spcc_plots,
 )
 
 __all__ = [
@@ -21,4 +22,4 @@ __all__ = [
 ]
 from .deployment import generate_deployment_plots
 
-__all__ = ["generate_deployment_plots"]
+__all__ += ["generate_deployment_plots", "generate_bss_spcc_plots"]

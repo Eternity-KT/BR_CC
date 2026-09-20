@@ -2,10 +2,16 @@
 
 from numbers import Integral
 
-from .abstention_metrics import compute_abstention_metrics
+from .abstention_metrics import (
+    compute_abstention_metrics,
+    compute_selective_instance_f1,
+)
 from .complete_metrics import compute_complete_metrics
 from .group_metrics import compute_group_metrics, compute_per_label_metrics
 from .metric_contract import (
+    BSS_SPCC_FULL_METRIC_NAMES,
+    BSS_SPCC_METRIC_PROFILE_VERSION,
+    BSS_SPCC_SELECTIVE_METRIC_NAMES,
     DEFAULT_ABSTAIN_VALUE,
     LEGACY_ALIASES,
     METRIC_CONTRACT_VERSION,
@@ -32,6 +38,51 @@ class AliasAwareMetricDict(dict):
             return self[key]
         except KeyError:
             return default
+
+
+def compute_bss_spcc_metric_bundle(
+    y_true,
+    y_full,
+    *,
+    y_partial,
+    cost,
+    penalty="linear",
+    abstain_value=DEFAULT_ABSTAIN_VALUE,
+):
+    """Return the exact narrow metric profile for BSS-UG-SPCC-PA."""
+
+    if y_partial is None:
+        raise ValueError("y_partial is required for the BSS-SPCC metric profile.")
+    if cost is None:
+        raise ValueError("cost is required for the BSS-SPCC metric profile.")
+    complete = compute_complete_metrics(y_true, y_full)
+    abstention = compute_abstention_metrics(
+        y_true,
+        y_partial,
+        y_full,
+        cost=cost,
+        penalty=penalty,
+        abstain_value=abstain_value,
+    )["Selective"]
+    full = {name: float(complete[name]) for name in BSS_SPCC_FULL_METRIC_NAMES}
+    values = {
+        **abstention,
+        "Selective Instance-F1": compute_selective_instance_f1(
+            y_true, y_partial, abstain_value=abstain_value
+        ),
+    }
+    selective = {
+        name: float(values[name]) for name in BSS_SPCC_SELECTIVE_METRIC_NAMES
+    }
+    if tuple(full) != BSS_SPCC_FULL_METRIC_NAMES:
+        raise RuntimeError("BSS-SPCC full output does not match its allowlist.")
+    if tuple(selective) != BSS_SPCC_SELECTIVE_METRIC_NAMES:
+        raise RuntimeError("BSS-SPCC selective output does not match its allowlist.")
+    return {
+        "Metric Profile": BSS_SPCC_METRIC_PROFILE_VERSION,
+        "Full": full,
+        "Selective": selective,
+    }
 
 
 def _critical_label_payload(per_label_records, critical_labels):

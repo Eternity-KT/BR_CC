@@ -11,6 +11,7 @@ from .base_learners import (
 from .classifier_chain import ClassifierChainClassifier
 from .gsi_mlc_pa import GSIMLCPartialAbstentionClassifier
 from .mlc_pa import MLCPartialAbstentionClassifier
+from .bss_ug_spcc_pa import BSSUGSPCCPartialAbstentionClassifier
 
 
 @dataclass(frozen=True)
@@ -21,7 +22,7 @@ class ModelSpec:
 
     @property
     def selective(self):
-        return self.family in ("MLC_PA", "GSI_MLC_PA")
+        return self.family in ("MLC_PA", "GSI_MLC_PA", "BSS_UG_SPCC_PA")
 
 
 def _configured_specs():
@@ -76,6 +77,7 @@ _LEGACY_FAMILIES = {
     "GSI_MLC_PA": "GSI_MLC_PA",
     "GSIMLCPA": "GSI_MLC_PA",
     "GSI_MLC_PARTIAL_ABSTENTION": "GSI_MLC_PA",
+    "BSS_UG_SPCC_PA": "BSS_UG_SPCC_PA",
 }
 
 
@@ -189,8 +191,9 @@ def create_registered_model(
     gsi_partition_random_state=None,
     gsi_fixed_independent_labels=None,
     gsi_final_order="correlation",
+    bss_parameters=None,
 ):
-    """Instantiate one of the eight preregistered Logistic/MLP baselines."""
+    """Instantiate one configured model without changing matched defaults."""
 
     spec = get_model_spec(model_id)
     if spec.family == "BR":
@@ -209,7 +212,7 @@ def create_registered_model(
             penalty=abstention_penalty,
             random_state=random_state,
         )
-    else:
+    elif spec.family == "GSI_MLC_PA":
         model = GSIMLCPartialAbstentionClassifier(
             cost=abstention_cost,
             validation_size=gsi_validation_size,
@@ -223,5 +226,27 @@ def create_registered_model(
             fixed_independent_labels=gsi_fixed_independent_labels,
             final_order=gsi_final_order,
             base_learner=spec.base_learner,
+        )
+    else:
+        parameters = deepcopy(bss_parameters or {})
+        reserved = {
+            "base_learner",
+            "random_state",
+            "cost",
+            "penalty",
+            "abstain_value",
+        }
+        conflicts = sorted(reserved.intersection(parameters))
+        if conflicts:
+            raise ValueError(
+                "BSS parameters duplicate registry-controlled fields: "
+                f"{conflicts}."
+            )
+        model = BSSUGSPCCPartialAbstentionClassifier(
+            base_learner=spec.base_learner,
+            random_state=random_state,
+            cost=abstention_cost,
+            penalty=abstention_penalty,
+            **parameters,
         )
     return _attach_manifest(model, spec)

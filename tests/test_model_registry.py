@@ -47,7 +47,7 @@ class SharedBaseLearnerFactoryTests(unittest.TestCase):
         self.assertEqual(logistic.C, 1.0)
         self.assertEqual(logistic.solver, "liblinear")
         self.assertEqual(logistic.tol, 0.001)
-        self.assertEqual(logistic.max_iter, 1000)
+        self.assertEqual(logistic.max_iter, 500)
         self.assertEqual(logistic.random_state, 19)
         self.assertEqual(
             base_learner_manifest("mlp")["backend"],

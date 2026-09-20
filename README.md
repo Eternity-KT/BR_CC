@@ -189,6 +189,58 @@ y_pred = clf.predict(X)
 y_proba = clf.predict_proba(X)  # P(Y_j = 1 | X)
 ```
 
+### 6.6. BSS-UG-SPCC-PA (Logistic, schema v3)
+
+Đặc tả chính thức nằm trong `specify.md`; cấu hình khoa học nằm trong
+`configs/bss_ug_spcc_pa.json`. Kiểm tra queue mà không nạp dataset hoặc huấn
+luyện:
+
+```bash
+python scripts/run_bss_ug_spcc_pa.py --dry-run
+```
+
+Chạy/resume thực nghiệm (người dùng chủ động chạy):
+
+```bash
+python scripts/run_bss_ug_spcc_pa.py
+```
+
+Runner dùng cùng bộ học cơ sở Logistic cho toàn bộ hình so sánh. Nó tái sử dụng
+`BR_Logistic` và các dataset `MLC_PA` Logistic tương thích trong `results_pa/tables/`,
+đồng thời tự tạo/resume checkpoint riêng cho `CC_Logistic` và phần
+`MLC_PA_Logistic` còn thiếu. Vì vậy không dùng kết quả `CC` LinearSVC hiện có để
+đổi nhãn thành Logistic. Dry-run in rõ dataset nào đã có/còn thiếu cho từng
+baseline. Với `--max-new-folds N`, mỗi lần gọi tiến thêm tối đa `N` fold cho từng
+queue baseline còn thiếu rồi tối đa `N` fold BSS.
+
+Chỉ khi cần chẩn đoán mà không muốn tiến triển baseline, dùng:
+
+```bash
+python scripts/run_bss_ug_spcc_pa.py --skip-comparison-preparation
+```
+
+Audit chính thức sẽ không pass nếu comparison còn thiếu dataset hoặc thiếu
+Selective Instance-F1 của MLC-PA. Vì cache schema-v2 không lưu metric này,
+runner tạo/resume một run MLC-PA Logistic riêng có dự đoán selective theo fold,
+tính metric chính xác rồi vẽ lại; không nội suy hoặc điền 0. Nguồn, settings và
+SHA-256 được lưu riêng ở `comparison_audit.json`.
+
+Có thể checkpoint theo quota bằng `--max-new-folds N`. Primary run chỉ đăng ký
+`BSS_UG_SPCC_PA_Logistic`; MLP/calibrated SVM chỉ là khả năng mở rộng qua API
+của lớp và không được trộn vào kết quả primary. Output nằm trong
+`results_bss_ug_spcc_pa/`, gồm checkpoint theo outer fold, 5 Full metrics, 8
+Selective metrics cho mỗi cost, structure audit, 10 hình theo dataset và 5
+hình rejection-cost. Hình/bảng được dựng lại sau mỗi dataset hoàn tất.
+
+Sau khi toàn bộ queue hoàn tất, audit bằng:
+
+```bash
+python scripts/audit_v3_results.py results_bss_ug_spcc_pa --profile bss_ug_spcc_pa_v1
+```
+
+Không dùng outer-test để chọn alpha, DAG, cha, calibration hoặc cost; mọi lựa
+chọn này được khóa từ outer-train/inner OOF trước khi đánh giá.
+
 ---
 
 ## 7. Resumable CV and MLC-PA

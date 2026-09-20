@@ -10,6 +10,11 @@ from .binary_relevance import (
 from .classifier_chain import ClassifierChainClassifier
 from .mlc_pa import MLCPartialAbstentionClassifier, MLCPAClassifier
 from .gsi_mlc_pa import GSIMLCPartialAbstentionClassifier, GSIMLCPAClassifier
+from .local_parent_pcc import LocalParentPCC
+from .bss_ug_spcc_pa import (
+    BSSUGSPCCPartialAbstentionClassifier,
+    BSSUGSPCCPAClassifier,
+)
 from .registry import (
     LOGISTIC_MLP_MODEL_IDS,
     MATCHED_MODEL_IDS,
@@ -40,6 +45,9 @@ __all__ = [
     "MLCPAClassifier",
     "GSIMLCPartialAbstentionClassifier",
     "GSIMLCPAClassifier",
+    "LocalParentPCC",
+    "BSSUGSPCCPartialAbstentionClassifier",
+    "BSSUGSPCCPAClassifier",
     "MATCHED_MODEL_IDS",
     "LOGISTIC_MLP_MODEL_IDS",
     "canonical_registered_model_id",

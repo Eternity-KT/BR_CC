@@ -1,6 +1,7 @@
 """Resumable benchmark pipeline for BR, CC, MLC-PA, and GSI-MLC-PA."""
 
 import argparse
+import json
 import os
 import time
 import warnings
@@ -56,7 +57,11 @@ DEFAULT_V3_ABSTENTION_COSTS = (*DEFAULT_ABSTENTION_COSTS, 0.50)
 
 def _is_selective_model(model_name):
     try:
-        return model_family(model_name) in ("MLC_PA", "GSI_MLC_PA")
+        return model_family(model_name) in (
+            "MLC_PA",
+            "GSI_MLC_PA",
+            "BSS_UG_SPCC_PA",
+        )
     except ValueError:
         return False
 
@@ -64,6 +69,13 @@ def _is_selective_model(model_name):
 def _is_gsi_model(model_name):
     try:
         return model_family(model_name) == "GSI_MLC_PA"
+    except ValueError:
+        return False
+
+
+def _is_bss_spcc_model(model_name):
+    try:
+        return model_family(model_name) == "BSS_UG_SPCC_PA"
     except ValueError:
         return False
 
@@ -87,6 +99,7 @@ def _create_model(
     gsi_partition_random_state=None,
     gsi_fixed_independent_labels=None,
     gsi_final_order="correlation",
+    bss_parameters=None,
 ):
     """Create a supported model from its standardized name."""
     model_key = model_name.upper()
@@ -105,6 +118,7 @@ def _create_model(
             gsi_partition_random_state=gsi_partition_random_state,
             gsi_fixed_independent_labels=gsi_fixed_independent_labels,
             gsi_final_order=gsi_final_order,
+            bss_parameters=bss_parameters,
         )
     if model_key in ("BR", "BR_SVC", "BR_LINEARSVC"):
         return BinaryRelevanceClassifier(
@@ -203,6 +217,7 @@ def _cache_settings(
     gsi_partition_random_state=None,
     gsi_fixed_independent_labels=None,
     gsi_final_order="correlation",
+    bss_parameters=None,
 ):
     settings = {
         "n_splits": int(n_splits),
@@ -276,6 +291,16 @@ def _cache_settings(
                 ),
                 "final_order_strategy": gsi_final_order,
             })
+    elif family == "BSS_UG_SPCC_PA":
+        settings.update({
+            "abstention_costs": [float(cost) for cost in abstention_costs],
+            "report_cost": float(report_cost),
+            "abstention_penalty": abstention_penalty,
+            "base_estimator": configured_base,
+            "metric_profile": "bss_ug_spcc_pa_v1",
+            "decision_boundary": "strict_symmetric_thresholds",
+            "model_parameters": dict(bss_parameters or {}),
+        })
     if is_registered_model_id(model_name):
         spec = get_model_spec(model_name)
         settings["model_manifest"] = {
@@ -305,6 +330,7 @@ def _evaluate_model_v3(
     label_names=None,
     critical_labels=None,
     label_policy=None,
+    include_selective_instance_f1=False,
 ):
     """Evaluate one fitted model with isolated schema-v3 metric scopes."""
 
@@ -366,6 +392,54 @@ def _evaluate_model_v3(
             "Selection Config": getattr(classifier, "selection_config_", {}),
             "Selection History": getattr(classifier, "selection_history_", []),
         })
+
+    if _is_bss_spcc_model(model_name):
+        from src.decision.hamming import HammingBOPPolicy
+        from src.evaluation.metric_contract import BSS_SPCC_METRIC_PROFILE_VERSION
+        from src.evaluation.metric_facade import compute_bss_spcc_metric_bundle
+
+        inference_started = time.perf_counter()
+        probabilities = np.asarray(
+            classifier.predict_proba(x_test), dtype=np.float64
+        )
+        inference_seconds = float(time.perf_counter() - inference_started)
+        full_prediction = classifier.predict_full_from_proba(probabilities)
+        decision_policy = HammingBOPPolicy(
+            cost=getattr(classifier, "cost", 0.3),
+            penalty=getattr(classifier, "penalty", "linear"),
+            abstain_value=classifier.abstain_value,
+            linear_boundary="strict_symmetric_thresholds",
+        )
+        model_metadata.update({
+            "Decision Policy": decision_policy.get_config(),
+            "Probability Inference Seconds": inference_seconds,
+            "Structure Audit": classifier.get_structure_audit(),
+        })
+        result = {
+            "Schema Version": 3,
+            "Metric Profile": BSS_SPCC_METRIC_PROFILE_VERSION,
+            "Full": None,
+            "Model Metadata": model_metadata,
+            "Costs": {},
+        }
+        for cost in abstention_costs:
+            partial_prediction = decision_policy.predict(
+                probabilities, cost=cost
+            )
+            bundle = compute_bss_spcc_metric_bundle(
+                y_test,
+                full_prediction,
+                y_partial=partial_prediction,
+                cost=cost,
+                penalty=getattr(classifier, "penalty", "linear"),
+                abstain_value=classifier.abstain_value,
+            )
+            if result["Full"] is None:
+                result["Full"] = bundle["Full"]
+            result["Costs"][_cost_key(cost)] = {
+                "Selective": bundle["Selective"]
+            }
+        return result
 
     if _is_selective_model(model_name):
         inference_started = time.perf_counter()
@@ -449,8 +523,21 @@ def _evaluate_model_v3(
             label_groups=label_groups,
             critical_labels=critical_labels,
         )
+        selective_metrics = dict(bundle["Selective"])
+        if include_selective_instance_f1:
+            from src.evaluation.abstention_metrics import (
+                compute_selective_instance_f1,
+            )
+
+            selective_metrics["Selective Instance-F1"] = (
+                compute_selective_instance_f1(
+                    y_test,
+                    partial_prediction,
+                    abstain_value=classifier.abstain_value,
+                )
+            )
         result["Costs"][_cost_key(cost)] = {
-            "Selective": dict(bundle["Selective"]),
+            "Selective": selective_metrics,
             "Rejected": bundle["Rejected"],
             "Optimistic": bundle["Optimistic"],
             "Diagnostics": bundle["Diagnostics"],
@@ -482,6 +569,7 @@ def _evaluate_model(
     label_names=None,
     critical_labels=None,
     label_policy=None,
+    include_selective_instance_f1=False,
 ):
     """Evaluate one fitted model, applying rejection only after training."""
     if metric_schema == 3:
@@ -494,6 +582,7 @@ def _evaluate_model(
             label_names=label_names,
             critical_labels=critical_labels,
             label_policy=label_policy,
+            include_selective_instance_f1=include_selective_instance_f1,
         )
     if metric_schema != 2:
         raise ValueError("metric_schema must be either 2 or 3.")
@@ -623,6 +712,11 @@ def run_experiment(
     operating_coverage_gamma=0.8,
     operating_risk_epsilon=0.1,
     operating_validation_size=0.2,
+    bss_parameters=None,
+    metric_profile=None,
+    refresh_artifacts_per_dataset=False,
+    comparison_config=None,
+    include_selective_instance_f1=False,
 ):
     """Run only missing model/dataset pairs and then rebuild all plots.
 
@@ -642,6 +736,16 @@ def run_experiment(
         raise ValueError(
             "operating_point_rule is available only with result_schema=3."
         )
+    if result_schema == 2 and (
+        bss_parameters is not None
+        or metric_profile is not None
+        or refresh_artifacts_per_dataset
+        or comparison_config is not None
+        or include_selective_instance_f1
+    ):
+        raise ValueError(
+            "BSS parameters/profile/artifact refresh require result_schema=3."
+        )
     if output_dir is None:
         output_dir = "results_pa_v3" if result_schema == 3 else "results_pa"
     if datasets is None:
@@ -660,6 +764,10 @@ def run_experiment(
     unknown_datasets = sorted(set(datasets) - set(DATASET_CONFIG))
     if unknown_datasets:
         raise ValueError(f"Unknown datasets: {unknown_datasets}")
+    if result_schema != 3 and any(
+        _is_bss_spcc_model(model) for model in standardized_models
+    ):
+        raise ValueError("BSS-UG-SPCC-PA is available only with result_schema=3.")
 
     if result_schema == 3:
         from src.evaluation.pipeline_v3 import run_experiment_v3
@@ -694,6 +802,11 @@ def run_experiment(
             operating_coverage_gamma=operating_coverage_gamma,
             operating_risk_epsilon=operating_risk_epsilon,
             operating_validation_size=operating_validation_size,
+            bss_parameters=bss_parameters,
+            metric_profile=metric_profile,
+            refresh_artifacts_per_dataset=refresh_artifacts_per_dataset,
+            comparison_config=comparison_config,
+            include_selective_instance_f1=include_selective_instance_f1,
         )
 
     figures_dir = os.path.join(output_dir, "plots_pa")
@@ -1254,6 +1367,15 @@ def main():
         default="correlation",
         help="Final GSI chain order after the IL/DL partition is frozen.",
     )
+    parser.add_argument(
+        "--bss_config_path",
+        type=str,
+        default=None,
+        help=(
+            "Optional BSS-UG-SPCC-PA scientific config; the dedicated runner "
+            "uses configs/bss_ug_spcc_pa.json by default."
+        ),
+    )
     args = parser.parse_args()
 
     resolved_costs = args.abstention_costs
@@ -1261,6 +1383,29 @@ def main():
     if args.abstention_cost is not None:
         resolved_costs = [args.abstention_cost]
         resolved_report_cost = args.abstention_cost
+
+    bss_config = None
+    bss_parameters = None
+    if args.bss_config_path is not None:
+        with open(args.bss_config_path, "r", encoding="utf-8") as stream:
+            bss_config = json.load(stream)
+        parameter_names = {
+            "inner_oof_splits",
+            "alpha_grid",
+            "ug_threshold",
+            "parent_gain_threshold",
+            "q_max",
+            "epsilon",
+            "alpha_tie_tolerance",
+            "calibration",
+            "calibration_splits",
+            "calibration_tolerance",
+        }
+        bss_parameters = {
+            name: bss_config[name]
+            for name in parameter_names
+            if name in bss_config
+        }
 
     run_experiment(
         datasets=args.datasets,
@@ -1289,6 +1434,15 @@ def main():
         operating_coverage_gamma=args.operating_coverage_gamma,
         operating_risk_epsilon=args.operating_risk_epsilon,
         operating_validation_size=args.operating_validation_size,
+        bss_parameters=bss_parameters,
+        metric_profile=(
+            None if bss_config is None else bss_config.get("metric_profile")
+        ),
+        refresh_artifacts_per_dataset=(
+            False
+            if bss_config is None
+            else bool(bss_config.get("refresh_artifacts_per_dataset", False))
+        ),
     )
 
 

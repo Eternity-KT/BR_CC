@@ -48,6 +48,37 @@ def _compute_aurc(y_true, y_full, acceptance_confidence):
     return float(np.mean(prefix_risk))
 
 
+def compute_selective_instance_f1(
+    y_true, y_partial, *, abstain_value=-1
+):
+    """Compute instance-F1 using only decided positions of each instance.
+
+    Instances with no decisions score zero.  If an instance has decisions but
+    both its decided true-positive set and decided predicted-positive set are
+    empty, it scores one because every reported negative is correct.
+    """
+
+    truth, partial, _ = validate_partial_inputs(
+        y_true, y_partial, y_true, abstain_value=abstain_value
+    )
+    scores = []
+    for row_index in range(truth.shape[0]):
+        decided = partial[row_index] != abstain_value
+        if not np.any(decided):
+            scores.append(0.0)
+            continue
+        true_row = truth[row_index, decided]
+        predicted_row = partial[row_index, decided]
+        true_positive = int(np.count_nonzero((true_row == 1) & (predicted_row == 1)))
+        false_positive = int(np.count_nonzero((true_row == 0) & (predicted_row == 1)))
+        false_negative = int(np.count_nonzero((true_row == 1) & (predicted_row == 0)))
+        denominator = 2 * true_positive + false_positive + false_negative
+        scores.append(
+            2.0 * true_positive / denominator if denominator else 1.0
+        )
+    return float(np.mean(scores))
+
+
 def compute_abstention_metrics(
     y_true,
     y_partial,
