@@ -20,10 +20,10 @@ from ..decision import HammingBOPPolicy
 from .base_learners import create_multilabel_estimator
 
 
-def _make_base_estimator(base_estimator, random_state):
+def _make_base_estimator(base_estimator, random_state, **kwargs):
     """Compatibility wrapper around the shared marginal-estimator factory."""
 
-    return create_multilabel_estimator(base_estimator, random_state)
+    return create_multilabel_estimator(base_estimator, random_state, **kwargs)
 
 
 class MLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
@@ -61,12 +61,14 @@ class MLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         penalty="linear",
         abstain_value=-1,
         random_state=42,
+        **base_kwargs,
     ):
         self.base_estimator = base_estimator
         self.cost = cost
         self.penalty = penalty
         self.abstain_value = abstain_value
         self.random_state = random_state
+        self.base_kwargs = base_kwargs
 
     def _validate_parameters(self):
         if not 0.0 <= float(self.cost) <= 1.0:
@@ -89,7 +91,7 @@ class MLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
 
         self.n_labels_ = Y_arr.shape[1]
         self.base_estimator_ = _make_base_estimator(
-            self.base_estimator, self.random_state
+            self.base_estimator, self.random_state, **self.base_kwargs
         )
         self.base_estimator_.fit(X, Y_arr)
         if hasattr(self.base_estimator_, "calibration_audit_"):

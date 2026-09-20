@@ -92,7 +92,7 @@ def _pytorch_classes():
     return FastPyTorchBinaryMLP, MultiLabelMLPClassifier
 
 
-def create_binary_estimator(base_learner, random_state=42):
+def create_binary_estimator(base_learner, random_state=42, **kwargs):
     """Create or clone one binary estimator from the shared configuration."""
 
     if hasattr(base_learner, "fit"):
@@ -123,11 +123,12 @@ def create_binary_estimator(base_learner, random_state=42):
         return MLPClassifier(**parameters)
     if name == "mlp":
         binary_class, _ = _pytorch_classes()
+        parameters.update(kwargs)
         return binary_class(**parameters)
     raise AssertionError(f"Unhandled configured base learner: {name}")
 
 
-def create_multilabel_estimator(base_learner, random_state=42):
+def create_multilabel_estimator(base_learner, random_state=42, **kwargs):
     """Create the BR-style marginal estimator shared by BR/MLC/GSI."""
 
     if hasattr(base_learner, "fit") and hasattr(base_learner, "predict_proba"):
@@ -143,8 +144,9 @@ def create_multilabel_estimator(base_learner, random_state=42):
     if name == "mlp":
         config = load_experiment_config()["base_learners"][name]
         parameters = _tuple_parameters(config.get("multilabel_parameters", {}))
+        parameters.update(kwargs)
         return BinaryRelevanceMLP(random_state=random_state, **parameters)
     return BinaryRelevanceClassifier(
-        base_estimator=create_binary_estimator(name, random_state),
+        base_estimator=create_binary_estimator(name, random_state, **kwargs),
         random_state=random_state,
     )

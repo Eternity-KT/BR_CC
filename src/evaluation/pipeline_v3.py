@@ -47,6 +47,7 @@ def _evaluation_policy_config(
     gsi_decision_policy="hamming",
     gsi_beta=1.0,
     gsi_penalty="linear",
+    min_coverage=None,
 ):
     """Describe the exact decision layer that affects one model's outputs."""
 
@@ -75,6 +76,7 @@ def _evaluation_policy_config(
                 if family == "GSI_MLC_PA"
                 else "minimum_loss"
             ),
+            min_coverage=min_coverage,
         ).get_config()
     return configuration
 
@@ -359,6 +361,9 @@ def _pair_config(
     operating_coverage_gamma,
     operating_risk_epsilon,
     operating_validation_size,
+    min_coverage=None,
+    cc_label_noise=0.0,
+    mlp_loss="bce",
 ):
     config = {
         "schema_version": CACHE_SCHEMA_VERSION_V3,
@@ -392,6 +397,9 @@ def _pair_config(
             else [int(label) for label in gsi_fixed_independent_labels]
         ),
         "gsi_final_order": gsi_final_order,
+        "min_coverage": None if min_coverage is None else float(min_coverage),
+        "cc_label_noise": float(cc_label_noise),
+        "mlp_loss": mlp_loss,
         "critical_labels": critical_labels,
         "model_signature": model_signature,
         "label_policy_hash": label_policy_digest,
@@ -409,6 +417,7 @@ def _pair_config(
             gsi_decision_policy,
             gsi_beta,
             gsi_penalty,
+            min_coverage=min_coverage,
         ),
     }
     if gsi_partition_random_state is not None:
@@ -521,6 +530,7 @@ def _select_inner_operating_point(
                 if family == "GSI_MLC_PA"
                 else "minimum_loss"
             ),
+            min_coverage=getattr(selector, "min_coverage", None),
         )
     records = []
     for cost in abstention_costs:
@@ -589,6 +599,9 @@ def run_experiment_v3(
     operating_coverage_gamma=0.8,
     operating_risk_epsilon=0.1,
     operating_validation_size=0.2,
+    min_coverage=None,
+    cc_label_noise=0.0,
+    mlp_loss="bce",
 ):
     """Run/resume schema-v3 folds and export strict JSON plus scope CSVs."""
 
@@ -648,6 +661,9 @@ def run_experiment_v3(
             gsi_partition_random_state=gsi_partition_random_state,
             gsi_fixed_independent_labels=gsi_fixed_independent_labels,
             gsi_final_order=gsi_final_order,
+            min_coverage=min_coverage,
+            cc_label_noise=cc_label_noise,
+            mlp_loss=mlp_loss,
         )
         model_signatures[model_name] = _model_signature(prototype)
 
@@ -712,6 +728,9 @@ def run_experiment_v3(
                 operating_coverage_gamma,
                 operating_risk_epsilon,
                 operating_validation_size,
+                min_coverage=min_coverage,
+                cc_label_noise=cc_label_noise,
+                mlp_loss=mlp_loss,
             )
             checkpoint_path, checkpoint = load_or_create_fold_checkpoint(
                 checkpoints_dir, model_name, dataset_name, config
@@ -740,6 +759,9 @@ def run_experiment_v3(
                     gsi_partition_random_state=gsi_partition_random_state,
                     gsi_fixed_independent_labels=gsi_fixed_independent_labels,
                     gsi_final_order=gsi_final_order,
+                    min_coverage=min_coverage,
+                    cc_label_noise=cc_label_noise,
+                    mlp_loss=mlp_loss,
                 )
                 operating_selection = None
                 if (
@@ -774,6 +796,9 @@ def run_experiment_v3(
                                 gsi_fixed_independent_labels
                             ),
                             "gsi_final_order": gsi_final_order,
+                            "min_coverage": min_coverage,
+                            "cc_label_noise": cc_label_noise,
+                            "mlp_loss": mlp_loss,
                         },
                         label_names=label_names,
                         label_policy=dataset_label_policy,
@@ -862,6 +887,9 @@ def run_experiment_v3(
             else [int(label) for label in gsi_fixed_independent_labels]
         ),
         "gsi_final_order": gsi_final_order,
+        "min_coverage": None if min_coverage is None else float(min_coverage),
+        "cc_label_noise": float(cc_label_noise),
+        "mlp_loss": mlp_loss,
         "critical_labels": critical_labels,
         "label_policy_status": label_policy_config.get("status"),
         "label_policy_hashes": dataset_policy_hashes,
@@ -882,6 +910,7 @@ def run_experiment_v3(
                 gsi_decision_policy,
                 gsi_beta,
                 gsi_penalty,
+                min_coverage=min_coverage,
             )
             for model_name in models
         },

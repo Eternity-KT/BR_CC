@@ -62,10 +62,11 @@ class ClassifierChainClassifier(BaseEstimator, ClassifierMixin):
         random_state (int, default=42):
             Random seed for reproducibility.
     """
-    def __init__(self, base_estimator=None, order=None, random_state=42):
+    def __init__(self, base_estimator=None, order=None, random_state=42, label_noise=0.0):
         self.base_estimator = base_estimator
         self.order = order
         self.random_state = random_state
+        self.label_noise = float(label_noise)
         self.classifiers_ = []
         self.order_ = None
         self.n_labels_ = 0
@@ -103,8 +104,12 @@ class ClassifierChainClassifier(BaseEstimator, ClassifierMixin):
                 X_extended = X
             else:
                 prev_indices = self.order_[:i]
-                prev_ground_truth = Y[:, prev_indices].astype(np.float32)
-                X_extended = np.hstack([X, prev_ground_truth])
+                prev_features = Y[:, prev_indices].astype(np.float32)
+                if self.label_noise > 0.0:
+                    rng = np.random.default_rng(self.random_state + i if self.random_state is not None else None)
+                    eps = rng.uniform(0.0, self.label_noise, size=prev_features.shape).astype(np.float32)
+                    prev_features = prev_features * (1.0 - eps) + 0.5 * eps
+                X_extended = np.hstack([X, prev_features])
 
             if len(unique_classes) <= 1 and not isinstance(
                 template_estimator, ProbabilityAdapter

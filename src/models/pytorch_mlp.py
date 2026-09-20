@@ -22,6 +22,41 @@ def get_default_device():
     return "cuda" if torch.cuda.is_available() else "cpu"
 
 
+class AsymmetricLoss(nn.Module):
+    """
+    Asymmetric Loss (ASL) for multi-label classification.
+    Reference: Ridnik et al., "Asymmetric Loss For Multi-Label Classification", ICCV 2021.
+    Suppresses gradients from easy negative samples and prevents under-confident positive predictions.
+    """
+    def __init__(self, gamma_neg=2.0, gamma_pos=0.0, clip=0.05, eps=1e-8):
+        super().__init__()
+        self.gamma_neg = gamma_neg
+        self.gamma_pos = gamma_pos
+        self.clip = clip
+        self.eps = eps
+
+    def forward(self, x, y):
+        xs_pos = torch.sigmoid(x)
+        xs_neg = 1.0 - xs_pos
+
+        if self.clip is not None and self.clip > 0.0:
+            xs_neg = (xs_neg + self.clip).clamp(max=1.0)
+
+        los_pos = y * torch.log(xs_pos.clamp(min=self.eps))
+        los_neg = (1.0 - y) * torch.log(xs_neg.clamp(min=self.eps))
+        loss = los_pos + los_neg
+
+        if self.gamma_neg > 0.0 or self.gamma_pos > 0.0:
+            pt0 = xs_pos * y
+            pt1 = xs_neg * (1.0 - y)
+            pt = pt0 + pt1
+            one_sided_gamma = self.gamma_pos * y + self.gamma_neg * (1.0 - y)
+            one_sided_w = torch.pow(1.0 - pt, one_sided_gamma)
+            loss = loss * one_sided_w
+
+        return -loss.sum(dim=1).mean()
+
+
 class MultiLabelMLPClassifier(BaseEstimator, ClassifierMixin):
     """
     Multi-Label Multi-Layer Perceptron Classifier running on GPU via PyTorch.
@@ -30,11 +65,11 @@ class MultiLabelMLPClassifier(BaseEstimator, ClassifierMixin):
     Parameters:
         hidden_layer_sizes (tuple, default=(128, 64)):
             Neurons in hidden layers.
-        lr (float, default=3e-3):
+        lr (float, default=1e-3):
             Learning rate for AdamW optimizer.
         weight_decay (float, default=1e-3):
             L2 regularization strength.
-        epochs (int, default=150):
+        epochs (int, default=30):
             Number of training epochs.
         dropout (float, default=0.15):
             Dropout probability for regularization.
@@ -44,6 +79,8 @@ class MultiLabelMLPClassifier(BaseEstimator, ClassifierMixin):
             If True and calibration is None, subtract log(pos_weight) from logits.
         calibration (str, default='sigmoid'):
             Probability calibration method: 'sigmoid' (Platt scaling) or None.
+        loss_name (str, default='bce'):
+            'bce' for standard BCEWithLogitsLoss, or 'asymmetric' / 'asl' for Asymmetric Loss.
         device (str, default=None):
             'cuda', 'cpu', or None (auto-detects).
         random_state (int, default=42):
@@ -59,6 +96,7 @@ class MultiLabelMLPClassifier(BaseEstimator, ClassifierMixin):
         pos_weight_clamp=15.0,
         unbias_pos_weight=False,
         calibration="sigmoid",
+        loss_name="bce",
         device=None,
         random_state=42,
         **kwargs
@@ -73,6 +111,7 @@ class MultiLabelMLPClassifier(BaseEstimator, ClassifierMixin):
         self.pos_weight_clamp = pos_weight_clamp
         self.unbias_pos_weight = unbias_pos_weight
         self.calibration = calibration
+        self.loss_name = loss_name
         self.device = device
         self.random_state = random_state
         self.extra_kwargs = kwargs
@@ -142,7 +181,11 @@ class MultiLabelMLPClassifier(BaseEstimator, ClassifierMixin):
         pos_weight = (neg_counts / pos_counts).clamp(min=1.0, max=self.pos_weight_clamp)
         self.pos_weight_ = pos_weight.detach()
 
-        criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+        if str(self.loss_name).lower() in ("asymmetric", "asl"):
+            criterion = AsymmetricLoss(gamma_neg=2.0, gamma_pos=0.0, clip=0.05)
+        else:
+            criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+
         optimizer = optim.AdamW(
             self.model_.parameters(),
             lr=self.lr,
@@ -159,36 +202,41 @@ class MultiLabelMLPClassifier(BaseEstimator, ClassifierMixin):
             optimizer.step()
             scheduler.step()
 
-        # Platt scaling (calibration="sigmoid")
+        # Vectorized Platt scaling (calibration="sigmoid") on GPU
         self.calibrators_ = {}
         if self.calibration == "sigmoid":
             self.model_.eval()
             with torch.no_grad():
-                raw_logits = self.model_(X_tensor).cpu().numpy()
+                raw_logits_t = self.model_(X_tensor)
+
+            # Fast vectorized calibration on GPU (all labels simultaneously)
+            a_param = nn.Parameter(torch.ones(self.n_labels_, device=self.device_))
+            b_param = nn.Parameter(torch.zeros(self.n_labels_, device=self.device_))
+            cal_opt = optim.Adam([a_param, b_param], lr=0.05)
+            cal_loss_fn = nn.BCEWithLogitsLoss()
+
+            with torch.enable_grad():
+                for _ in range(30):
+                    cal_opt.zero_grad(set_to_none=True)
+                    scaled = raw_logits_t * a_param + b_param
+                    loss_cal = cal_loss_fn(scaled, Y_tensor)
+                    loss_cal.backward()
+                    cal_opt.step()
+
+            a_arr = a_param.detach().clamp(min=0.01).cpu().numpy()
+            b_arr = b_param.detach().cpu().numpy()
 
             for j in range(self.n_labels_):
                 if j in self.constant_labels_:
                     continue
-                col = Y_arr[:, j]
-                pos_c = int(np.sum(col == 1))
+                pos_c = int(np.sum(Y_arr[:, j] == 1))
                 neg_c = n_samples - pos_c
                 if min(pos_c, neg_c) < 2:
-                    # Smoothed Laplace prior fallback
                     p_prior = (pos_c + 1.0) / (n_samples + 2.0)
                     b_prior = float(np.log(p_prior / (1.0 - p_prior)))
                     self.calibrators_[j] = (0.0, b_prior)
                 else:
-                    lr_cal = LogisticRegression(
-                        C=1.0,
-                        solver="liblinear",
-                        random_state=self.random_state if self.random_state is not None else 42,
-                    )
-                    lr_cal.fit(raw_logits[:, j:j+1], col)
-                    a_j = float(lr_cal.coef_[0, 0])
-                    b_j = float(lr_cal.intercept_[0])
-                    if a_j <= 0.0:
-                        a_j = 1.0
-                    self.calibrators_[j] = (a_j, b_j)
+                    self.calibrators_[j] = (float(a_arr[j]), float(b_arr[j]))
 
         return self
 
@@ -244,6 +292,7 @@ class FastPyTorchBinaryMLP(BaseEstimator, ClassifierMixin):
         epochs=30,
         unbias_pos_weight=False,
         calibration="sigmoid",
+        loss_name="bce",
         device=None,
         random_state=42,
         **kwargs
@@ -256,6 +305,7 @@ class FastPyTorchBinaryMLP(BaseEstimator, ClassifierMixin):
         self.epochs = epochs
         self.unbias_pos_weight = unbias_pos_weight
         self.calibration = calibration
+        self.loss_name = loss_name
         self.device = device
         self.random_state = random_state
         self.extra_kwargs = kwargs
@@ -303,7 +353,11 @@ class FastPyTorchBinaryMLP(BaseEstimator, ClassifierMixin):
         pos_weight = torch.tensor([min(max(neg_count / max(pos_count, 1.0), 1.0), 10.0)], device=self.device_)
         self.pos_weight_ = pos_weight.detach()
 
-        criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+        if str(self.loss_name).lower() in ("asymmetric", "asl"):
+            criterion = AsymmetricLoss(gamma_neg=2.0, gamma_pos=0.0, clip=0.05)
+        else:
+            criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+
         optimizer = optim.AdamW(
             self.model_.parameters(),
             lr=self.lr,

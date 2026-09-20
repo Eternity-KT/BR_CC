@@ -12,6 +12,7 @@ def create_configured_policy(
     allow_abstention=True,
     abstain_value=-1,
     hamming_boundary="minimum_loss",
+    min_coverage=None,
 ):
     """Create any registered built-in policy from one uniform configuration."""
 
@@ -41,9 +42,13 @@ def create_configured_policy(
             allow_abstention=allow_abstention,
         )
     if canonical in ("macro_f1", "per_label_macro_f1"):
+        kwargs = {}
+        if min_coverage is not None:
+            kwargs["min_coverage"] = min_coverage
         return create_policy(
             canonical,
             **common,
             allow_abstention=allow_abstention,
+            **kwargs,
         )
     raise ValueError(f"No configuration adapter exists for policy '{canonical}'.")

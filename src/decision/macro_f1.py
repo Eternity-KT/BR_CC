@@ -39,6 +39,7 @@ class PerLabelMacroF1Policy(DecisionPolicy):
         tau_low=None,
         tau_high=None,
         min_positive_support=1,
+        min_coverage=None,
     ):
         if abstain_value in (0, 1):
             raise ValueError("abstain_value must be different from 0 and 1.")
@@ -47,6 +48,7 @@ class PerLabelMacroF1Policy(DecisionPolicy):
         self.allow_abstention = bool(allow_abstention)
         self.abstain_value = int(abstain_value)
         self.min_positive_support = int(min_positive_support)
+        self.min_coverage = float(min_coverage) if min_coverage is not None else None
 
         self.tau_low = (
             None if tau_low is None else np.asarray(tau_low, dtype=np.float64)
@@ -151,6 +153,10 @@ class PerLabelMacroF1Policy(DecisionPolicy):
                         dtype=np.float64,
                     ) / float(n_samples)
                     utils = f1 - pen
+                    if self.min_coverage is not None:
+                        cov_ratio = decided / float(n_samples)
+                        cov_violation = np.maximum(0.0, float(self.min_coverage) - cov_ratio)
+                        utils = utils - 100.0 * cov_violation
 
                     max_idx = int(np.argmax(utils))
                     candidate_util = utils[max_idx]
@@ -277,6 +283,7 @@ class PerLabelMacroF1Policy(DecisionPolicy):
             "tau_high": (
                 None if self.tau_high is None else self.tau_high.tolist()
             ),
+            "min_coverage": self.min_coverage,
             "algorithm": "per_label_adaptive_thresholding_with_abstention",
             "inference_complexity": "O(K) time, O(K) space",
             "tie_breaking": "more_decisions_then_smaller_margin",
