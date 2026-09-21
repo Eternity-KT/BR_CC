@@ -391,9 +391,12 @@ def _finite_upper(comparison_sets: Iterable[dict[str, pd.DataFrame]]) -> float:
 
 
 def _axis_upper(metric: MetricSpec, observed_upper: float) -> float:
+    # Leave enough headroom for the vertical three-decimal value labels drawn
+    # above the error-bar caps.  Scores/losses remain on their native [0, 1]
+    # scale even though the display domain extends slightly past 1.0.
     if metric.column == "Generalized Loss":
-        return min(1.05, max(0.1, observed_upper * 1.22))
-    return min(1.05, max(0.1, observed_upper * 1.16))
+        return min(1.16, max(0.1, observed_upper * 1.30 + 0.025))
+    return min(1.16, max(0.1, observed_upper * 1.22 + 0.025))
 
 
 def _annotate_missing(ax: plt.Axes, missing: Sequence[str]) -> None:
@@ -449,7 +452,7 @@ def _draw_comparison_axis(
         if not np.any(finite):
             missing.append(family)
             continue
-        ax.bar(
+        bars = ax.bar(
             positions[finite],
             means[finite],
             width=width * 0.92,
@@ -464,6 +467,22 @@ def _draw_comparison_axis(
             error_kw={"elinewidth": 0.75, "capthick": 0.75},
             zorder=3,
         )
+        label_fontsize = 6.4 if len(run.datasets) >= 8 else 7.6
+        for bar, mean, std in zip(bars, means[finite], stds[finite]):
+            ax.annotate(
+                f"{mean:.3f}",
+                xy=(bar.get_x() + bar.get_width() / 2.0, mean + max(std, 0.0)),
+                xytext=(0, 3),
+                textcoords="offset points",
+                ha="center",
+                va="bottom",
+                rotation=90,
+                rotation_mode="anchor",
+                fontsize=label_fontsize,
+                color="#111827",
+                clip_on=False,
+                zorder=6,
+            )
 
     ax.set_ylim(0, ylim_upper)
     ax.set_xlim(-0.65, len(run.datasets) - 0.35)
@@ -479,7 +498,12 @@ def _draw_comparison_axis(
     ax.grid(axis="y", zorder=0)
     ax.spines[["top", "right"]].set_visible(False)
     if show_legend:
-        ax.legend(ncol=4, loc="upper center", bbox_to_anchor=(0.5, 1.01), frameon=False)
+        ax.legend(
+            ncol=4,
+            loc="lower center",
+            bbox_to_anchor=(0.5, 1.12),
+            frameon=False,
+        )
     _annotate_missing(ax, missing)
 
 
