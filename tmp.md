@@ -1,201 +1,103 @@
-Viewed tmp.md:1-48
-Listed directory BR_CC
-Searched for "IL"
-Listed directory src
-Listed directory selection
-Listed directory models
-Listed directory mlc_pa
-Viewed partition.py:1-184
-Viewed objectives.py:1-244
-Viewed gsi_mlc_pa.py:1-200
-Viewed gsi_mlc_pa.py:201-450
-Viewed gsi_mlc_pa.py:451-700
-Viewed gsi_mlc_pa.py:701-823
-Searched for "IL"
-Viewed meeting_summary.md:1-68
-Searched for "correlation"
-Searched for "independent"
-Viewed specify.md:1-60
-Searched for "partition"
-Searched for "IL/DL"
-Viewed README.md:245-305
-Viewed phase_Q6.md:1-100
-Viewed phase_Q7.md:1-100
+Searched for "DL"
+Viewed gsi_mlc_pa.py:265-340
+Viewed gsi_mlc_pa.py:150-265
+Viewed classifier_chain.py:1-100
+Viewed classifier_chain.py:101-160
+Viewed classifier_chain.py:160-200
+Viewed gsi_mlc_pa.py:520-650
+Viewed gsi_mlc_pa.py:650-790
+Viewed gsi_mlc_pa.py:340-450
 
-Dưới đây là chi tiết toàn bộ về **bản chất tập IL/DL**, **quy trình phân loại nhãn**, **cách tính tương quan** và **cơ chế phụ thuộc giữa các nhãn** trong kiến trúc mô hình **GSI-MLC-PA** (dựa trực tiếp trên mã nguồn tại [`src/models/gsi_mlc_pa.py`](file:///d:/University_Subject/ML%20Research/BR_CC/src/models/gsi_mlc_pa.py), [`src/selection/objectives.py`](file:///d:/University_Subject/ML%20Research/BR_CC/src/selection/objectives.py), và [`src/selection/partition.py`](file:///d:/University_Subject/ML%20Research/BR_CC/src/selection/partition.py)).
+Trong phiên bản **v3** (thực thi tại [src/models/gsi_mlc_pa.py](file:///d:/University_Subject/ML%20Research/BR_CC/src/models/gsi_mlc_pa.py)), cơ chế tính xác suất cho các nhãn phụ thuộc (**DL - Dependent Labels**) được thực hiện tuần tự qua chuỗi phân loại (Classifier Chain - CC) kết hợp với kỹ thuật **Biên duyên hóa xấp xỉ (Marginalization)**.
+
+Dưới đây là chi tiết toàn bộ quy trình toán học và cài đặt code:
 
 ---
 
-## 1. Bản chất và định nghĩa hai tập $IL$ và $DL$
+### 1. Thứ tự nhãn trong chuỗi (`self.order_`)
+Trước khi tính xác suất, tập nhãn được sắp xếp thông qua hàm `_correlation_order` ([src/models/gsi_mlc_pa.py#L359-L393](file:///d:/University_Subject/ML%20Research/BR_CC/src/models/gsi_mlc_pa.py#L359-L393)):
+1. **Các nhãn IL (Independent Labels)**: Luôn được xếp ở **đầu chuỗi** làm các "gốc" (roots).
+2. **Các nhãn DL (Dependent Labels)**: Được nối tiếp vào chuỗi theo thứ tự có **độ tương quan tuyệt đối (Pearson/Phi correlation) lớn nhất** với các nhãn đã được xếp trước đó trong chuỗi.
 
-Trong bài toán Phân loại đa nhãn (Multi-Label Classification - MLC):
-* **$IL$ (Independent Labels - Tập nhãn độc lập):**
-  * Gồm các nhãn được dự đoán trực tiếp từ đặc trưng đầu vào $X$ mà **không phụ thuộc** vào dự đoán của bất kỳ nhãn nào khác.
-  * Sử dụng cơ chế của **Binary Relevance (BR)**: mỗi nhãn $l \in IL$ có một bộ phân loại độc lập dự đoán xác suất biên:
-    $$P(Y_l = 1 \mid X) = P_{\text{BR}}(Y_l = 1 \mid X)$$
-  * *Ưu điểm:* Không bị ảnh hưởng bởi lỗi lan truyền (error propagation) từ các nhãn khác, tính toán nhanh.
-
-* **$DL$ (Dependent Labels - Tập nhãn phụ thuộc):**
-  * Gồm các nhãn có sự tương quan/phụ thuộc mạnh vào các nhãn đi trước nó trong chuỗi.
-  * Sử dụng cơ chế của **Classifier Chain (CC)**: nhãn $k \in DL$ được mô hình hóa theo điều kiện có biết các nhãn đi trước:
-    $$P(Y_k = 1 \mid X, Y_{\text{predecessors}})$$
-  * *Ưu điểm:* Tận dụng được cấu trúc tương quan nhãn để nâng cao độ chính xác ở những nhãn khó.
+Do đó, với mỗi nhãn $j \in \text{DL}$ ở vị trí `position` trong chuỗi, tập nhãn tiền nhiệm của nó là:
+$$\text{pred}(j) = \{\pi_1, \pi_2, \dots, \pi_{\text{position}-1}\}$$
+*(Tập tiền nhiệm này có thể gồm các nhãn IL hoặc các nhãn DL đứng trước $j$)*.
 
 ---
 
-## 2. Quy trình phân loại nhãn vào tập $IL$ và $DL$ (Greedy Forward Selection)
-
-Quy trình chọn phân hoạch diễn ra hoàn toàn bên trong bước huấn luyện (`fit`) và đảm bảo **nguyên tắc bảo mật dữ liệu (Leakage-Safe)**: tập kiểm tra bên ngoài (outer test fold) tuyệt đối không được tham gia vào bước này.
-
-### Bước 2.1: Chia tập dữ liệu nội bộ (Internal Split)
-Từ tập huấn luyện của fold hiện tại $(X_{\text{train}}, Y_{\text{train}})$:
-* Chia thành 2 tập con bằng `MultilabelStratifiedShuffleSplit` (hoặc stratified split):
-  * **Selection-Train** ($1 - \text{validation\_size}$, mặc định 80%): dùng để fit các mô hình tạm thời.
-  * **Validation** ($\text{validation\_size}$, mặc định 20%): dùng để đánh giá và chấm điểm cấu hình nhãn.
-* Huấn luyện 2 mô hình sơ bộ trên **Selection-Train**:
-  * `selection_br`: Mô hình BR-MLP dự đoán xác suất biên độc lập.
-  * `selection_cc`: Mô hình CC-MLP học chuỗi phân loại theo thứ tự ban đầu (`selection_order_`).
-* Tính trước ma trận xác suất biên trực tiếp trên tập Validation: `validation_direct = selection_br.predict_proba(X_val)`.
+### 2. Dữ liệu huấn luyện của bộ phân loại CC cho từng nhãn DL
+Trong quá trình `fit` của `ClassifierChainClassifier` ([src/models/classifier_chain.py#L101-L117](file:///d:/University_Subject/ML%20Research/BR_CC/src/models/classifier_chain.py#L101-L117)):
+- Mỗi bộ phân loại nhị phân $h_j$ tương ứng với nhãn $j$ được huấn luyện với vector đặc trưng mở rộng bằng **nhãn thực tế (Ground-Truth Labels)**:
+  $$X_{\text{train}}^{(j)} = [X, \quad Y_{\text{true}, \text{pred}(j)}]$$
+- Mục tiêu: $h_j$ học phân phối điều kiện $P(Y_j = 1 \mid X, Y_{\text{pred}(j)})$.
 
 ---
 
-### Bước 2.2: Thuật toán lựa chọn tham lam (Greedy Selection)
-Hàm thực thi: [`_select_partition()`](file:///d:/University_Subject/ML%20Research/BR_CC/src/models/gsi_mlc_pa.py#L523-L581).
+### 3. Cơ chế suy diễn xác suất khi Inference (`_configured_probabilities`)
+Tại thời điểm suy diễn ([src/models/gsi_mlc_pa.py#L266-L341](file:///d:/University_Subject/ML%20Research/BR_CC/src/models/gsi_mlc_pa.py#L266-L341)):
+- **Đối với nhãn $i \in \text{IL}$**: Xác suất được gán trực tiếp từ mô hình **Binary Relevance (BR)** độc lập:
+  $$\hat{P}(Y_i = 1 \mid X) = P_{\text{BR}}(Y_i = 1 \mid X)$$
+- **Đối với nhãn $j \in \text{DL}$**: Cần tính xác suất biên duyên $\hat{P}(Y_j = 1 \mid X)$ dựa trên các nhãn tiền nhiệm $\text{pred}(j)$. Xác suất của các nhãn tiền nhiệm này đã được tính toán ở các bước trước:
+  $$p_{\text{pred}} = \hat{P}(Y_{\text{pred}(j)} = 1 \mid X)$$
 
-1. **Khởi tạo:**
-   * Tập độc lập ban đầu: $IL = \emptyset$
-   * Tập phụ thuộc ban đầu: $DL = \{0, 1, \dots, K-1\}$ (mọi nhãn đều là phụ thuộc).
-2. **Đánh giá cấu hình cơ sở ($IL = \emptyset$):**
-   * Sinh xác suất cho tập Validation khi tất cả các nhãn đều chạy qua chuỗi CC.
-   * Chấm điểm cấu hình cơ sở bằng hàm mục tiêu lựa chọn (Selection Objective), ví dụ `full_macro_f1`:
-     $$S_{\text{current}} = \text{Score}(Y_{\text{val}}, \hat{P}_{IL=\emptyset})$$
-3. **Duyệt tuần tự từng nhãn $l \in \text{order}$:**
-   * Thử chuyển nhãn $l$ từ $DL$ sang $IL$: tạo ứng viên $IL_{\text{cand}} = IL \cup \{l\}$.
-   * Cập nhật xác suất tập Validation dưới cấu hình mới:
-     * Nhãn $l$ (và các nhãn đã thuộc $IL$) sẽ lấy xác suất biên từ `validation_direct[:, l]`.
-     * Các nhãn $DL$ nằm sau vị trí của $l$ trong chuỗi sẽ nhận xác suất mới của $l$ làm đầu vào điều kiện.
-   * Đánh giá điểm ứng viên:
-     $$S_{\text{cand}} = \text{Score}(Y_{\text{val}}, \hat{P}_{IL_{\text{cand}}})$$
-   * **Quy tắc chấp nhận:**
-     $$\Delta S = S_{\text{cand}} - S_{\text{current}}$$
-     * Nếu $\Delta S > 10^{-12}$ (điểm số **thực sự tăng strictly positive**):
-       * Chấp nhận chuyển: $IL \leftarrow IL \cup \{l\}$, $DL \leftarrow DL \setminus \{l\}$.
-       * Cập nhật điểm chuẩn: $S_{\text{current}} \leftarrow S_{\text{cand}}$.
-     * Nếu $\Delta S \le 10^{-12}$:
-       * Từ chối chuyển: Nhãn $l$ tiếp tục được giữ lại ở tập $DL$.
-4. **Kết quả:** Ta thu được bộ phân hoạch $IL^*$ và $DL^*$ tối ưu tham lam trên tập validation.
+Hệ thống xử lý nhãn DL theo **3 trường hợp** dựa vào số lượng tiền nhiệm $m = |\text{pred}(j)|$:
 
----
+#### Trường hợp 1: $m = 0$ (Root DL - nếu DL đứng ở vị trí đầu chuỗi)
+Bộ phân loại $h_j$ không phụ thuộc nhãn nào:
+$$\hat{P}(Y_j = 1 \mid X) = h_j(X)$$
 
-### Bước 2.3: Mục tiêu lựa chọn (Selection Objectives)
-Mô hình hỗ trợ nhiều hàm mục tiêu khác nhau thông qua [`src/selection/objectives.py`](file:///d:/University_Subject/ML%20Research/BR_CC/src/selection/objectives.py):
-* `full_macro_f1` *(Mặc định)*: Tính Macro-F1 trung bình số học sau khi phân ngưỡng $\ge 0.5$ (không áp dụng từ chối ở bước này).
-* `bop_instance_f1`, `bop_jaccard`: Cho phép áp dụng luật quyết định Bayes (BOP) có tính đến chi phí từ chối $c$ và phạt độ phủ (abstention penalty) ngay khi đánh giá ứng viên.
-* `macro_precision`, `macro_recall`, `f_beta_0_5`, `f_beta_2`: Tối ưu hóa hướng tới độ chính xác hoặc độ bao phủ theo yêu cầu bài toán.
+#### Trường hợp 2: $m = 1$ (Chỉ có duy nhất 1 nhãn tiền nhiệm)
+Mô hình thực hiện **Biên duyên hóa chính xác (Exact Marginalization)** theo công thức xác suất toàn phần:
+$$\hat{P}(Y_j = 1 \mid X) = \sum_{y_{\text{parent}} \in \{0, 1\}} P(Y_j = 1 \mid X, Y_{\text{parent}} = y_{\text{parent}}) \cdot \hat{P}(Y_{\text{parent}} = y_{\text{parent}} \mid X)$$
+$$\hat{P}(Y_j = 1 \mid X) = (1 - p_{\text{parent}}) \cdot h_j([X, 0]) + p_{\text{parent}} \cdot h_j([X, 1])$$
 
----
-
-## 3. Cách tính tương quan giữa các nhãn (Label Correlation)
-
-Hàm thực thi: [`_compute_label_correlation()`](file:///d:/University_Subject/ML%20Research/BR_CC/src/models/gsi_mlc_pa.py#L344-L357).
-
-### 3.1. Thời điểm tính (Timing)
-> **CỰC KỲ QUAN TRỌNG:** Tương quan được tính **SAU KHI** phân hoạch $IL/DL$ đã được chốt (frozen).
-> Việc tính tương quan sau giúp tránh phụ thuộc vòng (circular dependence) và bảo đảm việc phân loại nhãn không bị thiên kiến. Tương quan được tính trên toàn bộ ma trận nhãn huấn luyện $Y_{\text{train}}$ của outer fold.
-
-### 3.2. Công thức toán học
-Đối với dữ liệu đa nhãn nhị phân $Y \in \{0, 1\}^{N \times K}$, ma trận tương quan giữa hai nhãn $j$ và $k$ là hệ số tương quan Pearson, tương đương với **hệ số Phi ($\phi$)** trong bảng ngẫu nhiên $2 \times 2$:
-
-$$r_{jk} = \phi_{jk} = \frac{\text{Cov}(Y_j, Y_k)}{\sigma(Y_j) \sigma(Y_k)} = \frac{n_{11} n_{00} - n_{10} n_{01}}{\sqrt{n_{1\cdot} n_{0\cdot} n_{\cdot 1} n_{\cdot 0}}}$$
-
-Trong đó:
-* $n_{11}$: Số mẫu có cả hai nhãn cùng bằng $1$.
-* $n_{00}$: Số mẫu có cả hai nhãn cùng bằng $0$.
-* $n_{10}, n_{01}$: Số mẫu có một nhãn bằng $1$ và nhãn kia bằng $0$.
-* $n_{1\cdot}, n_{0\cdot}, n_{\cdot 1}, n_{\cdot 0}$: Các tổng biên (marginal totals).
-
-### 3.3. Xử lý ổn định số học trong code
-Trong thực tế, một số nhãn có thể có phương sai bằng $0$ (tất cả mẫu đều bằng 0 hoặc 1), dẫn đến chia cho $0$ ($0/0$ ra `NaN`):
+*Code thực thi ([src/models/gsi_mlc_pa.py#L318-L331](file:///d:/University_Subject/ML%20Research/BR_CC/src/models/gsi_mlc_pa.py#L318-L331)):*
 ```python
-with np.errstate(divide="ignore", invalid="ignore"):
-    correlation = np.corrcoef(Y, rowvar=False)
-correlation = np.nan_to_num(correlation, nan=0.0, posinf=0.0, neginf=0.0)
-correlation = np.clip(correlation, -1.0, 1.0)
-np.fill_diagonal(correlation, 1.0)
-```
-* Các giá trị không xác định (`NaN`) hoặc vô hạn được gán về `0.0` (xem như không có tương quan).
-* Đường chéo chính luôn được đặt bằng `1.0`.
-
----
-
-## 4. Cách sử dụng tương quan để sắp xếp chuỗi (Correlation Ordering)
-
-Sau khi có ma trận tương quan $R = (r_{jk})$ và phân hoạch $IL, DL$, mô hình sắp xếp lại toàn bộ các nhãn thành một chuỗi dự đoán mới (`order_`) qua hàm [`_correlation_order()`](file:///d:/University_Subject/ML%20Research/BR_CC/src/models/gsi_mlc_pa.py#L359-L394):
-
-### Quy tắc sắp xếp:
-1. **Đưa toàn bộ nhãn $IL$ lên đầu chuỗi:**
-   $$\text{Order} = \text{sorted}(IL)$$
-   *Ý nghĩa:* Nhãn độc lập không cần phụ thuộc vào nhãn nào, nên được dự đoán trước làm "gốc" (roots) cung cấp ngữ cảnh cho các nhãn phụ thuộc phía sau.
-2. **Nếu $IL = \emptyset$ (ví dụ mode `all_dl`):**
-   Nhãn đầu tiên được chọn là nhãn có **tổng tương quan tuyệt đối lớn nhất** với các nhãn còn lại:
-   $$\text{root} = \arg\max_{l \in DL} \sum_{k} |r_{lk}|$$
-3. **Bổ sung lần lượt các nhãn $DL$ còn lại:**
-   Tại mỗi bước, trong số các nhãn chưa được xếp vào chuỗi ($DL_{\text{remaining}}$), ta chọn nhãn có **độ tương quan tuyệt đối lớn nhất với ít nhất một nhãn ĐÃ CÓ trong chuỗi**:
-   $$l^* = \arg\max_{l \in DL_{\text{remaining}}} \left( \max_{p \in \text{Order}} |r_{l, p}| \right)$$
-   *(Nếu có hai nhãn bằng điểm, giải quyết bằng chỉ số nhãn nhỏ hơn để bảo đảm tính tất định).*
-   * Thêm $l^*$ vào $\text{Order}$, loại $l^*$ khỏi $DL_{\text{remaining}}$.
-   * Lặp lại cho đến khi xếp hết toàn bộ nhãn.
-
-### Xác định nút cha phụ thuộc mạnh nhất (Parent Mapping)
-Hàm [`_dependent_parent_map()`](file:///d:/University_Subject/ML%20Research/BR_CC/src/models/gsi_mlc_pa.py#L396-L418): Với mỗi nhãn $l \in DL$, nút cha chính của nó được định nghĩa là nhãn đứng trước nó có độ tương quan mạnh nhất:
-$$\text{parent}(l) = \arg\max_{p \in \text{predecessors}(l)} |r_{l, p}|$$
-
----
-
-## 5. Một nhãn thuộc $DL$ phụ thuộc vào các nhãn $IL$ (và các tiền nhiệm) như thế nào?
-
-Trong quá trình suy diễn xác suất ([`_configured_probabilities()`](file:///d:/University_Subject/ML%20Research/BR_CC/src/models/gsi_mlc_pa.py#L266-L342)), xác suất của một nhãn $l$ được tính toán như sau:
-
-### Trường hợp 1: Nhãn $l \in IL$
-Dự đoán trực tiếp từ mô hình BR:
-$$P(Y_l = 1 \mid X) = P_{\text{BR}}(Y_l = 1 \mid X)$$
-
-### Trường hợp 2: Nhãn $l \in DL$
-Nhãn $l$ có tập các nhãn đi trước trong chuỗi là $\text{predecessors} = [p_1, p_2, \dots, p_m]$. Các nhãn đi trước này có thể gồm cả nhãn thuộc $IL$ và nhãn thuộc $DL$ đã được tính xong xác suất trước đó:
-$$P(Y_{p_i} = 1 \mid X) = \hat{p}_{p_i}$$
-
-Bộ phân loại thứ $l$ của chuỗi CC được huấn luyện trên không gian đặc trưng mở rộng: $f_l(X, Y_{p_1}, \dots, Y_{p_m})$. Lúc dự đoán, vì không biết nhãn thực $Y_{p_i}$, mô hình xử lý như sau:
-
-1. **Nếu chỉ có 1 nhãn tiền nhiệm ($m = 1$ với xác suất $\hat{p}$):**
-   Áp dụng **Biên hóa chính xác 2 trạng thái (Exact Two-State Marginalization)**:
-   $$P(Y_l = 1 \mid X) = (1 - \hat{p}) \cdot f_l(X, 0) + \hat{p} \cdot f_l(X, 1)$$
-   *Ý nghĩa:* Tính kỳ vọng toán học chính xác theo phân phối Bernoulli của nhãn cha duy nhất.
-
-2. **Nếu có nhiều hơn 1 nhãn tiền nhiệm ($m > 1$):**
-   Nếu tính chính xác theo mọi tổ hợp trạng thái $2^m$, độ phức tạp tính toán sẽ bùng nổ hàm mũ. Do đó, mô hình sử dụng **Xấp xỉ trường trung bình (Mean-Field Plug-in Approximation)**:
-   Thay thế giá trị nhị phân $\{0, 1\}$ của từng nhãn tiền nhiệm bằng chính xác suất mềm (soft probability) tương ứng đã được chốt:
-   $$P(Y_l = 1 \mid X) = f_l\left( X, \hat{p}_{p_1}, \hat{p}_{p_2}, \dots, \hat{p}_{p_m} \right)$$
-   *Ý nghĩa:* Giúp nhãn $l$ tiếp nhận trực tiếp "độ tin cậy" từ các nhãn $IL$ và các nhãn $DL$ đi trước mà chỉ tốn 1 lần lan truyền tiến qua mạng nơ-ron (forward pass).
-
----
-
-## 6. Tóm tắt toàn bộ vòng đời tính toán (Pipeline Workflow)
-
-```mermaid
-flowchart TD
-    A["Dữ liệu Outer-Train (X_train, Y_train)"] --> B["Split nội bộ: Selection-Train (80%) và Validation (20%)"]
-    B --> C["Fit selection_br và selection_cc trên Selection-Train"]
-    C --> D["Greedy Forward Selection trên Validation<br/>Bắt đầu IL = ∅, DL = All<br/>Thử chuyển từng nhãn l vào IL nếu tăng Objective Score"]
-    D --> E["Đóng băng phân hoạch: IL* và DL*"]
-    E --> F["Tính ma trận tương quan Phi/Pearson trên Y_train"]
-    F --> G["Correlation Order:<br/>1. Đặt toàn bộ IL* lên đầu chuỗi<br/>2. Tham lam thêm DL* theo max absolute correlation"]
-    G --> H["Refit toàn bộ trên X_train, Y_train:<br/>- BR-MLP cho IL*<br/>- CC-MLP theo thứ tự correlation order"]
-    H --> I["Dự đoán Test Fold:<br/>- IL*: lấy xác suất từ BR<br/>- DL*: xấp xỉ Mean-Field từ các tiền nhiệm"]
-    I --> J["Áp dụng Bayes-Optimal Prediction (BOP)<br/>với chi phí từ chối cost c -> Quyết định {0, 1, -1}"]
+if len(predecessors) == 1:
+    zeros = np.zeros((X.shape[0], 1), dtype=np.float32)
+    ones = np.ones((X.shape[0], 1), dtype=np.float32)
+    probability_given_zero = _positive_probability(classifier, np.hstack((X, zeros)))
+    probability_given_one = _positive_probability(classifier, np.hstack((X, ones)))
+    parent_probability = predecessor_probabilities[:, 0]
+    probabilities[:, label_index] = (
+        (1.0 - parent_probability) * probability_given_zero
+        + parent_probability * probability_given_one
+    )
 ```
 
-### Các điểm mấu chốt có thể đưa vào bài báo (Paper Write-up):
-1. **Giải quyết vấn đề phân bố sai số (Error Propagation vs. Label Correlation):** Việc đưa các nhãn có hiệu năng độc lập tốt vào $IL$ giúp ngăn chặn việc gieo rắc nhãn sai vào các bước sau của chuỗi CC.
-2. **Thứ tự chuỗi tối ưu theo thông tin tương quan:** Các nhãn $DL$ được kết nối trực tiếp với các nhãn có độ tương quan cao nhất đi trước nó, tối đa hóa thông tin tương hỗ mà bộ phân loại nhận được.
-3. **Chi phí tính toán hiệu quả:** Dùng xấp xỉ Mean-field tránh độ phức tạp $O(2^m)$ của Probabilistic Classifier Chains truyền thống.
-4. **Không bị rò rỉ dữ liệu (No Data Leakage):** Việc chọn $IL/DL$ tách rời trên validation fold, và ma trận tương quan chỉ tính trên training fold.
+#### Trường hợp 3: $m \ge 2$ (Có từ 2 nhãn tiền nhiệm trở lên)
+Nếu tính chính xác, số lượng trường hợp cần duyệt là $2^m$ tổ hợp nhị phân (với $m=10$, cần $1024$ lần forward pass cho mỗi mẫu — không khả thi).
+
+Do đó, v3 sử dụng **Xấp xỉ trường trung bình (Mean-Field Approximation / Soft-label feature input)**:
+- Thay vì lấy tổng qua tất cả các cấu hình nhị phân rời rạc $\{0, 1\}^m$, các đặc trưng nhãn tiền nhiệm được thay thế bằng chính **giá trị kỳ vọng (xác suất mềm)** của chúng:
+  $$\tilde{X}_{\text{mean\_field}} = \left[X, \quad \hat{P}(Y_{\pi_1}=1 \mid X), \quad \hat{P}(Y_{\pi_2}=1 \mid X), \quad \dots, \quad \hat{P}(Y_{\pi_{m}}=1 \mid X)\right]$$
+- Sau đó đưa trực tiếp vector này vào bộ phân loại $h_j$:
+  $$\hat{P}(Y_j = 1 \mid X) \approx h_j(\tilde{X}_{\text{mean\_field}})$$
+
+*Code thực thi ([src/models/gsi_mlc_pa.py#L333-L340](file:///d:/University_Subject/ML%20Research/BR_CC/src/models/gsi_mlc_pa.py#L333-L340)):*
+```python
+else:
+    # Mean-field marginalization: q(Y_parents) is represented by
+    # its factorized means, avoiding an exponential 2**m sum.
+    mean_field_features = np.hstack(
+        (X, predecessor_probabilities.astype(np.float32))
+    )
+    probabilities[:, label_index] = _positive_probability(
+        classifier, mean_field_features
+    )
+```
+
+---
+
+### 4. Đánh giá kỹ thuật liên quan đến ghi chú của bạn
+Trong [meeting_summary.md](file:///d:/University_Subject/ML%20Research/BR_CC/meeting_summary.md), bạn có ghi chú:
+> *"Nghiên cứu lại phần sắp xếp nhãn IL và DL, cần rõ ràng phần này để cải thiện performance"*
+> *"Tách các nhãn IL ra riêng để đánh giá bằng BR, các nhãn thuộc DL sử dụng CC"*
+
+Cơ chế hiện tại của v3 đang có 2 vấn đề lớn có thể ảnh hưởng đến performance của DL:
+1. **Covariate Shift (Lệch phân phối đầu vào giữa Train và Test)**:
+   - Khi huấn luyện CC, $h_j$ chỉ nhìn thấy các nhãn nhị phân rời rạc $Y \in \{0, 1\}$.
+   - Khi suy diễn (inference), $h_j$ lại nhận các xác suất thực liên tục $p \in [0.0, 1.0]$ (soft probabilities). Đối với các mô hình tuyến tính hoặc cây quyết định, điều này dễ làm lệch điểm số đầu ra (logits) dẫn đến xác suất ước lượng kém chuẩn xác (miscalibration).
+2. **Tiền nhiệm của DL bao gồm cả IL và DL khác**:
+   - Hiện tại, chuỗi CC đang nối dài: $IL_1 \to IL_2 \to \dots \to DL_1 \to DL_2 \dots$
+   - Điều này đồng nghĩa với việc các nhãn $DL$ đang phải phụ thuộc vào một chuỗi rất dài gồm toàn bộ các nhãn $IL$ phía trước. Nếu muốn "tách các nhãn IL ra riêng, các nhãn DL sử dụng CC", một hướng cải tiến tiềm năng là: **Mô hình CC chỉ huấn luyện và liên kết riêng giữa các nhãn thuộc tập DL**, hoặc sử dụng cấu trúc cây phụ thuộc cục bộ (Parent Tree) thay vì một chuỗi dài nối tiếp qua tất cả các nhãn IL.

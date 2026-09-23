@@ -41,6 +41,7 @@ Phân tích kết quả, lí do tại sao đạt được
 
 **core**
 Nghiên cứu lại phần sắp xếp nhãn IL và DL, cần rõ ràng phần này để cải thiện performance 
+Tách các nhãn IL ra riêng để đánh giá bằng BR, các nhãn thuộc DL sử dụng CC
 
 
 **bên lề**
