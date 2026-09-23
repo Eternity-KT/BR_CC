@@ -60,7 +60,9 @@ def _evaluation_policy_config(
     family = model_family(model_name)
     if family in ("MLC_PA", "GSI_MLC_PA"):
         policy_name = gsi_decision_policy
-        penalty = gsi_penalty
+        penalty = (
+            abstention_penalty if family == "MLC_PA" else gsi_penalty
+        )
         configuration["partial_policy"] = create_configured_policy(
             policy_name,
             cost=report_cost,
@@ -360,6 +362,7 @@ def _pair_config(
     min_coverage=None,
     cc_label_noise=0.0,
     mlp_loss="bce",
+    gsi_decoupled_dl=None,
 ):
     config = {
         "schema_version": CACHE_SCHEMA_VERSION_V3,
@@ -418,6 +421,8 @@ def _pair_config(
     }
     if gsi_partition_random_state is not None:
         config["gsi_partition_random_state"] = int(gsi_partition_random_state)
+    if gsi_decoupled_dl is not None:
+        config["gsi_decoupled_dl"] = bool(gsi_decoupled_dl)
     return config
 
 
@@ -598,6 +603,7 @@ def run_experiment_v3(
     min_coverage=None,
     cc_label_noise=0.0,
     mlp_loss="bce",
+    gsi_decoupled_dl=None,
 ):
     """Run/resume schema-v3 folds and export strict JSON plus scope CSVs."""
 
@@ -660,6 +666,7 @@ def run_experiment_v3(
             min_coverage=min_coverage,
             cc_label_noise=cc_label_noise,
             mlp_loss=mlp_loss,
+            decoupled_dl=gsi_decoupled_dl,
         )
         model_signatures[model_name] = _model_signature(prototype)
 
@@ -727,6 +734,7 @@ def run_experiment_v3(
                 min_coverage=min_coverage,
                 cc_label_noise=cc_label_noise,
                 mlp_loss=mlp_loss,
+                gsi_decoupled_dl=gsi_decoupled_dl,
             )
             checkpoint_path, checkpoint = load_or_create_fold_checkpoint(
                 checkpoints_dir, model_name, dataset_name, config
@@ -758,6 +766,7 @@ def run_experiment_v3(
                     min_coverage=min_coverage,
                     cc_label_noise=cc_label_noise,
                     mlp_loss=mlp_loss,
+                    decoupled_dl=gsi_decoupled_dl,
                 )
                 operating_selection = None
                 if (
@@ -795,6 +804,7 @@ def run_experiment_v3(
                             "min_coverage": min_coverage,
                             "cc_label_noise": cc_label_noise,
                             "mlp_loss": mlp_loss,
+                            "decoupled_dl": gsi_decoupled_dl,
                         },
                         label_names=label_names,
                         label_policy=dataset_label_policy,

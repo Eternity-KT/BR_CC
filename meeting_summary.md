@@ -49,7 +49,13 @@
 **core**
 - Nghiên cứu lại phần sắp xếp nhãn IL và DL, cần rõ ràng phần này để cải thiện performance 
 - Tách các nhãn IL ra riêng để đánh giá bằng BR, các nhãn thuộc DL sử dụng CC
+  - ✅ **Đã hoàn thành trong v3.1 (`spec_v3_1.md`)**: Tách hoàn toàn tập $IL$ (đánh giá thuần túy bằng BR) và tập $DL$ (đánh giá bằng Standalone Sub-CC không tiền tố $IL$).
+  - ✅ **Đã kiểm chứng thực nghiệm 10 tập dữ liệu nhỏ - vừa** (`results_pa_v3_1`):
+    - Đạt tỷ lệ thắng **70.0%** trên mô hình MLP (7 thắng, 0 hòa, 3 thua; Macro-F1 trung bình $+0.28\%$, emotions $+1.87\%$, plantpseaac $+1.52\%$, chd49 $+0.64\%$).
+    - Đạt tỷ lệ thắng **75.0%** trên mô hình Logistic (6 thắng, 2 hòa, 2 thua; chd49 $+0.88\%$).
+    - Loại bỏ hoàn toàn nhiễu từ nhãn $IL$ và triệt tiêu Covariate Shift trong suy diễn Mean-Field.
 
 **bên lề**
 - Check các phương pháp hiện tại tương tự có mạnh hơn của mình không
 - Lên deadline sửa paper
+

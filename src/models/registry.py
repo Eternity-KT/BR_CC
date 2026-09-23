@@ -18,6 +18,7 @@ class ModelSpec:
     model_id: str
     family: str
     base_learner: str
+    decoupled_dl: bool = False
 
     @property
     def selective(self):
@@ -30,6 +31,7 @@ def _configured_specs():
             model_id=model_id,
             family=str(values["family"]),
             base_learner=str(values["base_learner"]),
+            decoupled_dl=bool(values.get("decoupled_dl", False)),
         )
         for model_id, values in load_experiment_config()["models"].items()
     }
@@ -55,6 +57,12 @@ _REGISTERED_ALIASES = {
     "MLCPA_MLP": "MLC_PA_MLP",
     "GSIMLCPA_LOGISTIC": "GSI_MLC_PA_Logistic",
     "GSIMLCPA_MLP": "GSI_MLC_PA_MLP",
+    "GSIMLCPA_V3_1_LOGISTIC": "GSI_MLC_PA_v3_1_Logistic",
+    "GSIMLCPA_V3_1_MLP": "GSI_MLC_PA_v3_1_MLP",
+    "GSIMLCPA_V3_1_SVM": "GSI_MLC_PA_v3_1_SVM",
+    "GSI_MLC_PA_V3_1_LOGISTIC": "GSI_MLC_PA_v3_1_Logistic",
+    "GSI_MLC_PA_V3_1_MLP": "GSI_MLC_PA_v3_1_MLP",
+    "GSI_MLC_PA_V3_1_SVM": "GSI_MLC_PA_v3_1_SVM",
     "BR_CALIBRATED_SVM": "BR_SVM",
     "CC_CALIBRATED_SVM": "CC_SVM",
     "MLCPA_SVM": "MLC_PA_SVM",
@@ -156,6 +164,8 @@ def _attach_manifest(model, spec):
     # material and retained as soon as an ablation supplies a separate seed.
     if model_parameters.get("partition_random_state") is None:
         model_parameters.pop("partition_random_state", None)
+    if not model_parameters.get("decoupled_dl", False):
+        model_parameters.pop("decoupled_dl", None)
     manifest = {
         "experiment_config_schema": int(
             load_experiment_config()["schema_version"]
@@ -192,8 +202,9 @@ def create_registered_model(
     min_coverage=None,
     cc_label_noise=0.0,
     mlp_loss="bce",
+    decoupled_dl=None,
 ):
-    """Instantiate one of the eight preregistered Logistic/MLP baselines."""
+    """Instantiate one of the preregistered baselines."""
 
     spec = get_model_spec(model_id)
     extra_base_kwargs = {}
@@ -222,6 +233,9 @@ def create_registered_model(
             **extra_base_kwargs,
         )
     else:
+        effective_decoupled_dl = (
+            spec.decoupled_dl if decoupled_dl is None else bool(decoupled_dl)
+        )
         model = GSIMLCPartialAbstentionClassifier(
             cost=abstention_cost,
             validation_size=gsi_validation_size,
@@ -238,5 +252,6 @@ def create_registered_model(
             min_coverage=min_coverage,
             cc_label_noise=cc_label_noise,
             mlp_loss=mlp_loss,
+            decoupled_dl=effective_decoupled_dl,
         )
     return _attach_manifest(model, spec)

@@ -157,6 +157,7 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         min_coverage=None,
         cc_label_noise=0.0,
         mlp_loss="bce",
+        decoupled_dl=False,
     ):
         self.cost = cost
         self.validation_size = validation_size
@@ -178,6 +179,7 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         self.min_coverage = min_coverage
         self.cc_label_noise = cc_label_noise
         self.mlp_loss = mlp_loss
+        self.decoupled_dl = bool(decoupled_dl)
 
     def _validate_parameters(self):
         if not 0.0 <= float(self.cost) <= 1.0:
@@ -284,8 +286,53 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         independent_labels,
         initial_probabilities=None,
         start_position=0,
+        dl_order=None,
     ):
         """Infer probabilities sequentially under one fixed IL/DL partition."""
+        if self.decoupled_dl:
+            independent = set(int(label) for label in independent_labels)
+            probabilities = np.zeros_like(direct_probabilities, dtype=np.float64)
+            for label_index in independent:
+                probabilities[:, label_index] = direct_probabilities[:, label_index]
+
+            effective_dl_order = (
+                list(dl_order)
+                if dl_order is not None
+                else [lbl for lbl in getattr(self, "order_", []) if lbl not in independent]
+            )
+            if cc_model is not None and effective_dl_order and hasattr(cc_model, "classifiers_"):
+                for position, label_index in enumerate(effective_dl_order):
+                    classifier = cc_model.classifiers_[position]
+                    if position == 0:
+                        probabilities[:, label_index] = _positive_probability(
+                            classifier, X
+                        )
+                    elif position == 1:
+                        parent_label = effective_dl_order[0]
+                        parent_probability = probabilities[:, parent_label]
+                        zeros = np.zeros((X.shape[0], 1), dtype=np.float32)
+                        ones = np.ones((X.shape[0], 1), dtype=np.float32)
+                        probability_given_zero = _positive_probability(
+                            classifier, np.hstack((X, zeros))
+                        )
+                        probability_given_one = _positive_probability(
+                            classifier, np.hstack((X, ones))
+                        )
+                        probabilities[:, label_index] = (
+                            (1.0 - parent_probability) * probability_given_zero
+                            + parent_probability * probability_given_one
+                        )
+                    else:
+                        predecessors = effective_dl_order[:position]
+                        predecessor_probabilities = probabilities[:, predecessors]
+                        mean_field_features = np.hstack(
+                            (X, predecessor_probabilities.astype(np.float32))
+                        )
+                        probabilities[:, label_index] = _positive_probability(
+                            classifier, mean_field_features
+                        )
+            return np.clip(probabilities, 0.0, 1.0)
+
         if not hasattr(cc_model, "classifiers_") or not hasattr(cc_model, "order_"):
             raise ValueError(
                 "cc_estimator must expose fitted classifiers_ and order_ attributes."
@@ -390,6 +437,54 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             )
             order.append(root)
             remaining.remove(root)
+        while remaining:
+            best = min(
+                remaining,
+                key=lambda label: (
+                    -max(
+                        (abs(float(correlation[label, parent])) for parent in order),
+                        default=0.0,
+                    ),
+                    label,
+                ),
+            )
+            order.append(best)
+            remaining.remove(best)
+        return order
+
+    @staticmethod
+    def _intra_dl_correlation_order(correlation, dependent_labels):
+        """Order ONLY dependent labels using intra-DL absolute correlations.
+
+        Independent labels are excluded. The root DL label is chosen by strongest
+        connections to other DL labels. Remaining DL labels are appended by strongest
+        connection to an already placed DL label.
+        """
+        correlation = np.asarray(correlation, dtype=np.float64)
+        remaining = set(int(label) for label in dependent_labels)
+        if not remaining:
+            return []
+        if len(remaining) == 1:
+            return list(remaining)
+
+        order = []
+        # Root DL: max sum of absolute correlations with other remaining DL labels
+        root = min(
+            remaining,
+            key=lambda label: (
+                -float(
+                    sum(
+                        abs(float(correlation[label, other]))
+                        for other in remaining
+                        if other != label
+                    )
+                ),
+                label,
+            ),
+        )
+        order.append(root)
+        remaining.remove(root)
+
         while remaining:
             best = min(
                 remaining,
@@ -520,15 +615,37 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         direct_probabilities,
         cc_model,
         independent_labels,
+        selection_train_x=None,
+        selection_train_y=None,
     ):
         """Score a provider partition through the same Q6 objective API."""
-
-        probabilities = self._configured_probabilities(
-            X,
-            direct_probabilities,
-            cc_model,
-            independent_labels,
-        )
+        if self.decoupled_dl:
+            cand_dl = [lbl for lbl in range(self.n_labels_) if lbl not in independent_labels]
+            if not cand_dl:
+                sub_cc = None
+                cand_order = []
+            elif selection_train_x is not None and selection_train_y is not None:
+                corr = self._compute_label_correlation(selection_train_y)
+                cand_order = self._intra_dl_correlation_order(corr, cand_dl)
+                sub_cc = self._make_cc_model(order=list(range(len(cand_order))))
+                sub_cc.fit(selection_train_x, selection_train_y[:, cand_order])
+            else:
+                sub_cc = cc_model
+                cand_order = cand_dl
+            probabilities = self._configured_probabilities(
+                X,
+                direct_probabilities,
+                sub_cc,
+                independent_labels,
+                dl_order=cand_order,
+            )
+        else:
+            probabilities = self._configured_probabilities(
+                X,
+                direct_probabilities,
+                cc_model,
+                independent_labels,
+            )
         result = self._evaluate_configuration(Y, probabilities)
         self.evaluated_configurations_ = 1
         self._store_selection_result(result)
@@ -537,11 +654,87 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         ]
         return float(result.score), history
 
-    def _select_partition(self, X, Y, direct_probabilities, cc_model):
+    def _select_partition(
+        self,
+        X,
+        Y,
+        direct_probabilities,
+        cc_model,
+        selection_train_x=None,
+        selection_train_y=None,
+    ):
         """Move labels from DL to IL using the configured objective module."""
         independent = []
         dependent = set(range(self.n_labels_))
         probability_cache = {}
+
+        if self.decoupled_dl:
+            corr = (
+                self._compute_label_correlation(selection_train_y)
+                if selection_train_y is not None
+                else self._compute_label_correlation(Y)
+            )
+
+            def evaluate_decoupled(label_set):
+                key = frozenset(label_set)
+                if key not in probability_cache:
+                    cand_il = set(label_set)
+                    cand_dl = [lbl for lbl in range(self.n_labels_) if lbl not in cand_il]
+                    if not cand_dl:
+                        candidate_probabilities = direct_probabilities.copy()
+                    else:
+                        cand_order = self._intra_dl_correlation_order(corr, cand_dl)
+                        if selection_train_x is not None and selection_train_y is not None:
+                            sub_cc = self._make_cc_model(order=list(range(len(cand_order))))
+                            sub_cc.fit(selection_train_x, selection_train_y[:, cand_order])
+                        else:
+                            sub_cc = cc_model
+                        candidate_probabilities = self._configured_probabilities(
+                            X,
+                            direct_probabilities,
+                            sub_cc,
+                            cand_il,
+                            dl_order=cand_order,
+                        )
+                    probability_cache[key] = (
+                        candidate_probabilities,
+                        self._evaluate_configuration(Y, candidate_probabilities),
+                    )
+                return probability_cache[key]
+
+            current_probabilities, current_result = evaluate_decoupled(independent)
+            current_score = float(current_result.score)
+            history = [
+                self._selection_history_record(0, None, True, current_result, 0.0)
+            ]
+
+            for label in list(self.order_):
+                candidate_set = independent + [label]
+                candidate_probabilities, candidate_result = evaluate_decoupled(
+                    candidate_set
+                )
+                candidate_score = float(candidate_result.score)
+                improvement = float(candidate_score - current_score)
+                accepted = improvement > 1e-12
+                if accepted:
+                    independent.append(label)
+                    dependent.remove(label)
+                    current_probabilities = candidate_probabilities
+                    current_score = float(candidate_score)
+                    current_result = candidate_result
+                history.append(
+                    self._selection_history_record(
+                        len(history),
+                        label,
+                        accepted,
+                        candidate_result,
+                        improvement,
+                    )
+                )
+
+            self.evaluated_configurations_ = int(len(probability_cache))
+            self._store_selection_result(current_result)
+            return sorted(independent), sorted(dependent), current_score, history
 
         def evaluate(label_set, initial_probabilities=None, start_position=0):
             key = frozenset(label_set)
@@ -658,6 +851,8 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
                 Y_array[validation],
                 validation_direct,
                 selection_cc,
+                selection_train_x=X_array[selection_train],
+                selection_train_y=Y_array[selection_train],
             )
             learned_evaluation_count = int(self.evaluated_configurations_)
 
@@ -704,6 +899,8 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
                 validation_direct,
                 selection_cc,
                 self.independent_labels_,
+                selection_train_x=X_array[selection_train],
+                selection_train_y=Y_array[selection_train],
             )
             if self.partition_mode_ == "random_matched":
                 self.evaluated_configurations_ += learned_evaluation_count
@@ -722,6 +919,7 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             "requested_final_order_strategy": (
                 self.requested_final_order_strategy_
             ),
+            "decoupled_dl": bool(self.decoupled_dl),
         })
         self.selection_time_seconds_ = float(perf_counter() - selection_started)
 
@@ -729,14 +927,24 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         # objective/cost may affect selection, but correlation and outer-test
         # data cannot feed back into it.
         self.label_correlation_ = self._compute_label_correlation(Y_array)
-        correlation_order = self._correlation_order(
-            self.label_correlation_,
-            self.independent_labels_,
-            self.dependent_labels_,
-        )
+        if self.decoupled_dl:
+            correlation_order = self._intra_dl_correlation_order(
+                self.label_correlation_,
+                self.dependent_labels_,
+            )
+        else:
+            correlation_order = self._correlation_order(
+                self.label_correlation_,
+                self.independent_labels_,
+                self.dependent_labels_,
+            )
         self.correlation_order_ = [int(label) for label in correlation_order]
         if self.order is not None:
-            desired_final_order = self._validated_order(self.n_labels_)
+            desired_final_order = (
+                [lbl for lbl in self._validated_order(self.n_labels_) if lbl in self.dependent_labels_]
+                if self.decoupled_dl
+                else self._validated_order(self.n_labels_)
+            )
             self.final_order_strategy_ = "explicit"
         else:
             effective_strategy = self.requested_final_order_strategy_
@@ -746,9 +954,17 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             if effective_strategy == "correlation":
                 desired_final_order = list(self.correlation_order_)
             elif effective_strategy == "selection":
-                desired_final_order = list(self.selection_order_)
+                desired_final_order = (
+                    [lbl for lbl in self.selection_order_ if lbl in self.dependent_labels_]
+                    if self.decoupled_dl
+                    else list(self.selection_order_)
+                )
             else:
-                desired_final_order = list(range(self.n_labels_))
+                desired_final_order = (
+                    sorted(self.dependent_labels_)
+                    if self.decoupled_dl
+                    else list(range(self.n_labels_))
+                )
 
         # Fit decision policy on true out-of-sample validation probabilities
         # BEFORE any full-data refit occurs to prevent in-sample data leakage.
@@ -757,12 +973,33 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             val_direct = self._direct_probabilities(
                 selection_br, X_array[validation]
             )
-            val_probs = self._configured_probabilities(
-                X_array[validation],
-                val_direct,
-                selection_cc,
-                self.independent_labels_,
-            )
+            if self.decoupled_dl:
+                val_dl = self.dependent_labels_
+                if val_dl:
+                    val_corr = self._compute_label_correlation(Y_array[selection_train])
+                    val_dl_order = self._intra_dl_correlation_order(val_corr, val_dl)
+                    val_sub_cc = self._make_cc_model(order=list(range(len(val_dl_order))))
+                    val_sub_cc.fit(
+                        X_array[selection_train],
+                        Y_array[selection_train][:, val_dl_order],
+                    )
+                else:
+                    val_sub_cc = None
+                    val_dl_order = []
+                val_probs = self._configured_probabilities(
+                    X_array[validation],
+                    val_direct,
+                    val_sub_cc,
+                    self.independent_labels_,
+                    dl_order=val_dl_order,
+                )
+            else:
+                val_probs = self._configured_probabilities(
+                    X_array[validation],
+                    val_direct,
+                    selection_cc,
+                    self.independent_labels_,
+                )
             self.decision_policy_.fit(
                 val_probs,
                 Y_array[validation],
@@ -784,12 +1021,24 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             final_y = Y_array[selection_train]
             self.refit_train_size_ = self.selection_train_size_
 
-        self.cc_model_ = self._make_cc_model(order=desired_final_order)
-        self.cc_model_.fit(final_x, final_y)
-        if hasattr(self.cc_model_, "order_"):
-            self.order_ = [int(label) for label in self.cc_model_.order_]
+        if self.decoupled_dl:
+            if desired_final_order:
+                self.cc_model_ = self._make_cc_model(
+                    order=list(range(len(desired_final_order)))
+                )
+                self.cc_model_.fit(final_x, final_y[:, desired_final_order])
+                self.order_ = list(desired_final_order)
+            else:
+                self.cc_model_ = None
+                self.order_ = []
         else:
-            self.order_ = list(desired_final_order)
+            self.cc_model_ = self._make_cc_model(order=desired_final_order)
+            self.cc_model_.fit(final_x, final_y)
+            if hasattr(self.cc_model_, "order_"):
+                self.order_ = [int(label) for label in self.cc_model_.order_]
+            else:
+                self.order_ = list(desired_final_order)
+
         self.dependent_parent_map_ = self._dependent_parent_map(
             self.label_correlation_, self.order_, self.dependent_labels_
         )
@@ -816,14 +1065,18 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
 
     def predict_proba(self, X):
         """Return all probabilities under the frozen IL/DL configuration."""
-        check_is_fitted(
-            self,
-            ("is_fitted_", "br_model_", "cc_model_", "independent_labels_"),
-        )
+        required = ["is_fitted_", "br_model_", "independent_labels_"]
+        if not self.decoupled_dl or (hasattr(self, "dependent_labels_") and len(self.dependent_labels_) > 0):
+            required.append("cc_model_")
+        check_is_fitted(self, tuple(required))
         X_array = _as_dense_float(X)
         direct = self._direct_probabilities(self.br_model_, X_array)
         return self._configured_probabilities(
-            X_array, direct, self.cc_model_, self.independent_labels_
+            X_array,
+            direct,
+            self.cc_model_,
+            self.independent_labels_,
+            dl_order=self.order_ if self.decoupled_dl else None,
         )
 
     def predict(self, X):

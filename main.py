@@ -90,6 +90,7 @@ def _create_model(
     min_coverage=None,
     cc_label_noise=0.0,
     mlp_loss="bce",
+    decoupled_dl=None,
 ):
     """Create a supported model from its standardized name."""
     model_key = model_name.upper()
@@ -111,6 +112,7 @@ def _create_model(
             min_coverage=min_coverage,
             cc_label_noise=cc_label_noise,
             mlp_loss=mlp_loss,
+            decoupled_dl=decoupled_dl,
         )
     if model_key in ("BR", "BR_SVC", "BR_LINEARSVC"):
         return BinaryRelevanceClassifier(
@@ -172,6 +174,7 @@ def _create_model(
             min_coverage=min_coverage,
             cc_label_noise=cc_label_noise,
             mlp_loss=mlp_loss,
+            decoupled_dl=bool(decoupled_dl) if decoupled_dl is not None else False,
         )
     raise ValueError(
         f"Unknown model name: {model_name}. Registered: {MATCHED_MODEL_IDS}; "
@@ -670,6 +673,7 @@ def run_experiment(
     min_coverage=None,
     cc_label_noise=0.0,
     mlp_loss="bce",
+    gsi_decoupled_dl=None,
 ):
     """Run only missing model/dataset pairs and then rebuild all plots.
 
@@ -744,6 +748,7 @@ def run_experiment(
             min_coverage=min_coverage,
             cc_label_noise=cc_label_noise,
             mlp_loss=mlp_loss,
+            gsi_decoupled_dl=gsi_decoupled_dl,
         )
 
     figures_dir = os.path.join(output_dir, "plots_pa")
@@ -1328,6 +1333,12 @@ def main():
         default="bce",
         help="Loss function for PyTorch MLP base learners (bce or asymmetric).",
     )
+    parser.add_argument(
+        "--gsi_decoupled_dl",
+        type=lambda v: str(v).lower() in ("true", "1", "yes"),
+        default=None,
+        help="Enable decoupled DL Sub-CC evaluation for GSI models (True/False).",
+    )
     config_parser = argparse.ArgumentParser(add_help=False)
     config_parser.add_argument("--config", type=str, default=None)
     config_args, _ = config_parser.parse_known_args()
@@ -1374,6 +1385,7 @@ def main():
         min_coverage=args.min_coverage,
         cc_label_noise=args.cc_label_noise,
         mlp_loss=args.mlp_loss,
+        gsi_decoupled_dl=args.gsi_decoupled_dl,
     )
 
 

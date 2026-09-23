@@ -1,0 +1,2455 @@
+{
+  "config": {
+    "abstention_costs": [
+      0.2,
+      0.25,
+      0.3,
+      0.35,
+      0.4,
+      0.5
+    ],
+    "abstention_penalty": "linear",
+    "cc_label_noise": 0.0,
+    "critical_labels": null,
+    "dataset": "plantpseaac",
+    "dataset_fingerprint": "9b644f8f8f0cb35f",
+    "dataset_shape": {
+      "features": 440,
+      "labels": 12,
+      "samples": 978
+    },
+    "evaluation_policy": {
+      "acceptance_confidence": "2*abs(probability-0.5)",
+      "calibration": "none",
+      "full_threshold": 0.5,
+      "partial_policy": null
+    },
+    "gsi_beta": 1.0,
+    "gsi_decision_policy": "hamming",
+    "gsi_final_order": "correlation",
+    "gsi_fixed_independent_labels": null,
+    "gsi_partition_mode": "learned",
+    "gsi_penalty": "linear",
+    "gsi_selection_objective": "full_macro_f1",
+    "gsi_validation_size": 0.2,
+    "label_names": [
+      "Cell_membrane",
+      "Cell_wall",
+      "Chloroplast",
+      "Cytoplasm",
+      "Endoplasmic_reticulum",
+      "Extracell",
+      "Golgi_apparatus",
+      "Mitochondrion",
+      "Nucleus",
+      "Peroxisome",
+      "Plastid",
+      "Vacuole"
+    ],
+    "label_policy_hash": null,
+    "metric_contract_version": "3.0-contract",
+    "min_coverage": null,
+    "mlc_pa_base": "logistic",
+    "mlp_loss": "bce",
+    "model": "CC_MLP",
+    "model_signature": {
+      "backend": "pytorch",
+      "class": "src.models.classifier_chain.ClassifierChainClassifier",
+      "experiment_manifest": {
+        "base_learner": {
+          "backend": "pytorch",
+          "binary_class": "src.models.pytorch_mlp.FastPyTorchBinaryMLP",
+          "binary_parameters": {
+            "calibration": "sigmoid",
+            "epochs": 30,
+            "hidden_layer_sizes": [
+              64
+            ],
+            "lr": 0.001,
+            "unbias_pos_weight": false,
+            "weight_decay": 0.001
+          },
+          "multilabel_class": "src.models.pytorch_mlp.MultiLabelMLPClassifier",
+          "multilabel_parameters": {
+            "calibration": "sigmoid",
+            "dropout": 0.15,
+            "epochs": 30,
+            "hidden_layer_sizes": [
+              128,
+              64
+            ],
+            "lr": 0.001,
+            "pos_weight_clamp": 15.0,
+            "unbias_pos_weight": false,
+            "weight_decay": 0.001
+          },
+          "name": "mlp"
+        },
+        "experiment_config_schema": 1,
+        "family": "CC",
+        "model_id": "CC_MLP",
+        "model_parameters": {
+          "base_estimator": "mlp",
+          "label_noise": 0.0,
+          "order": null,
+          "random_state": 42
+        },
+        "selective": false
+      },
+      "parameters": {
+        "base_estimator": "mlp",
+        "label_noise": 0.0,
+        "order": null,
+        "random_state": 42
+      }
+    },
+    "n_splits": 5,
+    "operating_point": {
+      "coverage_gamma": 0.8,
+      "risk_epsilon": 0.1,
+      "rule": null,
+      "selection_scope": "inner_validation",
+      "validation_size": 0.2
+    },
+    "random_state": 42,
+    "report_cost": 0.3,
+    "scaler": "MaxAbsScaler",
+    "schema_version": 3,
+    "split_hash": "b524ee91eca4da90"
+  },
+  "config_hash": "7551a62f9b43717c",
+  "created_at": "2026-09-23T09:33:57.424325+00:00",
+  "dataset": "plantpseaac",
+  "folds": {
+    "1": {
+      "metadata": {
+        "Test Size": 196,
+        "Train And Evaluate Seconds": 0.38045644760131836,
+        "Train Size": 782
+      },
+      "metrics": {
+        "Calibration": {
+          "Bin Count": 10,
+          "Metrics": {
+            "Brier Score": 0.07248358428198799,
+            "ECE": 0.031359214781033845,
+            "Log Loss": 0.25139076589350606
+          },
+          "Per Label": [
+            {
+              "Brier Score": 0.05967468856221168,
+              "ECE": 0.03698988734478397,
+              "Label Index": 0,
+              "Label Name": "Cell_membrane",
+              "Log Loss": 0.2131761626855405
+            },
+            {
+              "Brier Score": 0.030326558579081262,
+              "ECE": 0.018445395698238692,
+              "Label Index": 1,
+              "Label Name": "Cell_wall",
+              "Log Loss": 0.1252589798518819
+            },
+            {
+              "Brier Score": 0.19117170712074744,
+              "ECE": 0.08893006501187173,
+              "Label Index": 2,
+              "Label Name": "Chloroplast",
+              "Log Loss": 0.5769109113144021
+            },
+            {
+              "Brier Score": 0.15633557651895294,
+              "ECE": 0.12566524442014754,
+              "Label Index": 3,
+              "Label Name": "Cytoplasm",
+              "Log Loss": 0.4640275039613233
+            },
+            {
+              "Brier Score": 0.03936253083300082,
+              "ECE": 0.01458960274538519,
+              "Label Index": 4,
+              "Label Name": "Endoplasmic_reticulum",
+              "Log Loss": 0.16623741828754235
+            },
+            {
+              "Brier Score": 0.023911946412602664,
+              "ECE": 0.008672340188296606,
+              "Label Index": 5,
+              "Label Name": "Extracell",
+              "Log Loss": 0.10093844119547446
+            },
+            {
+              "Brier Score": 0.020050899243033007,
+              "ECE": 0.0006770374828341362,
+              "Label Index": 6,
+              "Label Name": "Golgi_apparatus",
+              "Log Loss": 0.09953534232170931
+            },
+            {
+              "Brier Score": 0.1508830737436375,
+              "ECE": 0.11684611780844699,
+              "Label Index": 7,
+              "Label Name": "Mitochondrion",
+              "Log Loss": 0.5334803574380867
+            },
+            {
+              "Brier Score": 0.09353055464913768,
+              "ECE": 0.04753922476527582,
+              "Label Index": 8,
+              "Label Name": "Nucleus",
+              "Log Loss": 0.3047665127185191
+            },
+            {
+              "Brier Score": 0.02000889555620894,
+              "ECE": 0.0014105724474909355,
+              "Label Index": 9,
+              "Label Name": "Peroxisome",
+              "Log Loss": 0.09955942621355618
+            },
+            {
+              "Brier Score": 0.03362663019403262,
+              "ECE": 0.01985976165765722,
+              "Label Index": 10,
+              "Label Name": "Plastid",
+              "Log Loss": 0.12816429582851158
+            },
+            {
+              "Brier Score": 0.05091994997120943,
+              "ECE": 0.03179127558586497,
+              "Label Index": 11,
+              "Label Name": "Vacuole",
+              "Log Loss": 0.20463383890552528
+            }
+          ],
+          "Reliability": [
+            {
+              "Absolute Gap": 0.009101406169986014,
+              "Bin": 0,
+              "Count": 1846,
+              "Lower Bound": 0.0,
+              "Mean Predicted Probability": 0.025026437817012904,
+              "Observed Positive Rate": 0.03412784398699892,
+              "Upper Bound": 0.1
+            },
+            {
+              "Absolute Gap": 0.09207658266109198,
+              "Bin": 1,
+              "Count": 183,
+              "Lower Bound": 0.1,
+              "Mean Predicted Probability": 0.14289609493453645,
+              "Observed Positive Rate": 0.23497267759562843,
+              "Upper Bound": 0.2
+            },
+            {
+              "Absolute Gap": 0.04773871039990149,
+              "Bin": 2,
+              "Count": 101,
+              "Lower Bound": 0.2,
+              "Mean Predicted Probability": 0.24575851238009952,
+              "Observed Positive Rate": 0.19801980198019803,
+              "Upper Bound": 0.3
+            },
+            {
+              "Absolute Gap": 0.01848300313577056,
+              "Bin": 3,
+              "Count": 64,
+              "Lower Bound": 0.3,
+              "Mean Predicted Probability": 0.34660800313577056,
+              "Observed Positive Rate": 0.328125,
+              "Upper Bound": 0.4
+            },
+            {
+              "Absolute Gap": 0.06588799977789123,
+              "Bin": 4,
+              "Count": 49,
+              "Lower Bound": 0.4,
+              "Mean Predicted Probability": 0.45364310181870754,
+              "Observed Positive Rate": 0.3877551020408163,
+              "Upper Bound": 0.5
+            },
+            {
+              "Absolute Gap": 0.259841687977314,
+              "Bin": 5,
+              "Count": 32,
+              "Lower Bound": 0.5,
+              "Mean Predicted Probability": 0.541091687977314,
+              "Observed Positive Rate": 0.28125,
+              "Upper Bound": 0.6
+            },
+            {
+              "Absolute Gap": 0.36293981415884835,
+              "Bin": 6,
+              "Count": 35,
+              "Lower Bound": 0.6,
+              "Mean Predicted Probability": 0.648654099873134,
+              "Observed Positive Rate": 0.2857142857142857,
+              "Upper Bound": 0.7
+            },
+            {
+              "Absolute Gap": 0.28167818574344416,
+              "Bin": 7,
+              "Count": 17,
+              "Lower Bound": 0.7,
+              "Mean Predicted Probability": 0.7522664210375618,
+              "Observed Positive Rate": 0.47058823529411764,
+              "Upper Bound": 0.8
+            },
+            {
+              "Absolute Gap": 0.16492759436368942,
+              "Bin": 8,
+              "Count": 16,
+              "Lower Bound": 0.8,
+              "Mean Predicted Probability": 0.8524275943636894,
+              "Observed Positive Rate": 0.6875,
+              "Upper Bound": 0.9
+            },
+            {
+              "Absolute Gap": 0.2697145144144695,
+              "Bin": 9,
+              "Count": 9,
+              "Lower Bound": 0.9,
+              "Mean Predicted Probability": 0.9363811810811361,
+              "Observed Positive Rate": 0.6666666666666666,
+              "Upper Bound": 1.0
+            }
+          ],
+          "Sample Label Count": 2352
+        },
+        "Costs": {},
+        "Critical Labels": {
+          "Reason": "critical_labels is not configured by the domain",
+          "Records": [],
+          "Status": "N/A"
+        },
+        "Full": {
+          "Hamming Accuracy": 0.9017857142857143,
+          "Hamming Loss": 0.09821428571428571,
+          "Instance Jaccard": 0.1913265306122449,
+          "Instance-F1": 0.20238095238095236,
+          "Macro Precision": 0.21563674812030073,
+          "Macro Recall": 0.12946409327988276,
+          "Macro-F1": 0.16123418780745755,
+          "Micro-F1": 0.27586206896551724,
+          "Subset Accuracy": 0.15816326530612246
+        },
+        "Groups": {},
+        "Metric Contract Version": "3.0-contract",
+        "Model Metadata": {
+          "Experiment Manifest": {
+            "base_learner": {
+              "backend": "pytorch",
+              "binary_class": "src.models.pytorch_mlp.FastPyTorchBinaryMLP",
+              "binary_parameters": {
+                "calibration": "sigmoid",
+                "epochs": 30,
+                "hidden_layer_sizes": [
+                  64
+                ],
+                "lr": 0.001,
+                "unbias_pos_weight": false,
+                "weight_decay": 0.001
+              },
+              "multilabel_class": "src.models.pytorch_mlp.MultiLabelMLPClassifier",
+              "multilabel_parameters": {
+                "calibration": "sigmoid",
+                "dropout": 0.15,
+                "epochs": 30,
+                "hidden_layer_sizes": [
+                  128,
+                  64
+                ],
+                "lr": 0.001,
+                "pos_weight_clamp": 15.0,
+                "unbias_pos_weight": false,
+                "weight_decay": 0.001
+              },
+              "name": "mlp"
+            },
+            "experiment_config_schema": 1,
+            "family": "CC",
+            "model_id": "CC_MLP",
+            "model_parameters": {
+              "base_estimator": "mlp",
+              "label_noise": 0.0,
+              "order": null,
+              "random_state": 42
+            },
+            "selective": false
+          }
+        },
+        "Per Label": [
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.1111111111111111,
+            "Full Hamming Accuracy": 0.9183673469387755,
+            "Full Precision": 0.14285714285714285,
+            "Full Recall": 0.09090909090909091,
+            "Label Index": 0,
+            "Label Name": "Cell_membrane",
+            "Negative Support": 185,
+            "Positive Support": 11,
+            "Prevalence": 0.05612244897959184,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.1111111111111111,
+            "Selective Precision": 0.14285714285714285,
+            "Selective Recall": 0.09090909090909091
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9693877551020408,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 1,
+            "Label Name": "Cell_wall",
+            "Negative Support": 190,
+            "Positive Support": 6,
+            "Prevalence": 0.030612244897959183,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.38202247191011235,
+            "Full Hamming Accuracy": 0.7193877551020408,
+            "Full Precision": 0.53125,
+            "Full Recall": 0.2982456140350877,
+            "Label Index": 2,
+            "Label Name": "Chloroplast",
+            "Negative Support": 139,
+            "Positive Support": 57,
+            "Prevalence": 0.29081632653061223,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.38202247191011235,
+            "Selective Precision": 0.53125,
+            "Selective Recall": 0.2982456140350877
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.10714285714285714,
+            "Full Hamming Accuracy": 0.7448979591836735,
+            "Full Precision": 0.15789473684210525,
+            "Full Recall": 0.08108108108108109,
+            "Label Index": 3,
+            "Label Name": "Cytoplasm",
+            "Negative Support": 159,
+            "Positive Support": 37,
+            "Prevalence": 0.18877551020408162,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.10714285714285714,
+            "Selective Precision": 0.15789473684210525,
+            "Selective Recall": 0.08108108108108109
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9591836734693877,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 4,
+            "Label Name": "Endoplasmic_reticulum",
+            "Negative Support": 188,
+            "Positive Support": 8,
+            "Prevalence": 0.04081632653061224,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9744897959183674,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 5,
+            "Label Name": "Extracell",
+            "Negative Support": 191,
+            "Positive Support": 5,
+            "Prevalence": 0.025510204081632654,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9795918367346939,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 6,
+            "Label Name": "Golgi_apparatus",
+            "Negative Support": 192,
+            "Positive Support": 4,
+            "Prevalence": 0.02040816326530612,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.23529411764705882,
+            "Full Hamming Accuracy": 0.8010204081632653,
+            "Full Precision": 0.2857142857142857,
+            "Full Recall": 0.2,
+            "Label Index": 7,
+            "Label Name": "Mitochondrion",
+            "Negative Support": 166,
+            "Positive Support": 30,
+            "Prevalence": 0.15306122448979592,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.23529411764705882,
+            "Selective Precision": 0.2857142857142857,
+            "Selective Recall": 0.2
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.5306122448979592,
+            "Full Hamming Accuracy": 0.8826530612244898,
+            "Full Precision": 0.6842105263157895,
+            "Full Recall": 0.43333333333333335,
+            "Label Index": 8,
+            "Label Name": "Nucleus",
+            "Negative Support": 166,
+            "Positive Support": 30,
+            "Prevalence": 0.15306122448979592,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.5306122448979592,
+            "Selective Precision": 0.6842105263157895,
+            "Selective Recall": 0.43333333333333335
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9795918367346939,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 9,
+            "Label Name": "Peroxisome",
+            "Negative Support": 192,
+            "Positive Support": 4,
+            "Prevalence": 0.02040816326530612,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.3333333333333333,
+            "Full Hamming Accuracy": 0.9591836734693877,
+            "Full Precision": 0.5,
+            "Full Recall": 0.25,
+            "Label Index": 10,
+            "Label Name": "Plastid",
+            "Negative Support": 188,
+            "Positive Support": 8,
+            "Prevalence": 0.04081632653061224,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.3333333333333333,
+            "Selective Precision": 0.5,
+            "Selective Recall": 0.25
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.23529411764705882,
+            "Full Hamming Accuracy": 0.9336734693877551,
+            "Full Precision": 0.2857142857142857,
+            "Full Recall": 0.2,
+            "Label Index": 11,
+            "Label Name": "Vacuole",
+            "Negative Support": 186,
+            "Positive Support": 10,
+            "Prevalence": 0.05102040816326531,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.23529411764705882,
+            "Selective Precision": 0.2857142857142857,
+            "Selective Recall": 0.2
+          }
+        ],
+        "Schema Version": 3
+      }
+    },
+    "2": {
+      "metadata": {
+        "Test Size": 198,
+        "Train And Evaluate Seconds": 0.41138482093811035,
+        "Train Size": 780
+      },
+      "metrics": {
+        "Calibration": {
+          "Bin Count": 10,
+          "Metrics": {
+            "Brier Score": 0.06977691145689766,
+            "ECE": 0.0219094424923508,
+            "Log Loss": 0.2482725479227474
+          },
+          "Per Label": [
+            {
+              "Brier Score": 0.051974881001878054,
+              "ECE": 0.02947915637233021,
+              "Label Index": 0,
+              "Label Name": "Cell_membrane",
+              "Log Loss": 0.2116420309178372
+            },
+            {
+              "Brier Score": 0.028818043394847566,
+              "ECE": 0.01132852476439439,
+              "Label Index": 1,
+              "Label Name": "Cell_wall",
+              "Log Loss": 0.12694321459444938
+            },
+            {
+              "Brier Score": 0.19350060686852935,
+              "ECE": 0.07075919521586838,
+              "Label Index": 2,
+              "Label Name": "Chloroplast",
+              "Log Loss": 0.5900905300474245
+            },
+            {
+              "Brier Score": 0.12771264115307018,
+              "ECE": 0.0460646758170568,
+              "Label Index": 3,
+              "Label Name": "Cytoplasm",
+              "Log Loss": 0.3941538563962748
+            },
+            {
+              "Brier Score": 0.044375777393360204,
+              "ECE": 0.01899732506335384,
+              "Label Index": 4,
+              "Label Name": "Endoplasmic_reticulum",
+              "Log Loss": 0.18196847800291185
+            },
+            {
+              "Brier Score": 0.019244784054716472,
+              "ECE": 0.0021547504554907146,
+              "Label Index": 5,
+              "Label Name": "Extracell",
+              "Log Loss": 0.08508654585771687
+            },
+            {
+              "Brier Score": 0.024691462717492445,
+              "ECE": 0.006415742411833219,
+              "Label Index": 6,
+              "Label Name": "Golgi_apparatus",
+              "Log Loss": 0.11904377401526492
+            },
+            {
+              "Brier Score": 0.14282715529227652,
+              "ECE": 0.11309788662758291,
+              "Label Index": 7,
+              "Label Name": "Mitochondrion",
+              "Log Loss": 0.5189430823832003
+            },
+            {
+              "Brier Score": 0.0932619963643692,
+              "ECE": 0.028304021468864796,
+              "Label Index": 8,
+              "Label Name": "Nucleus",
+              "Log Loss": 0.3152607608315166
+            },
+            {
+              "Brier Score": 0.019654868055492263,
+              "ECE": 0.001065216144791454,
+              "Label Index": 9,
+              "Label Name": "Peroxisome",
+              "Log Loss": 0.09537363423338062
+            },
+            {
+              "Brier Score": 0.03598868483253102,
+              "ECE": 0.03408787904382651,
+              "Label Index": 10,
+              "Label Name": "Plastid",
+              "Log Loss": 0.14252594143631395
+            },
+            {
+              "Brier Score": 0.055272036354208715,
+              "ECE": 0.04385415720870963,
+              "Label Index": 11,
+              "Label Name": "Vacuole",
+              "Log Loss": 0.19823872635667758
+            }
+          ],
+          "Reliability": [
+            {
+              "Absolute Gap": 0.013002903155738401,
+              "Bin": 0,
+              "Count": 1884,
+              "Lower Bound": 0.0,
+              "Mean Predicted Probability": 0.025213657353815738,
+              "Observed Positive Rate": 0.03821656050955414,
+              "Upper Bound": 0.1
+            },
+            {
+              "Absolute Gap": 0.007484565683922084,
+              "Bin": 1,
+              "Count": 172,
+              "Lower Bound": 0.1,
+              "Mean Predicted Probability": 0.14367822501375233,
+              "Observed Positive Rate": 0.1511627906976744,
+              "Upper Bound": 0.2
+            },
+            {
+              "Absolute Gap": 0.016350555751058787,
+              "Bin": 2,
+              "Count": 108,
+              "Lower Bound": 0.2,
+              "Mean Predicted Probability": 0.24783203723254027,
+              "Observed Positive Rate": 0.23148148148148148,
+              "Upper Bound": 0.3
+            },
+            {
+              "Absolute Gap": 0.018763114712131546,
+              "Bin": 3,
+              "Count": 67,
+              "Lower Bound": 0.3,
+              "Mean Predicted Probability": 0.34712132366735543,
+              "Observed Positive Rate": 0.3283582089552239,
+              "Upper Bound": 0.4
+            },
+            {
+              "Absolute Gap": 0.07384682260453701,
+              "Bin": 4,
+              "Count": 48,
+              "Lower Bound": 0.4,
+              "Mean Predicted Probability": 0.448846822604537,
+              "Observed Positive Rate": 0.375,
+              "Upper Bound": 0.5
+            },
+            {
+              "Absolute Gap": 0.02014707691139639,
+              "Bin": 5,
+              "Count": 36,
+              "Lower Bound": 0.5,
+              "Mean Predicted Probability": 0.5479248546891742,
+              "Observed Positive Rate": 0.5277777777777778,
+              "Upper Bound": 0.6
+            },
+            {
+              "Absolute Gap": 0.27681581676006317,
+              "Bin": 6,
+              "Count": 16,
+              "Lower Bound": 0.6,
+              "Mean Predicted Probability": 0.6518158167600632,
+              "Observed Positive Rate": 0.375,
+              "Upper Bound": 0.7
+            },
+            {
+              "Absolute Gap": 0.3036516532301903,
+              "Bin": 7,
+              "Count": 16,
+              "Lower Bound": 0.7,
+              "Mean Predicted Probability": 0.7411516532301903,
+              "Observed Positive Rate": 0.4375,
+              "Upper Bound": 0.8
+            },
+            {
+              "Absolute Gap": 0.2980438371499379,
+              "Bin": 8,
+              "Count": 18,
+              "Lower Bound": 0.8,
+              "Mean Predicted Probability": 0.8535993927054935,
+              "Observed Positive Rate": 0.5555555555555556,
+              "Upper Bound": 0.9
+            },
+            {
+              "Absolute Gap": 0.39334736087105493,
+              "Bin": 9,
+              "Count": 11,
+              "Lower Bound": 0.9,
+              "Mean Predicted Probability": 0.9388019063256003,
+              "Observed Positive Rate": 0.5454545454545454,
+              "Upper Bound": 1.0
+            }
+          ],
+          "Sample Label Count": 2376
+        },
+        "Costs": {},
+        "Critical Labels": {
+          "Reason": "critical_labels is not configured by the domain",
+          "Records": [],
+          "Status": "N/A"
+        },
+        "Full": {
+          "Hamming Accuracy": 0.9107744107744108,
+          "Hamming Loss": 0.08922558922558922,
+          "Instance Jaccard": 0.21885521885521883,
+          "Instance-F1": 0.2264309764309764,
+          "Macro Precision": 0.21691618566618565,
+          "Macro Recall": 0.12122319688109162,
+          "Macro-F1": 0.15374999999999997,
+          "Micro-F1": 0.3116883116883117,
+          "Subset Accuracy": 0.19696969696969696
+        },
+        "Groups": {},
+        "Metric Contract Version": "3.0-contract",
+        "Model Metadata": {
+          "Experiment Manifest": {
+            "base_learner": {
+              "backend": "pytorch",
+              "binary_class": "src.models.pytorch_mlp.FastPyTorchBinaryMLP",
+              "binary_parameters": {
+                "calibration": "sigmoid",
+                "epochs": 30,
+                "hidden_layer_sizes": [
+                  64
+                ],
+                "lr": 0.001,
+                "unbias_pos_weight": false,
+                "weight_decay": 0.001
+              },
+              "multilabel_class": "src.models.pytorch_mlp.MultiLabelMLPClassifier",
+              "multilabel_parameters": {
+                "calibration": "sigmoid",
+                "dropout": 0.15,
+                "epochs": 30,
+                "hidden_layer_sizes": [
+                  128,
+                  64
+                ],
+                "lr": 0.001,
+                "pos_weight_clamp": 15.0,
+                "unbias_pos_weight": false,
+                "weight_decay": 0.001
+              },
+              "name": "mlp"
+            },
+            "experiment_config_schema": 1,
+            "family": "CC",
+            "model_id": "CC_MLP",
+            "model_parameters": {
+              "base_estimator": "mlp",
+              "label_noise": 0.0,
+              "order": null,
+              "random_state": 42
+            },
+            "selective": false
+          }
+        },
+        "Per Label": [
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9393939393939394,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 0,
+            "Label Name": "Cell_membrane",
+            "Negative Support": 187,
+            "Positive Support": 11,
+            "Prevalence": 0.05555555555555555,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9696969696969697,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 1,
+            "Label Name": "Cell_wall",
+            "Negative Support": 192,
+            "Positive Support": 6,
+            "Prevalence": 0.030303030303030304,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.4,
+            "Full Hamming Accuracy": 0.7272727272727273,
+            "Full Precision": 0.5454545454545454,
+            "Full Recall": 0.3157894736842105,
+            "Label Index": 2,
+            "Label Name": "Chloroplast",
+            "Negative Support": 141,
+            "Positive Support": 57,
+            "Prevalence": 0.2878787878787879,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.4,
+            "Selective Precision": 0.5454545454545454,
+            "Selective Recall": 0.3157894736842105
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.32,
+            "Full Hamming Accuracy": 0.8282828282828283,
+            "Full Precision": 0.5714285714285714,
+            "Full Recall": 0.2222222222222222,
+            "Label Index": 3,
+            "Label Name": "Cytoplasm",
+            "Negative Support": 162,
+            "Positive Support": 36,
+            "Prevalence": 0.18181818181818182,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.32,
+            "Selective Precision": 0.5714285714285714,
+            "Selective Recall": 0.2222222222222222
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9545454545454546,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 4,
+            "Label Name": "Endoplasmic_reticulum",
+            "Negative Support": 189,
+            "Positive Support": 9,
+            "Prevalence": 0.045454545454545456,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9797979797979798,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 5,
+            "Label Name": "Extracell",
+            "Negative Support": 194,
+            "Positive Support": 4,
+            "Prevalence": 0.020202020202020204,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9747474747474747,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 6,
+            "Label Name": "Golgi_apparatus",
+            "Negative Support": 193,
+            "Positive Support": 5,
+            "Prevalence": 0.025252525252525252,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.3333333333333333,
+            "Full Hamming Accuracy": 0.8181818181818182,
+            "Full Precision": 0.375,
+            "Full Recall": 0.3,
+            "Label Index": 7,
+            "Label Name": "Mitochondrion",
+            "Negative Support": 168,
+            "Positive Support": 30,
+            "Prevalence": 0.15151515151515152,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.3333333333333333,
+            "Selective Precision": 0.375,
+            "Selective Recall": 0.3
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.4583333333333333,
+            "Full Hamming Accuracy": 0.8686868686868687,
+            "Full Precision": 0.6111111111111112,
+            "Full Recall": 0.36666666666666664,
+            "Label Index": 8,
+            "Label Name": "Nucleus",
+            "Negative Support": 168,
+            "Positive Support": 30,
+            "Prevalence": 0.15151515151515152,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.4583333333333333,
+            "Selective Precision": 0.6111111111111112,
+            "Selective Recall": 0.36666666666666664
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9797979797979798,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 9,
+            "Label Name": "Peroxisome",
+            "Negative Support": 194,
+            "Positive Support": 4,
+            "Prevalence": 0.020202020202020204,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.3333333333333333,
+            "Full Hamming Accuracy": 0.9595959595959596,
+            "Full Precision": 0.5,
+            "Full Recall": 0.25,
+            "Label Index": 10,
+            "Label Name": "Plastid",
+            "Negative Support": 190,
+            "Positive Support": 8,
+            "Prevalence": 0.04040404040404041,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.3333333333333333,
+            "Selective Precision": 0.5,
+            "Selective Recall": 0.25
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9292929292929293,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 11,
+            "Label Name": "Vacuole",
+            "Negative Support": 187,
+            "Positive Support": 11,
+            "Prevalence": 0.05555555555555555,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          }
+        ],
+        "Schema Version": 3
+      }
+    },
+    "3": {
+      "metadata": {
+        "Test Size": 194,
+        "Train And Evaluate Seconds": 0.37587642669677734,
+        "Train Size": 784
+      },
+      "metrics": {
+        "Calibration": {
+          "Bin Count": 10,
+          "Metrics": {
+            "Brier Score": 0.06907832418309028,
+            "ECE": 0.023211079091931933,
+            "Log Loss": 0.23879664464257516
+          },
+          "Per Label": [
+            {
+              "Brier Score": 0.05184792946881974,
+              "ECE": 0.02004644314676869,
+              "Label Index": 0,
+              "Label Name": "Cell_membrane",
+              "Log Loss": 0.19796566205594604
+            },
+            {
+              "Brier Score": 0.020961267798481682,
+              "ECE": 0.010775249219168285,
+              "Label Index": 1,
+              "Label Name": "Cell_wall",
+              "Log Loss": 0.09472908443692643
+            },
+            {
+              "Brier Score": 0.18462480499160536,
+              "ECE": 0.07271470037557799,
+              "Label Index": 2,
+              "Label Name": "Chloroplast",
+              "Log Loss": 0.5563942378478343
+            },
+            {
+              "Brier Score": 0.14580540896030214,
+              "ECE": 0.08569334364816764,
+              "Label Index": 3,
+              "Label Name": "Cytoplasm",
+              "Log Loss": 0.44860450129508556
+            },
+            {
+              "Brier Score": 0.03857035621085008,
+              "ECE": 0.0022598025004965123,
+              "Label Index": 4,
+              "Label Name": "Endoplasmic_reticulum",
+              "Log Loss": 0.16130051807518145
+            },
+            {
+              "Brier Score": 0.019088141542373954,
+              "ECE": 0.004728616253693695,
+              "Label Index": 5,
+              "Label Name": "Extracell",
+              "Log Loss": 0.07879326228218196
+            },
+            {
+              "Brier Score": 0.020044866920629806,
+              "ECE": 0.0016309444974992697,
+              "Label Index": 6,
+              "Label Name": "Golgi_apparatus",
+              "Log Loss": 0.09641578839064655
+            },
+            {
+              "Brier Score": 0.13799936179691863,
+              "ECE": 0.0947912899191016,
+              "Label Index": 7,
+              "Label Name": "Mitochondrion",
+              "Log Loss": 0.45199724439742794
+            },
+            {
+              "Brier Score": 0.10836273971420099,
+              "ECE": 0.07088732599105552,
+              "Label Index": 8,
+              "Label Name": "Nucleus",
+              "Log Loss": 0.35429173876305814
+            },
+            {
+              "Brier Score": 0.024983666306135924,
+              "ECE": 0.0050877816159009305,
+              "Label Index": 9,
+              "Label Name": "Peroxisome",
+              "Log Loss": 0.11605293074170758
+            },
+            {
+              "Brier Score": 0.02413880187947767,
+              "ECE": 0.014215346573391142,
+              "Label Index": 10,
+              "Label Name": "Plastid",
+              "Log Loss": 0.09553305495116061
+            },
+            {
+              "Brier Score": 0.052512544607287374,
+              "ECE": 0.043867803656390494,
+              "Label Index": 11,
+              "Label Name": "Vacuole",
+              "Log Loss": 0.21348171247374523
+            }
+          ],
+          "Reliability": [
+            {
+              "Absolute Gap": 0.011389094748235361,
+              "Bin": 0,
+              "Count": 1828,
+              "Lower Bound": 0.0,
+              "Mean Predicted Probability": 0.025262984026381708,
+              "Observed Positive Rate": 0.03665207877461707,
+              "Upper Bound": 0.1
+            },
+            {
+              "Absolute Gap": 0.017561511481335168,
+              "Bin": 1,
+              "Count": 181,
+              "Lower Bound": 0.1,
+              "Mean Predicted Probability": 0.14265948299380296,
+              "Observed Positive Rate": 0.16022099447513813,
+              "Upper Bound": 0.2
+            },
+            {
+              "Absolute Gap": 0.0016700490661289147,
+              "Bin": 2,
+              "Count": 115,
+              "Lower Bound": 0.2,
+              "Mean Predicted Probability": 0.24514830993569414,
+              "Observed Positive Rate": 0.24347826086956523,
+              "Upper Bound": 0.3
+            },
+            {
+              "Absolute Gap": 0.08346790865975984,
+              "Bin": 3,
+              "Count": 49,
+              "Lower Bound": 0.3,
+              "Mean Predicted Probability": 0.34877403110873945,
+              "Observed Positive Rate": 0.2653061224489796,
+              "Upper Bound": 0.4
+            },
+            {
+              "Absolute Gap": 0.094938016600079,
+              "Bin": 4,
+              "Count": 45,
+              "Lower Bound": 0.4,
+              "Mean Predicted Probability": 0.45049357215563457,
+              "Observed Positive Rate": 0.35555555555555557,
+              "Upper Bound": 0.5
+            },
+            {
+              "Absolute Gap": 0.12299180187677083,
+              "Bin": 5,
+              "Count": 38,
+              "Lower Bound": 0.5,
+              "Mean Predicted Probability": 0.5440444334557182,
+              "Observed Positive Rate": 0.42105263157894735,
+              "Upper Bound": 0.6
+            },
+            {
+              "Absolute Gap": 0.11212745484183817,
+              "Bin": 6,
+              "Count": 17,
+              "Lower Bound": 0.6,
+              "Mean Predicted Probability": 0.6415392195477205,
+              "Observed Positive Rate": 0.5294117647058824,
+              "Upper Bound": 0.7
+            },
+            {
+              "Absolute Gap": 0.24486161172389986,
+              "Bin": 7,
+              "Count": 20,
+              "Lower Bound": 0.7,
+              "Mean Predicted Probability": 0.7448616117238999,
+              "Observed Positive Rate": 0.5,
+              "Upper Bound": 0.8
+            },
+            {
+              "Absolute Gap": 0.3286793771244231,
+              "Bin": 8,
+              "Count": 21,
+              "Lower Bound": 0.8,
+              "Mean Predicted Probability": 0.8524889009339469,
+              "Observed Positive Rate": 0.5238095238095238,
+              "Upper Bound": 0.9
+            },
+            {
+              "Absolute Gap": 0.22171036260468613,
+              "Bin": 9,
+              "Count": 14,
+              "Lower Bound": 0.9,
+              "Mean Predicted Probability": 0.9359960768904004,
+              "Observed Positive Rate": 0.7142857142857143,
+              "Upper Bound": 1.0
+            }
+          ],
+          "Sample Label Count": 2328
+        },
+        "Costs": {},
+        "Critical Labels": {
+          "Reason": "critical_labels is not configured by the domain",
+          "Records": [],
+          "Status": "N/A"
+        },
+        "Full": {
+          "Hamming Accuracy": 0.9110824742268041,
+          "Hamming Loss": 0.08891752577319588,
+          "Instance Jaccard": 0.26202749140893467,
+          "Instance-F1": 0.2706185567010309,
+          "Macro Precision": 0.3453533891033891,
+          "Macro Recall": 0.16645556543688975,
+          "Macro-F1": 0.217507693045207,
+          "Micro-F1": 0.3510971786833856,
+          "Subset Accuracy": 0.23711340206185566
+        },
+        "Groups": {},
+        "Metric Contract Version": "3.0-contract",
+        "Model Metadata": {
+          "Experiment Manifest": {
+            "base_learner": {
+              "backend": "pytorch",
+              "binary_class": "src.models.pytorch_mlp.FastPyTorchBinaryMLP",
+              "binary_parameters": {
+                "calibration": "sigmoid",
+                "epochs": 30,
+                "hidden_layer_sizes": [
+                  64
+                ],
+                "lr": 0.001,
+                "unbias_pos_weight": false,
+                "weight_decay": 0.001
+              },
+              "multilabel_class": "src.models.pytorch_mlp.MultiLabelMLPClassifier",
+              "multilabel_parameters": {
+                "calibration": "sigmoid",
+                "dropout": 0.15,
+                "epochs": 30,
+                "hidden_layer_sizes": [
+                  128,
+                  64
+                ],
+                "lr": 0.001,
+                "pos_weight_clamp": 15.0,
+                "unbias_pos_weight": false,
+                "weight_decay": 0.001
+              },
+              "name": "mlp"
+            },
+            "experiment_config_schema": 1,
+            "family": "CC",
+            "model_id": "CC_MLP",
+            "model_parameters": {
+              "base_estimator": "mlp",
+              "label_noise": 0.0,
+              "order": null,
+              "random_state": 42
+            },
+            "selective": false
+          }
+        },
+        "Per Label": [
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9432989690721649,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 0,
+            "Label Name": "Cell_membrane",
+            "Negative Support": 183,
+            "Positive Support": 11,
+            "Prevalence": 0.05670103092783505,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.5,
+            "Full Hamming Accuracy": 0.979381443298969,
+            "Full Precision": 1.0,
+            "Full Recall": 0.3333333333333333,
+            "Label Index": 1,
+            "Label Name": "Cell_wall",
+            "Negative Support": 188,
+            "Positive Support": 6,
+            "Prevalence": 0.030927835051546393,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.5,
+            "Selective Precision": 1.0,
+            "Selective Recall": 0.3333333333333333
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.48936170212765956,
+            "Full Hamming Accuracy": 0.7525773195876289,
+            "Full Precision": 0.6216216216216216,
+            "Full Recall": 0.40350877192982454,
+            "Label Index": 2,
+            "Label Name": "Chloroplast",
+            "Negative Support": 137,
+            "Positive Support": 57,
+            "Prevalence": 0.29381443298969073,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.48936170212765956,
+            "Selective Precision": 0.6216216216216216,
+            "Selective Recall": 0.40350877192982454
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.2807017543859649,
+            "Full Hamming Accuracy": 0.788659793814433,
+            "Full Precision": 0.38095238095238093,
+            "Full Recall": 0.2222222222222222,
+            "Label Index": 3,
+            "Label Name": "Cytoplasm",
+            "Negative Support": 158,
+            "Positive Support": 36,
+            "Prevalence": 0.18556701030927836,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.2807017543859649,
+            "Selective Precision": 0.38095238095238093,
+            "Selective Recall": 0.2222222222222222
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9587628865979382,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 4,
+            "Label Name": "Endoplasmic_reticulum",
+            "Negative Support": 186,
+            "Positive Support": 8,
+            "Prevalence": 0.041237113402061855,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.979381443298969,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 5,
+            "Label Name": "Extracell",
+            "Negative Support": 190,
+            "Positive Support": 4,
+            "Prevalence": 0.020618556701030927,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.979381443298969,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 6,
+            "Label Name": "Golgi_apparatus",
+            "Negative Support": 190,
+            "Positive Support": 4,
+            "Prevalence": 0.020618556701030927,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.28,
+            "Full Hamming Accuracy": 0.8144329896907216,
+            "Full Precision": 0.35,
+            "Full Recall": 0.23333333333333334,
+            "Label Index": 7,
+            "Label Name": "Mitochondrion",
+            "Negative Support": 164,
+            "Positive Support": 30,
+            "Prevalence": 0.15463917525773196,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.28,
+            "Selective Precision": 0.35,
+            "Selective Recall": 0.23333333333333334
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.4727272727272727,
+            "Full Hamming Accuracy": 0.8505154639175257,
+            "Full Precision": 0.5416666666666666,
+            "Full Recall": 0.41935483870967744,
+            "Label Index": 8,
+            "Label Name": "Nucleus",
+            "Negative Support": 163,
+            "Positive Support": 31,
+            "Prevalence": 0.15979381443298968,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.4727272727272727,
+            "Selective Precision": 0.5416666666666666,
+            "Selective Recall": 0.41935483870967744
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9742268041237113,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 9,
+            "Label Name": "Peroxisome",
+            "Negative Support": 189,
+            "Positive Support": 5,
+            "Prevalence": 0.02577319587628866,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.4444444444444444,
+            "Full Hamming Accuracy": 0.9742268041237113,
+            "Full Precision": 1.0,
+            "Full Recall": 0.2857142857142857,
+            "Label Index": 10,
+            "Label Name": "Plastid",
+            "Negative Support": 187,
+            "Positive Support": 7,
+            "Prevalence": 0.03608247422680412,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.4444444444444444,
+            "Selective Precision": 1.0,
+            "Selective Recall": 0.2857142857142857
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.14285714285714285,
+            "Full Hamming Accuracy": 0.9381443298969072,
+            "Full Precision": 0.25,
+            "Full Recall": 0.1,
+            "Label Index": 11,
+            "Label Name": "Vacuole",
+            "Negative Support": 184,
+            "Positive Support": 10,
+            "Prevalence": 0.05154639175257732,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.14285714285714285,
+            "Selective Precision": 0.25,
+            "Selective Recall": 0.1
+          }
+        ],
+        "Schema Version": 3
+      }
+    },
+    "4": {
+      "metadata": {
+        "Test Size": 193,
+        "Train And Evaluate Seconds": 0.39960241317749023,
+        "Train Size": 785
+      },
+      "metrics": {
+        "Calibration": {
+          "Bin Count": 10,
+          "Metrics": {
+            "Brier Score": 0.07221624231707448,
+            "ECE": 0.02419470394860564,
+            "Log Loss": 0.2466238258270878
+          },
+          "Per Label": [
+            {
+              "Brier Score": 0.0543400277553867,
+              "ECE": 0.022211189202028157,
+              "Label Index": 0,
+              "Label Name": "Cell_membrane",
+              "Log Loss": 0.1958595760414482
+            },
+            {
+              "Brier Score": 0.03173803584772074,
+              "ECE": 0.014524199225375223,
+              "Label Index": 1,
+              "Label Name": "Cell_wall",
+              "Log Loss": 0.13135578163662281
+            },
+            {
+              "Brier Score": 0.19092125071211777,
+              "ECE": 0.08560838124719618,
+              "Label Index": 2,
+              "Label Name": "Chloroplast",
+              "Log Loss": 0.5652224168517191
+            },
+            {
+              "Brier Score": 0.15250799827697423,
+              "ECE": 0.06950135066214988,
+              "Label Index": 3,
+              "Label Name": "Cytoplasm",
+              "Log Loss": 0.4727165663761972
+            },
+            {
+              "Brier Score": 0.04393123715063016,
+              "ECE": 0.015464619057822412,
+              "Label Index": 4,
+              "Label Name": "Endoplasmic_reticulum",
+              "Log Loss": 0.17772133838716087
+            },
+            {
+              "Brier Score": 0.024438444200747127,
+              "ECE": 0.007340031188618333,
+              "Label Index": 5,
+              "Label Name": "Extracell",
+              "Log Loss": 0.1039540408479026
+            },
+            {
+              "Brier Score": 0.020098640205007248,
+              "ECE": 0.00010416482290533102,
+              "Label Index": 6,
+              "Label Name": "Golgi_apparatus",
+              "Log Loss": 0.09665668801731948
+            },
+            {
+              "Brier Score": 0.13466447592013533,
+              "ECE": 0.10155196934654932,
+              "Label Index": 7,
+              "Label Name": "Mitochondrion",
+              "Log Loss": 0.4580780779223764
+            },
+            {
+              "Brier Score": 0.10563028544111748,
+              "ECE": 0.05543420375082756,
+              "Label Index": 8,
+              "Label Name": "Nucleus",
+              "Log Loss": 0.33170728480664424
+            },
+            {
+              "Brier Score": 0.02012833534463743,
+              "ECE": 0.00209760078629527,
+              "Label Index": 9,
+              "Label Name": "Peroxisome",
+              "Log Loss": 0.09705396066761676
+            },
+            {
+              "Brier Score": 0.033675119918014966,
+              "ECE": 0.02936838122858024,
+              "Label Index": 10,
+              "Label Name": "Plastid",
+              "Log Loss": 0.12692791788524213
+            },
+            {
+              "Brier Score": 0.05452105703240464,
+              "ECE": 0.03920996833292265,
+              "Label Index": 11,
+              "Label Name": "Vacuole",
+              "Log Loss": 0.20223226048480356
+            }
+          ],
+          "Reliability": [
+            {
+              "Absolute Gap": 0.012410955837802828,
+              "Bin": 0,
+              "Count": 1826,
+              "Lower Bound": 0.0,
+              "Mean Predicted Probability": 0.025924202979283696,
+              "Observed Positive Rate": 0.038335158817086525,
+              "Upper Bound": 0.1
+            },
+            {
+              "Absolute Gap": 0.02789263715401538,
+              "Bin": 1,
+              "Count": 181,
+              "Lower Bound": 0.1,
+              "Mean Predicted Probability": 0.14337808107802882,
+              "Observed Positive Rate": 0.1712707182320442,
+              "Upper Bound": 0.2
+            },
+            {
+              "Absolute Gap": 0.031220411700485007,
+              "Bin": 2,
+              "Count": 113,
+              "Lower Bound": 0.2,
+              "Mean Predicted Probability": 0.2519654290074796,
+              "Observed Positive Rate": 0.2831858407079646,
+              "Upper Bound": 0.3
+            },
+            {
+              "Absolute Gap": 0.02256966282924011,
+              "Bin": 3,
+              "Count": 60,
+              "Lower Bound": 0.3,
+              "Mean Predicted Probability": 0.34409700383742653,
+              "Observed Positive Rate": 0.36666666666666664,
+              "Upper Bound": 0.4
+            },
+            {
+              "Absolute Gap": 0.03641257998419972,
+              "Bin": 4,
+              "Count": 41,
+              "Lower Bound": 0.4,
+              "Mean Predicted Probability": 0.4510467263256631,
+              "Observed Positive Rate": 0.4146341463414634,
+              "Upper Bound": 0.5
+            },
+            {
+              "Absolute Gap": 0.12334660747471982,
+              "Bin": 5,
+              "Count": 34,
+              "Lower Bound": 0.5,
+              "Mean Predicted Probability": 0.5351113133570727,
+              "Observed Positive Rate": 0.4117647058823529,
+              "Upper Bound": 0.6
+            },
+            {
+              "Absolute Gap": 0.20434355735778809,
+              "Bin": 6,
+              "Count": 18,
+              "Lower Bound": 0.6,
+              "Mean Predicted Probability": 0.6487880018022325,
+              "Observed Positive Rate": 0.4444444444444444,
+              "Upper Bound": 0.7
+            },
+            {
+              "Absolute Gap": 0.2774254963511512,
+              "Bin": 7,
+              "Count": 21,
+              "Lower Bound": 0.7,
+              "Mean Predicted Probability": 0.7536159725416274,
+              "Observed Positive Rate": 0.47619047619047616,
+              "Upper Bound": 0.8
+            },
+            {
+              "Absolute Gap": 0.38398737907409664,
+              "Bin": 8,
+              "Count": 15,
+              "Lower Bound": 0.8,
+              "Mean Predicted Probability": 0.8506540457407633,
+              "Observed Positive Rate": 0.4666666666666667,
+              "Upper Bound": 0.9
+            },
+            {
+              "Absolute Gap": 0.3558921132768904,
+              "Bin": 9,
+              "Count": 7,
+              "Lower Bound": 0.9,
+              "Mean Predicted Probability": 0.9273206847054618,
+              "Observed Positive Rate": 0.5714285714285714,
+              "Upper Bound": 1.0
+            }
+          ],
+          "Sample Label Count": 2316
+        },
+        "Costs": {},
+        "Critical Labels": {
+          "Reason": "critical_labels is not configured by the domain",
+          "Records": [],
+          "Status": "N/A"
+        },
+        "Full": {
+          "Hamming Accuracy": 0.9032815198618307,
+          "Hamming Loss": 0.09671848013816926,
+          "Instance Jaccard": 0.20207253886010362,
+          "Instance-F1": 0.2089810017271157,
+          "Macro Precision": 0.21000881834215168,
+          "Macro Recall": 0.10864183844578729,
+          "Macro-F1": 0.13806485237773272,
+          "Micro-F1": 0.27741935483870966,
+          "Subset Accuracy": 0.18134715025906736
+        },
+        "Groups": {},
+        "Metric Contract Version": "3.0-contract",
+        "Model Metadata": {
+          "Experiment Manifest": {
+            "base_learner": {
+              "backend": "pytorch",
+              "binary_class": "src.models.pytorch_mlp.FastPyTorchBinaryMLP",
+              "binary_parameters": {
+                "calibration": "sigmoid",
+                "epochs": 30,
+                "hidden_layer_sizes": [
+                  64
+                ],
+                "lr": 0.001,
+                "unbias_pos_weight": false,
+                "weight_decay": 0.001
+              },
+              "multilabel_class": "src.models.pytorch_mlp.MultiLabelMLPClassifier",
+              "multilabel_parameters": {
+                "calibration": "sigmoid",
+                "dropout": 0.15,
+                "epochs": 30,
+                "hidden_layer_sizes": [
+                  128,
+                  64
+                ],
+                "lr": 0.001,
+                "pos_weight_clamp": 15.0,
+                "unbias_pos_weight": false,
+                "weight_decay": 0.001
+              },
+              "name": "mlp"
+            },
+            "experiment_config_schema": 1,
+            "family": "CC",
+            "model_id": "CC_MLP",
+            "model_parameters": {
+              "base_estimator": "mlp",
+              "label_noise": 0.0,
+              "order": null,
+              "random_state": 42
+            },
+            "selective": false
+          }
+        },
+        "Per Label": [
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.927461139896373,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 0,
+            "Label Name": "Cell_membrane",
+            "Negative Support": 181,
+            "Positive Support": 12,
+            "Prevalence": 0.06217616580310881,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9637305699481865,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 1,
+            "Label Name": "Cell_wall",
+            "Negative Support": 186,
+            "Positive Support": 7,
+            "Prevalence": 0.03626943005181347,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.35294117647058826,
+            "Full Hamming Accuracy": 0.7150259067357513,
+            "Full Precision": 0.5555555555555556,
+            "Full Recall": 0.25862068965517243,
+            "Label Index": 2,
+            "Label Name": "Chloroplast",
+            "Negative Support": 135,
+            "Positive Support": 58,
+            "Prevalence": 0.3005181347150259,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.35294117647058826,
+            "Selective Precision": 0.5555555555555556,
+            "Selective Recall": 0.25862068965517243
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.19607843137254902,
+            "Full Hamming Accuracy": 0.7875647668393783,
+            "Full Precision": 0.35714285714285715,
+            "Full Recall": 0.13513513513513514,
+            "Label Index": 3,
+            "Label Name": "Cytoplasm",
+            "Negative Support": 156,
+            "Positive Support": 37,
+            "Prevalence": 0.19170984455958548,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.19607843137254902,
+            "Selective Precision": 0.35714285714285715,
+            "Selective Recall": 0.13513513513513514
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9533678756476683,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 4,
+            "Label Name": "Endoplasmic_reticulum",
+            "Negative Support": 184,
+            "Positive Support": 9,
+            "Prevalence": 0.046632124352331605,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9740932642487047,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 5,
+            "Label Name": "Extracell",
+            "Negative Support": 188,
+            "Positive Support": 5,
+            "Prevalence": 0.025906735751295335,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9792746113989638,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 6,
+            "Label Name": "Golgi_apparatus",
+            "Negative Support": 189,
+            "Positive Support": 4,
+            "Prevalence": 0.02072538860103627,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.2916666666666667,
+            "Full Hamming Accuracy": 0.8238341968911918,
+            "Full Precision": 0.3888888888888889,
+            "Full Recall": 0.23333333333333334,
+            "Label Index": 7,
+            "Label Name": "Mitochondrion",
+            "Negative Support": 163,
+            "Positive Support": 30,
+            "Prevalence": 0.15544041450777202,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.2916666666666667,
+            "Selective Precision": 0.3888888888888889,
+            "Selective Recall": 0.23333333333333334
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.4827586206896552,
+            "Full Hamming Accuracy": 0.844559585492228,
+            "Full Precision": 0.5185185185185185,
+            "Full Recall": 0.45161290322580644,
+            "Label Index": 8,
+            "Label Name": "Nucleus",
+            "Negative Support": 162,
+            "Positive Support": 31,
+            "Prevalence": 0.16062176165803108,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.4827586206896552,
+            "Selective Precision": 0.5185185185185185,
+            "Selective Recall": 0.45161290322580644
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9792746113989638,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 9,
+            "Label Name": "Peroxisome",
+            "Negative Support": 189,
+            "Positive Support": 4,
+            "Prevalence": 0.02072538860103627,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.2,
+            "Full Hamming Accuracy": 0.9585492227979274,
+            "Full Precision": 0.5,
+            "Full Recall": 0.125,
+            "Label Index": 10,
+            "Label Name": "Plastid",
+            "Negative Support": 185,
+            "Positive Support": 8,
+            "Prevalence": 0.04145077720207254,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.2,
+            "Selective Precision": 0.5,
+            "Selective Recall": 0.125
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.13333333333333333,
+            "Full Hamming Accuracy": 0.9326424870466321,
+            "Full Precision": 0.2,
+            "Full Recall": 0.1,
+            "Label Index": 11,
+            "Label Name": "Vacuole",
+            "Negative Support": 183,
+            "Positive Support": 10,
+            "Prevalence": 0.05181347150259067,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.13333333333333333,
+            "Selective Precision": 0.2,
+            "Selective Recall": 0.1
+          }
+        ],
+        "Schema Version": 3
+      }
+    },
+    "5": {
+      "metadata": {
+        "Test Size": 197,
+        "Train And Evaluate Seconds": 0.3866231441497803,
+        "Train Size": 781
+      },
+      "metrics": {
+        "Calibration": {
+          "Bin Count": 10,
+          "Metrics": {
+            "Brier Score": 0.07270457473700431,
+            "ECE": 0.029844387272285142,
+            "Log Loss": 0.25268310014444845
+          },
+          "Per Label": [
+            {
+              "Brier Score": 0.05592287213781793,
+              "ECE": 0.027364047417484536,
+              "Label Index": 0,
+              "Label Name": "Cell_membrane",
+              "Log Loss": 0.223153477467668
+            },
+            {
+              "Brier Score": 0.028201970890096587,
+              "ECE": 0.009071713670093073,
+              "Label Index": 1,
+              "Label Name": "Cell_wall",
+              "Log Loss": 0.1265308278329064
+            },
+            {
+              "Brier Score": 0.19404867356125294,
+              "ECE": 0.0832123637038666,
+              "Label Index": 2,
+              "Label Name": "Chloroplast",
+              "Log Loss": 0.5857661858838209
+            },
+            {
+              "Brier Score": 0.16896395718008622,
+              "ECE": 0.10851811842467629,
+              "Label Index": 3,
+              "Label Name": "Cytoplasm",
+              "Log Loss": 0.5781521598724285
+            },
+            {
+              "Brier Score": 0.03955107665824262,
+              "ECE": 0.016295342259392675,
+              "Label Index": 4,
+              "Label Name": "Endoplasmic_reticulum",
+              "Log Loss": 0.16641160254666504
+            },
+            {
+              "Brier Score": 0.020232219578203404,
+              "ECE": 0.007351038311513584,
+              "Label Index": 5,
+              "Label Name": "Extracell",
+              "Log Loss": 0.09195043468659755
+            },
+            {
+              "Brier Score": 0.019497038540469715,
+              "ECE": 0.0017508994196990743,
+              "Label Index": 6,
+              "Label Name": "Golgi_apparatus",
+              "Log Loss": 0.09335317353220028
+            },
+            {
+              "Brier Score": 0.12633894880205881,
+              "ECE": 0.07406916504633183,
+              "Label Index": 7,
+              "Label Name": "Mitochondrion",
+              "Log Loss": 0.41737690981651854
+            },
+            {
+              "Brier Score": 0.10948860377896077,
+              "ECE": 0.057651947827142225,
+              "Label Index": 8,
+              "Label Name": "Nucleus",
+              "Log Loss": 0.34958699856298453
+            },
+            {
+              "Brier Score": 0.0199960109102747,
+              "ECE": 0.0015375574975071242,
+              "Label Index": 9,
+              "Label Name": "Peroxisome",
+              "Log Loss": 0.1010961231984355
+            },
+            {
+              "Brier Score": 0.020967068547743536,
+              "ECE": 0.02376379114704214,
+              "Label Index": 10,
+              "Label Name": "Plastid",
+              "Log Loss": 0.07626036554073662
+            },
+            {
+              "Brier Score": 0.06924645625884454,
+              "ECE": 0.059960726964537726,
+              "Label Index": 11,
+              "Label Name": "Vacuole",
+              "Log Loss": 0.2225589427924195
+            }
+          ],
+          "Reliability": [
+            {
+              "Absolute Gap": 0.011115450836556382,
+              "Bin": 0,
+              "Count": 1835,
+              "Lower Bound": 0.0,
+              "Mean Predicted Probability": 0.02485185161575969,
+              "Observed Positive Rate": 0.03596730245231607,
+              "Upper Bound": 0.1
+            },
+            {
+              "Absolute Gap": 0.04789754250391043,
+              "Bin": 1,
+              "Count": 199,
+              "Lower Bound": 0.1,
+              "Mean Predicted Probability": 0.1430572313654363,
+              "Observed Positive Rate": 0.19095477386934673,
+              "Upper Bound": 0.2
+            },
+            {
+              "Absolute Gap": 0.013804023928731396,
+              "Bin": 2,
+              "Count": 107,
+              "Lower Bound": 0.2,
+              "Mean Predicted Probability": 0.2474488837418155,
+              "Observed Positive Rate": 0.2336448598130841,
+              "Upper Bound": 0.3
+            },
+            {
+              "Absolute Gap": 0.060708929049341276,
+              "Bin": 3,
+              "Count": 76,
+              "Lower Bound": 0.3,
+              "Mean Predicted Probability": 0.3501826132598676,
+              "Observed Positive Rate": 0.2894736842105263,
+              "Upper Bound": 0.4
+            },
+            {
+              "Absolute Gap": 0.15215763652866537,
+              "Bin": 4,
+              "Count": 44,
+              "Lower Bound": 0.4,
+              "Mean Predicted Probability": 0.44761218198321084,
+              "Observed Positive Rate": 0.29545454545454547,
+              "Upper Bound": 0.5
+            },
+            {
+              "Absolute Gap": 0.19772335886955256,
+              "Bin": 5,
+              "Count": 28,
+              "Lower Bound": 0.5,
+              "Mean Predicted Probability": 0.5548662160124097,
+              "Observed Positive Rate": 0.35714285714285715,
+              "Upper Bound": 0.6
+            },
+            {
+              "Absolute Gap": 0.13418917953968046,
+              "Bin": 6,
+              "Count": 20,
+              "Lower Bound": 0.6,
+              "Mean Predicted Probability": 0.6341891795396805,
+              "Observed Positive Rate": 0.5,
+              "Upper Bound": 0.7
+            },
+            {
+              "Absolute Gap": 0.2510371744632721,
+              "Bin": 7,
+              "Count": 20,
+              "Lower Bound": 0.7,
+              "Mean Predicted Probability": 0.7510371744632721,
+              "Observed Positive Rate": 0.5,
+              "Upper Bound": 0.8
+            },
+            {
+              "Absolute Gap": 0.3922869339585305,
+              "Bin": 8,
+              "Count": 24,
+              "Lower Bound": 0.8,
+              "Mean Predicted Probability": 0.8506202672918638,
+              "Observed Positive Rate": 0.4583333333333333,
+              "Upper Bound": 0.9
+            },
+            {
+              "Absolute Gap": 0.47110504995692865,
+              "Bin": 9,
+              "Count": 11,
+              "Lower Bound": 0.9,
+              "Mean Predicted Probability": 0.9256505045023832,
+              "Observed Positive Rate": 0.45454545454545453,
+              "Upper Bound": 1.0
+            }
+          ],
+          "Sample Label Count": 2364
+        },
+        "Costs": {},
+        "Critical Labels": {
+          "Reason": "critical_labels is not configured by the domain",
+          "Records": [],
+          "Status": "N/A"
+        },
+        "Full": {
+          "Hamming Accuracy": 0.9065143824027073,
+          "Hamming Loss": 0.09348561759729272,
+          "Instance Jaccard": 0.20642978003384094,
+          "Instance-F1": 0.21489001692047374,
+          "Macro Precision": 0.3048611111111111,
+          "Macro Recall": 0.1399339573681679,
+          "Macro-F1": 0.18109725774367716,
+          "Micro-F1": 0.2939297124600639,
+          "Subset Accuracy": 0.18274111675126903
+        },
+        "Groups": {},
+        "Metric Contract Version": "3.0-contract",
+        "Model Metadata": {
+          "Experiment Manifest": {
+            "base_learner": {
+              "backend": "pytorch",
+              "binary_class": "src.models.pytorch_mlp.FastPyTorchBinaryMLP",
+              "binary_parameters": {
+                "calibration": "sigmoid",
+                "epochs": 30,
+                "hidden_layer_sizes": [
+                  64
+                ],
+                "lr": 0.001,
+                "unbias_pos_weight": false,
+                "weight_decay": 0.001
+              },
+              "multilabel_class": "src.models.pytorch_mlp.MultiLabelMLPClassifier",
+              "multilabel_parameters": {
+                "calibration": "sigmoid",
+                "dropout": 0.15,
+                "epochs": 30,
+                "hidden_layer_sizes": [
+                  128,
+                  64
+                ],
+                "lr": 0.001,
+                "pos_weight_clamp": 15.0,
+                "unbias_pos_weight": false,
+                "weight_decay": 0.001
+              },
+              "name": "mlp"
+            },
+            "experiment_config_schema": 1,
+            "family": "CC",
+            "model_id": "CC_MLP",
+            "model_parameters": {
+              "base_estimator": "mlp",
+              "label_noise": 0.0,
+              "order": null,
+              "random_state": 42
+            },
+            "selective": false
+          }
+        },
+        "Per Label": [
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.934010152284264,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 0,
+            "Label Name": "Cell_membrane",
+            "Negative Support": 186,
+            "Positive Support": 11,
+            "Prevalence": 0.05583756345177665,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.25,
+            "Full Hamming Accuracy": 0.9695431472081218,
+            "Full Precision": 1.0,
+            "Full Recall": 0.14285714285714285,
+            "Label Index": 1,
+            "Label Name": "Cell_wall",
+            "Negative Support": 190,
+            "Positive Support": 7,
+            "Prevalence": 0.03553299492385787,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.25,
+            "Selective Precision": 1.0,
+            "Selective Recall": 0.14285714285714285
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.45652173913043476,
+            "Full Hamming Accuracy": 0.7461928934010152,
+            "Full Precision": 0.6,
+            "Full Recall": 0.3684210526315789,
+            "Label Index": 2,
+            "Label Name": "Chloroplast",
+            "Negative Support": 140,
+            "Positive Support": 57,
+            "Prevalence": 0.2893401015228426,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.45652173913043476,
+            "Selective Precision": 0.6,
+            "Selective Recall": 0.3684210526315789
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.1568627450980392,
+            "Full Hamming Accuracy": 0.7817258883248731,
+            "Full Precision": 0.26666666666666666,
+            "Full Recall": 0.1111111111111111,
+            "Label Index": 3,
+            "Label Name": "Cytoplasm",
+            "Negative Support": 161,
+            "Positive Support": 36,
+            "Prevalence": 0.18274111675126903,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.1568627450980392,
+            "Selective Precision": 0.26666666666666666,
+            "Selective Recall": 0.1111111111111111
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9593908629441624,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 4,
+            "Label Name": "Endoplasmic_reticulum",
+            "Negative Support": 189,
+            "Positive Support": 8,
+            "Prevalence": 0.04060913705583756,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9796954314720813,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 5,
+            "Label Name": "Extracell",
+            "Negative Support": 193,
+            "Positive Support": 4,
+            "Prevalence": 0.02030456852791878,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9796954314720813,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 6,
+            "Label Name": "Golgi_apparatus",
+            "Negative Support": 193,
+            "Positive Support": 4,
+            "Prevalence": 0.02030456852791878,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.2608695652173913,
+            "Full Hamming Accuracy": 0.8274111675126904,
+            "Full Precision": 0.375,
+            "Full Recall": 0.2,
+            "Label Index": 7,
+            "Label Name": "Mitochondrion",
+            "Negative Support": 167,
+            "Positive Support": 30,
+            "Prevalence": 0.15228426395939088,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.2608695652173913,
+            "Selective Precision": 0.375,
+            "Selective Recall": 0.2
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.375,
+            "Full Hamming Accuracy": 0.8477157360406091,
+            "Full Precision": 0.5,
+            "Full Recall": 0.3,
+            "Label Index": 8,
+            "Label Name": "Nucleus",
+            "Negative Support": 167,
+            "Positive Support": 30,
+            "Prevalence": 0.15228426395939088,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.375,
+            "Selective Precision": 0.5,
+            "Selective Recall": 0.3
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9796954314720813,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 9,
+            "Label Name": "Peroxisome",
+            "Negative Support": 193,
+            "Positive Support": 4,
+            "Prevalence": 0.02030456852791878,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.5,
+            "Full Hamming Accuracy": 0.9695431472081218,
+            "Full Precision": 0.75,
+            "Full Recall": 0.375,
+            "Label Index": 10,
+            "Label Name": "Plastid",
+            "Negative Support": 189,
+            "Positive Support": 8,
+            "Prevalence": 0.04060913705583756,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.5,
+            "Selective Precision": 0.75,
+            "Selective Recall": 0.375
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.17391304347826086,
+            "Full Hamming Accuracy": 0.9035532994923858,
+            "Full Precision": 0.16666666666666666,
+            "Full Recall": 0.18181818181818182,
+            "Label Index": 11,
+            "Label Name": "Vacuole",
+            "Negative Support": 186,
+            "Positive Support": 11,
+            "Prevalence": 0.05583756345177665,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.17391304347826086,
+            "Selective Precision": 0.16666666666666666,
+            "Selective Recall": 0.18181818181818182
+          }
+        ],
+        "Schema Version": 3
+      }
+    }
+  },
+  "metric_contract_version": "3.0-contract",
+  "model": "CC_MLP",
+  "schema_version": 3,
+  "status": "complete",
+  "updated_at": "2026-09-23T09:33:59.409611+00:00"
+}
