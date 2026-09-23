@@ -1,0 +1,2171 @@
+{
+  "config": {
+    "abstention_costs": [
+      0.2,
+      0.25,
+      0.3,
+      0.35,
+      0.4,
+      0.5
+    ],
+    "abstention_penalty": "linear",
+    "critical_labels": null,
+    "dataset": "viruspseaac",
+    "dataset_fingerprint": "65c103406207faa5",
+    "dataset_shape": {
+      "features": 440,
+      "labels": 6,
+      "samples": 207
+    },
+    "evaluation_policy": {
+      "acceptance_confidence": "2*abs(probability-0.5)",
+      "calibration": "none",
+      "full_threshold": 0.5,
+      "partial_policy": null
+    },
+    "gsi_beta": 1.0,
+    "gsi_decision_policy": "hamming",
+    "gsi_final_order": "correlation",
+    "gsi_fixed_independent_labels": null,
+    "gsi_partition_mode": "learned",
+    "gsi_penalty": "linear",
+    "gsi_selection_objective": "full_macro_f1",
+    "gsi_validation_size": 0.2,
+    "label_names": [
+      "Viral_capsid",
+      "Host_cell_membrane",
+      "Host_endoplasm_reticulum",
+      "Host_cytoplasm",
+      "Host_nucleus",
+      "Secreted"
+    ],
+    "label_policy_hash": null,
+    "metric_contract_version": "3.0-contract",
+    "mlc_pa_base": "logistic",
+    "model": "CC_SVM",
+    "model_signature": {
+      "backend": "sklearn.svm.LinearSVC+CalibratedClassifierCV",
+      "class": "src.models.classifier_chain.ClassifierChainClassifier",
+      "experiment_manifest": {
+        "base_learner": {
+          "backend": "sklearn.svm.LinearSVC+CalibratedClassifierCV",
+          "binary_parameters": {
+            "C": 1.0,
+            "dual": "auto",
+            "max_iter": 5000,
+            "tol": 0.001
+          },
+          "calibration": {
+            "cv": 3,
+            "method": "sigmoid",
+            "rare_label_strategy": "smoothed_prior",
+            "scope": "nested_in_training_fold"
+          },
+          "name": "svm_calibrated"
+        },
+        "experiment_config_schema": 1,
+        "family": "CC",
+        "model_id": "CC_SVM",
+        "model_parameters": {
+          "base_estimator": "svm_calibrated",
+          "order": null,
+          "random_state": 42
+        },
+        "selective": false
+      },
+      "parameters": {
+        "base_estimator": "svm_calibrated",
+        "order": null,
+        "random_state": 42
+      }
+    },
+    "n_splits": 5,
+    "operating_point": {
+      "coverage_gamma": 0.8,
+      "risk_epsilon": 0.1,
+      "rule": null,
+      "selection_scope": "inner_validation",
+      "validation_size": 0.2
+    },
+    "random_state": 42,
+    "report_cost": 0.3,
+    "scaler": "MaxAbsScaler",
+    "schema_version": 3,
+    "split_hash": "fb5c0a305552811e"
+  },
+  "config_hash": "eb081bad616bce4c",
+  "created_at": "2026-09-20T08:39:01.151358+00:00",
+  "dataset": "viruspseaac",
+  "folds": {
+    "1": {
+      "metadata": {
+        "Test Size": 40,
+        "Train And Evaluate Seconds": 0.08007597923278809,
+        "Train Size": 167
+      },
+      "metrics": {
+        "Calibration": {
+          "Bin Count": 10,
+          "Metrics": {
+            "Brier Score": 0.13371295917967957,
+            "ECE": 0.058879043310298584,
+            "Log Loss": 0.40429933138183927
+          },
+          "Per Label": [
+            {
+              "Brier Score": 0.0022199026161629954,
+              "ECE": 0.015427397639723495,
+              "Label Index": 0,
+              "Label Name": "Viral_capsid",
+              "Log Loss": 0.016769334180326417
+            },
+            {
+              "Brier Score": 0.1380010862433066,
+              "ECE": 0.10219284677878022,
+              "Label Index": 1,
+              "Label Name": "Host_cell_membrane",
+              "Log Loss": 0.43497568875202
+            },
+            {
+              "Brier Score": 0.09034774032028117,
+              "ECE": 0.1006404916755855,
+              "Label Index": 2,
+              "Label Name": "Host_endoplasm_reticulum",
+              "Log Loss": 0.2871457296589714
+            },
+            {
+              "Brier Score": 0.25552427824800866,
+              "ECE": 0.19069191794842483,
+              "Label Index": 3,
+              "Label Name": "Host_cytoplasm",
+              "Log Loss": 0.7091689689964495
+            },
+            {
+              "Brier Score": 0.23901728167703434,
+              "ECE": 0.16307335663586853,
+              "Label Index": 4,
+              "Label Name": "Host_nucleus",
+              "Log Loss": 0.6740954479465341
+            },
+            {
+              "Brier Score": 0.07716746597328346,
+              "ECE": 0.02639263712335378,
+              "Label Index": 5,
+              "Label Name": "Secreted",
+              "Log Loss": 0.3036408187567342
+            }
+          ],
+          "Reliability": [
+            {
+              "Absolute Gap": 0.017143504696280187,
+              "Bin": 0,
+              "Count": 107,
+              "Lower Bound": 0.0,
+              "Mean Predicted Probability": 0.035835093481326914,
+              "Observed Positive Rate": 0.018691588785046728,
+              "Upper Bound": 0.1
+            },
+            {
+              "Absolute Gap": 0.09693690771009864,
+              "Bin": 1,
+              "Count": 41,
+              "Lower Bound": 0.1,
+              "Mean Predicted Probability": 0.1469655313142916,
+              "Observed Positive Rate": 0.24390243902439024,
+              "Upper Bound": 0.2
+            },
+            {
+              "Absolute Gap": 0.07283407165890649,
+              "Bin": 2,
+              "Count": 21,
+              "Lower Bound": 0.2,
+              "Mean Predicted Probability": 0.26049926167442683,
+              "Observed Positive Rate": 0.3333333333333333,
+              "Upper Bound": 0.3
+            },
+            {
+              "Absolute Gap": 0.03203259981595552,
+              "Bin": 3,
+              "Count": 13,
+              "Lower Bound": 0.3,
+              "Mean Predicted Probability": 0.33972490750826323,
+              "Observed Positive Rate": 0.3076923076923077,
+              "Upper Bound": 0.4
+            },
+            {
+              "Absolute Gap": 0.10110927373170853,
+              "Bin": 4,
+              "Count": 20,
+              "Lower Bound": 0.4,
+              "Mean Predicted Probability": 0.4511092737317085,
+              "Observed Positive Rate": 0.35,
+              "Upper Bound": 0.5
+            },
+            {
+              "Absolute Gap": 0.03630228127752033,
+              "Bin": 5,
+              "Count": 14,
+              "Lower Bound": 0.5,
+              "Mean Predicted Probability": 0.5351262901510511,
+              "Observed Positive Rate": 0.5714285714285714,
+              "Upper Bound": 0.6
+            },
+            {
+              "Absolute Gap": 0.1512596479484013,
+              "Bin": 6,
+              "Count": 14,
+              "Lower Bound": 0.6,
+              "Mean Predicted Probability": 0.6512596479484013,
+              "Observed Positive Rate": 0.5,
+              "Upper Bound": 0.7
+            },
+            {
+              "Absolute Gap": 0.16921672650745945,
+              "Bin": 7,
+              "Count": 7,
+              "Lower Bound": 0.7,
+              "Mean Predicted Probability": 0.7406452979360308,
+              "Observed Positive Rate": 0.5714285714285714,
+              "Upper Bound": 0.8
+            },
+            {
+              "Absolute Gap": 0.18123110135396325,
+              "Bin": 8,
+              "Count": 3,
+              "Lower Bound": 0.8,
+              "Mean Predicted Probability": 0.8478977680206299,
+              "Observed Positive Rate": 0.6666666666666666,
+              "Upper Bound": 0.9
+            },
+            {
+              "Absolute Gap": null,
+              "Bin": 9,
+              "Count": 0,
+              "Lower Bound": 0.9,
+              "Mean Predicted Probability": null,
+              "Observed Positive Rate": null,
+              "Upper Bound": 1.0
+            }
+          ],
+          "Sample Label Count": 240
+        },
+        "Costs": {},
+        "Critical Labels": {
+          "Reason": "critical_labels is not configured by the domain",
+          "Records": [],
+          "Status": "N/A"
+        },
+        "Full": {
+          "Hamming Accuracy": 0.8041666666666667,
+          "Hamming Loss": 0.19583333333333333,
+          "Instance Jaccard": 0.3875,
+          "Instance-F1": 0.41666666666666663,
+          "Macro Precision": 0.3611111111111111,
+          "Macro Recall": 0.35784313725490197,
+          "Macro-F1": 0.3569078947368421,
+          "Micro-F1": 0.47191011235955055,
+          "Subset Accuracy": 0.3
+        },
+        "Groups": {},
+        "Metric Contract Version": "3.0-contract",
+        "Model Metadata": {
+          "Calibration Audit": {
+            "calibrated_label_count": 6,
+            "fallback_label_count": 0,
+            "fit_sample_counts": [
+              167
+            ],
+            "labels": [
+              {
+                "class_counts": {
+                  "0": 160,
+                  "1": 7
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 167,
+                "label_index": 0,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 141,
+                  "1": 26
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 167,
+                "label_index": 1,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 151,
+                  "1": 16
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 167,
+                "label_index": 2,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 98,
+                  "1": 69
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 167,
+                "label_index": 3,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 100,
+                  "1": 67
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 167,
+                "label_index": 4,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 151,
+                  "1": 16
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 167,
+                "label_index": 5,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              }
+            ],
+            "outer_test_access": false
+          },
+          "Experiment Manifest": {
+            "base_learner": {
+              "backend": "sklearn.svm.LinearSVC+CalibratedClassifierCV",
+              "binary_parameters": {
+                "C": 1.0,
+                "dual": "auto",
+                "max_iter": 5000,
+                "tol": 0.001
+              },
+              "calibration": {
+                "cv": 3,
+                "method": "sigmoid",
+                "rare_label_strategy": "smoothed_prior",
+                "scope": "nested_in_training_fold"
+              },
+              "name": "svm_calibrated"
+            },
+            "experiment_config_schema": 1,
+            "family": "CC",
+            "model_id": "CC_SVM",
+            "model_parameters": {
+              "base_estimator": "svm_calibrated",
+              "order": null,
+              "random_state": 42
+            },
+            "selective": false
+          }
+        },
+        "Per Label": [
+          {
+            "Coverage": 1.0,
+            "Full F1": 1.0,
+            "Full Hamming Accuracy": 1.0,
+            "Full Precision": 1.0,
+            "Full Recall": 1.0,
+            "Label Index": 0,
+            "Label Name": "Viral_capsid",
+            "Negative Support": 39,
+            "Positive Support": 1,
+            "Prevalence": 0.025,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 1.0,
+            "Selective Precision": 1.0,
+            "Selective Recall": 1.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.8,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 1,
+            "Label Name": "Host_cell_membrane",
+            "Negative Support": 33,
+            "Positive Support": 7,
+            "Prevalence": 0.175,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.875,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 2,
+            "Label Name": "Host_endoplasm_reticulum",
+            "Negative Support": 36,
+            "Positive Support": 4,
+            "Prevalence": 0.1,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.5625,
+            "Full Hamming Accuracy": 0.65,
+            "Full Precision": 0.6428571428571429,
+            "Full Recall": 0.5,
+            "Label Index": 3,
+            "Label Name": "Host_cytoplasm",
+            "Negative Support": 22,
+            "Positive Support": 18,
+            "Prevalence": 0.45,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.5625,
+            "Selective Precision": 0.6428571428571429,
+            "Selective Recall": 0.5
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.5789473684210527,
+            "Full Hamming Accuracy": 0.6,
+            "Full Precision": 0.5238095238095238,
+            "Full Recall": 0.6470588235294118,
+            "Label Index": 4,
+            "Label Name": "Host_nucleus",
+            "Negative Support": 23,
+            "Positive Support": 17,
+            "Prevalence": 0.425,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.5789473684210527,
+            "Selective Precision": 0.5238095238095238,
+            "Selective Recall": 0.6470588235294118
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 5,
+            "Label Name": "Secreted",
+            "Negative Support": 36,
+            "Positive Support": 4,
+            "Prevalence": 0.1,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          }
+        ],
+        "Schema Version": 3
+      }
+    },
+    "2": {
+      "metadata": {
+        "Test Size": 40,
+        "Train And Evaluate Seconds": 0.0793006420135498,
+        "Train Size": 167
+      },
+      "metrics": {
+        "Calibration": {
+          "Bin Count": 10,
+          "Metrics": {
+            "Brier Score": 0.15282594077942016,
+            "ECE": 0.09045162670566545,
+            "Log Loss": 0.45976148316123217
+          },
+          "Per Label": [
+            {
+              "Brier Score": 0.00022400518991038467,
+              "ECE": 0.006776693614665419,
+              "Label Index": 0,
+              "Label Name": "Viral_capsid",
+              "Log Loss": 0.006894232983350124
+            },
+            {
+              "Brier Score": 0.13741253751482446,
+              "ECE": 0.02510942816734315,
+              "Label Index": 1,
+              "Label Name": "Host_cell_membrane",
+              "Log Loss": 0.44149290954611153
+            },
+            {
+              "Brier Score": 0.15046952453071155,
+              "ECE": 0.1843829803285189,
+              "Label Index": 2,
+              "Label Name": "Host_endoplasm_reticulum",
+              "Log Loss": 0.5309493473203915
+            },
+            {
+              "Brier Score": 0.2730924526280215,
+              "ECE": 0.17279883287847042,
+              "Label Index": 3,
+              "Label Name": "Host_cytoplasm",
+              "Log Loss": 0.74424117671032
+            },
+            {
+              "Brier Score": 0.2735455912657484,
+              "ECE": 0.25440699988976123,
+              "Label Index": 4,
+              "Label Name": "Host_nucleus",
+              "Log Loss": 0.7429527719932001
+            },
+            {
+              "Brier Score": 0.08221153354730479,
+              "ECE": 0.02896932969451882,
+              "Label Index": 5,
+              "Label Name": "Secreted",
+              "Log Loss": 0.2920384604140197
+            }
+          ],
+          "Reliability": [
+            {
+              "Absolute Gap": 0.028590685337582983,
+              "Bin": 0,
+              "Count": 103,
+              "Lower Bound": 0.0,
+              "Mean Predicted Probability": 0.029661741846883038,
+              "Observed Positive Rate": 0.05825242718446602,
+              "Upper Bound": 0.1
+            },
+            {
+              "Absolute Gap": 0.027530023511850604,
+              "Bin": 1,
+              "Count": 53,
+              "Lower Bound": 0.1,
+              "Mean Predicted Probability": 0.14228129724286637,
+              "Observed Positive Rate": 0.16981132075471697,
+              "Upper Bound": 0.2
+            },
+            {
+              "Absolute Gap": 0.19129784684628248,
+              "Bin": 2,
+              "Count": 16,
+              "Lower Bound": 0.2,
+              "Mean Predicted Probability": 0.24620215315371752,
+              "Observed Positive Rate": 0.4375,
+              "Upper Bound": 0.3
+            },
+            {
+              "Absolute Gap": 0.05815361936887109,
+              "Bin": 3,
+              "Count": 15,
+              "Lower Bound": 0.3,
+              "Mean Predicted Probability": 0.34184638063112893,
+              "Observed Positive Rate": 0.4,
+              "Upper Bound": 0.4
+            },
+            {
+              "Absolute Gap": 0.09461139257137591,
+              "Bin": 4,
+              "Count": 13,
+              "Lower Bound": 0.4,
+              "Mean Predicted Probability": 0.44385014589016253,
+              "Observed Positive Rate": 0.5384615384615384,
+              "Upper Bound": 0.5
+            },
+            {
+              "Absolute Gap": 0.24535128703484166,
+              "Bin": 5,
+              "Count": 13,
+              "Lower Bound": 0.5,
+              "Mean Predicted Probability": 0.5530435947271494,
+              "Observed Positive Rate": 0.3076923076923077,
+              "Upper Bound": 0.6
+            },
+            {
+              "Absolute Gap": 0.3699183084748008,
+              "Bin": 6,
+              "Count": 11,
+              "Lower Bound": 0.6,
+              "Mean Predicted Probability": 0.6426455812020735,
+              "Observed Positive Rate": 0.2727272727272727,
+              "Upper Bound": 0.7
+            },
+            {
+              "Absolute Gap": 0.24094170331954956,
+              "Bin": 7,
+              "Count": 8,
+              "Lower Bound": 0.7,
+              "Mean Predicted Probability": 0.7409417033195496,
+              "Observed Positive Rate": 0.5,
+              "Upper Bound": 0.8
+            },
+            {
+              "Absolute Gap": 0.4349085450172424,
+              "Bin": 8,
+              "Count": 5,
+              "Lower Bound": 0.8,
+              "Mean Predicted Probability": 0.8349085450172424,
+              "Observed Positive Rate": 0.4,
+              "Upper Bound": 0.9
+            },
+            {
+              "Absolute Gap": 0.2602320512135824,
+              "Bin": 9,
+              "Count": 3,
+              "Lower Bound": 0.9,
+              "Mean Predicted Probability": 0.926898717880249,
+              "Observed Positive Rate": 0.6666666666666666,
+              "Upper Bound": 1.0
+            }
+          ],
+          "Sample Label Count": 240
+        },
+        "Costs": {},
+        "Critical Labels": {
+          "Reason": "critical_labels is not configured by the domain",
+          "Records": [],
+          "Status": "N/A"
+        },
+        "Full": {
+          "Hamming Accuracy": 0.75,
+          "Hamming Loss": 0.25,
+          "Instance Jaccard": 0.2708333333333333,
+          "Instance-F1": 0.2958333333333333,
+          "Macro Precision": 0.2993421052631579,
+          "Macro Recall": 0.303921568627451,
+          "Macro-F1": 0.30134680134680136,
+          "Micro-F1": 0.3333333333333333,
+          "Subset Accuracy": 0.2
+        },
+        "Groups": {},
+        "Metric Contract Version": "3.0-contract",
+        "Model Metadata": {
+          "Calibration Audit": {
+            "calibrated_label_count": 6,
+            "fallback_label_count": 0,
+            "fit_sample_counts": [
+              167
+            ],
+            "labels": [
+              {
+                "class_counts": {
+                  "0": 160,
+                  "1": 7
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 167,
+                "label_index": 0,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 141,
+                  "1": 26
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 167,
+                "label_index": 1,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 151,
+                  "1": 16
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 167,
+                "label_index": 2,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 97,
+                  "1": 70
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 167,
+                "label_index": 3,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 100,
+                  "1": 67
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 167,
+                "label_index": 4,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 151,
+                  "1": 16
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 167,
+                "label_index": 5,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              }
+            ],
+            "outer_test_access": false
+          },
+          "Experiment Manifest": {
+            "base_learner": {
+              "backend": "sklearn.svm.LinearSVC+CalibratedClassifierCV",
+              "binary_parameters": {
+                "C": 1.0,
+                "dual": "auto",
+                "max_iter": 5000,
+                "tol": 0.001
+              },
+              "calibration": {
+                "cv": 3,
+                "method": "sigmoid",
+                "rare_label_strategy": "smoothed_prior",
+                "scope": "nested_in_training_fold"
+              },
+              "name": "svm_calibrated"
+            },
+            "experiment_config_schema": 1,
+            "family": "CC",
+            "model_id": "CC_SVM",
+            "model_parameters": {
+              "base_estimator": "svm_calibrated",
+              "order": null,
+              "random_state": 42
+            },
+            "selective": false
+          }
+        },
+        "Per Label": [
+          {
+            "Coverage": 1.0,
+            "Full F1": 1.0,
+            "Full Hamming Accuracy": 1.0,
+            "Full Precision": 1.0,
+            "Full Recall": 1.0,
+            "Label Index": 0,
+            "Label Name": "Viral_capsid",
+            "Negative Support": 39,
+            "Positive Support": 1,
+            "Prevalence": 0.025,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 1.0,
+            "Selective Precision": 1.0,
+            "Selective Recall": 1.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.825,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 1,
+            "Label Name": "Host_cell_membrane",
+            "Negative Support": 33,
+            "Positive Support": 7,
+            "Prevalence": 0.175,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.8,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 2,
+            "Label Name": "Host_endoplasm_reticulum",
+            "Negative Support": 36,
+            "Positive Support": 4,
+            "Prevalence": 0.1,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.36363636363636365,
+            "Full Hamming Accuracy": 0.475,
+            "Full Precision": 0.375,
+            "Full Recall": 0.35294117647058826,
+            "Label Index": 3,
+            "Label Name": "Host_cytoplasm",
+            "Negative Support": 23,
+            "Positive Support": 17,
+            "Prevalence": 0.425,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.36363636363636365,
+            "Selective Precision": 0.375,
+            "Selective Recall": 0.35294117647058826
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.4444444444444444,
+            "Full Hamming Accuracy": 0.5,
+            "Full Precision": 0.42105263157894735,
+            "Full Recall": 0.47058823529411764,
+            "Label Index": 4,
+            "Label Name": "Host_nucleus",
+            "Negative Support": 23,
+            "Positive Support": 17,
+            "Prevalence": 0.425,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.4444444444444444,
+            "Selective Precision": 0.42105263157894735,
+            "Selective Recall": 0.47058823529411764
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 5,
+            "Label Name": "Secreted",
+            "Negative Support": 36,
+            "Positive Support": 4,
+            "Prevalence": 0.1,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          }
+        ],
+        "Schema Version": 3
+      }
+    },
+    "3": {
+      "metadata": {
+        "Test Size": 39,
+        "Train And Evaluate Seconds": 0.07917451858520508,
+        "Train Size": 168
+      },
+      "metrics": {
+        "Calibration": {
+          "Bin Count": 10,
+          "Metrics": {
+            "Brier Score": 0.14166889153534928,
+            "ECE": 0.04502253972031732,
+            "Log Loss": 0.4275992351959429
+          },
+          "Per Label": [
+            {
+              "Brier Score": 0.00060843520509814,
+              "ECE": 0.010159388915874446,
+              "Label Index": 0,
+              "Label Name": "Viral_capsid",
+              "Log Loss": 0.010484949676153823
+            },
+            {
+              "Brier Score": 0.15363710642920603,
+              "ECE": 0.12429821873322511,
+              "Label Index": 1,
+              "Label Name": "Host_cell_membrane",
+              "Log Loss": 0.46665818418961974
+            },
+            {
+              "Brier Score": 0.08379060762137149,
+              "ECE": 0.10030133570902623,
+              "Label Index": 2,
+              "Label Name": "Host_endoplasm_reticulum",
+              "Log Loss": 0.3030628981782447
+            },
+            {
+              "Brier Score": 0.2719568577191477,
+              "ECE": 0.1515849506816803,
+              "Label Index": 3,
+              "Label Name": "Host_cytoplasm",
+              "Log Loss": 0.7412620777723713
+            },
+            {
+              "Brier Score": 0.22754647491599242,
+              "ECE": 0.17050290890993217,
+              "Label Index": 4,
+              "Label Name": "Host_nucleus",
+              "Log Loss": 0.6553352887291912
+            },
+            {
+              "Brier Score": 0.11247386732127992,
+              "ECE": 0.07940326356448424,
+              "Label Index": 5,
+              "Label Name": "Secreted",
+              "Log Loss": 0.3887920126300765
+            }
+          ],
+          "Reliability": [
+            {
+              "Absolute Gap": 0.005808994614199037,
+              "Bin": 0,
+              "Count": 96,
+              "Lower Bound": 0.0,
+              "Mean Predicted Probability": 0.03585767205246763,
+              "Observed Positive Rate": 0.041666666666666664,
+              "Upper Bound": 0.1
+            },
+            {
+              "Absolute Gap": 0.03818662152733912,
+              "Bin": 1,
+              "Count": 43,
+              "Lower Bound": 0.1,
+              "Mean Predicted Probability": 0.14785989010056785,
+              "Observed Positive Rate": 0.18604651162790697,
+              "Upper Bound": 0.2
+            },
+            {
+              "Absolute Gap": 0.04848642498254774,
+              "Bin": 2,
+              "Count": 30,
+              "Lower Bound": 0.2,
+              "Mean Predicted Probability": 0.25151357501745225,
+              "Observed Positive Rate": 0.3,
+              "Upper Bound": 0.3
+            },
+            {
+              "Absolute Gap": 0.04223868437111378,
+              "Bin": 3,
+              "Count": 16,
+              "Lower Bound": 0.3,
+              "Mean Predicted Probability": 0.3547386843711138,
+              "Observed Positive Rate": 0.3125,
+              "Upper Bound": 0.4
+            },
+            {
+              "Absolute Gap": 0.11678653671627948,
+              "Bin": 4,
+              "Count": 21,
+              "Lower Bound": 0.4,
+              "Mean Predicted Probability": 0.4546420347122919,
+              "Observed Positive Rate": 0.5714285714285714,
+              "Upper Bound": 0.5
+            },
+            {
+              "Absolute Gap": 0.1108490452170372,
+              "Bin": 5,
+              "Count": 16,
+              "Lower Bound": 0.5,
+              "Mean Predicted Probability": 0.5483490452170372,
+              "Observed Positive Rate": 0.4375,
+              "Upper Bound": 0.6
+            },
+            {
+              "Absolute Gap": 0.08272692135402138,
+              "Bin": 6,
+              "Count": 7,
+              "Lower Bound": 0.6,
+              "Mean Predicted Probability": 0.6541554927825928,
+              "Observed Positive Rate": 0.5714285714285714,
+              "Upper Bound": 0.7
+            },
+            {
+              "Absolute Gap": 0.3977146148681641,
+              "Bin": 7,
+              "Count": 3,
+              "Lower Bound": 0.7,
+              "Mean Predicted Probability": 0.7310479482014974,
+              "Observed Positive Rate": 0.3333333333333333,
+              "Upper Bound": 0.8
+            },
+            {
+              "Absolute Gap": 0.11062115430831909,
+              "Bin": 8,
+              "Count": 1,
+              "Lower Bound": 0.8,
+              "Mean Predicted Probability": 0.8893788456916809,
+              "Observed Positive Rate": 1.0,
+              "Upper Bound": 0.9
+            },
+            {
+              "Absolute Gap": 0.09621894359588623,
+              "Bin": 9,
+              "Count": 1,
+              "Lower Bound": 0.9,
+              "Mean Predicted Probability": 0.9037810564041138,
+              "Observed Positive Rate": 1.0,
+              "Upper Bound": 1.0
+            }
+          ],
+          "Sample Label Count": 234
+        },
+        "Costs": {},
+        "Critical Labels": {
+          "Reason": "critical_labels is not configured by the domain",
+          "Records": [],
+          "Status": "N/A"
+        },
+        "Full": {
+          "Hamming Accuracy": 0.7777777777777778,
+          "Hamming Loss": 0.2222222222222222,
+          "Instance Jaccard": 0.2948717948717949,
+          "Instance-F1": 0.3162393162393162,
+          "Macro Precision": 0.5089285714285714,
+          "Macro Recall": 0.31290849673202614,
+          "Macro-F1": 0.3625,
+          "Micro-F1": 0.35,
+          "Subset Accuracy": 0.23076923076923078
+        },
+        "Groups": {},
+        "Metric Contract Version": "3.0-contract",
+        "Model Metadata": {
+          "Calibration Audit": {
+            "calibrated_label_count": 6,
+            "fallback_label_count": 0,
+            "fit_sample_counts": [
+              168
+            ],
+            "labels": [
+              {
+                "class_counts": {
+                  "0": 162,
+                  "1": 6
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 168,
+                "label_index": 0,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 142,
+                  "1": 26
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 168,
+                "label_index": 1,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 152,
+                  "1": 16
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 168,
+                "label_index": 2,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 99,
+                  "1": 69
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 168,
+                "label_index": 3,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 101,
+                  "1": 67
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 168,
+                "label_index": 4,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 152,
+                  "1": 16
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 168,
+                "label_index": 5,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              }
+            ],
+            "outer_test_access": false
+          },
+          "Experiment Manifest": {
+            "base_learner": {
+              "backend": "sklearn.svm.LinearSVC+CalibratedClassifierCV",
+              "binary_parameters": {
+                "C": 1.0,
+                "dual": "auto",
+                "max_iter": 5000,
+                "tol": 0.001
+              },
+              "calibration": {
+                "cv": 3,
+                "method": "sigmoid",
+                "rare_label_strategy": "smoothed_prior",
+                "scope": "nested_in_training_fold"
+              },
+              "name": "svm_calibrated"
+            },
+            "experiment_config_schema": 1,
+            "family": "CC",
+            "model_id": "CC_SVM",
+            "model_parameters": {
+              "base_estimator": "svm_calibrated",
+              "order": null,
+              "random_state": 42
+            },
+            "selective": false
+          }
+        },
+        "Per Label": [
+          {
+            "Coverage": 1.0,
+            "Full F1": 1.0,
+            "Full Hamming Accuracy": 1.0,
+            "Full Precision": 1.0,
+            "Full Recall": 1.0,
+            "Label Index": 0,
+            "Label Name": "Viral_capsid",
+            "Negative Support": 37,
+            "Positive Support": 2,
+            "Prevalence": 0.05128205128205128,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 1.0,
+            "Selective Precision": 1.0,
+            "Selective Recall": 1.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.7692307692307693,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 1,
+            "Label Name": "Host_cell_membrane",
+            "Negative Support": 32,
+            "Positive Support": 7,
+            "Prevalence": 0.1794871794871795,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.4,
+            "Full Hamming Accuracy": 0.9230769230769231,
+            "Full Precision": 1.0,
+            "Full Recall": 0.25,
+            "Label Index": 2,
+            "Label Name": "Host_endoplasm_reticulum",
+            "Negative Support": 35,
+            "Positive Support": 4,
+            "Prevalence": 0.10256410256410256,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.4,
+            "Selective Precision": 1.0,
+            "Selective Recall": 0.25
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.375,
+            "Full Hamming Accuracy": 0.48717948717948717,
+            "Full Precision": 0.42857142857142855,
+            "Full Recall": 0.3333333333333333,
+            "Label Index": 3,
+            "Label Name": "Host_cytoplasm",
+            "Negative Support": 21,
+            "Positive Support": 18,
+            "Prevalence": 0.46153846153846156,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.375,
+            "Selective Precision": 0.42857142857142855,
+            "Selective Recall": 0.3333333333333333
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.4,
+            "Full Hamming Accuracy": 0.6153846153846154,
+            "Full Precision": 0.625,
+            "Full Recall": 0.29411764705882354,
+            "Label Index": 4,
+            "Label Name": "Host_nucleus",
+            "Negative Support": 22,
+            "Positive Support": 17,
+            "Prevalence": 0.4358974358974359,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.4,
+            "Selective Precision": 0.625,
+            "Selective Recall": 0.29411764705882354
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.8717948717948718,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 5,
+            "Label Name": "Secreted",
+            "Negative Support": 35,
+            "Positive Support": 4,
+            "Prevalence": 0.10256410256410256,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          }
+        ],
+        "Schema Version": 3
+      }
+    },
+    "4": {
+      "metadata": {
+        "Test Size": 43,
+        "Train And Evaluate Seconds": 0.07952141761779785,
+        "Train Size": 164
+      },
+      "metrics": {
+        "Calibration": {
+          "Bin Count": 10,
+          "Metrics": {
+            "Brier Score": 0.13854723548410264,
+            "ECE": 0.08012427565079479,
+            "Log Loss": 0.41331814639332076
+          },
+          "Per Label": [
+            {
+              "Brier Score": 0.000850465329999158,
+              "ECE": 0.00941317200492851,
+              "Label Index": 0,
+              "Label Name": "Viral_capsid",
+              "Log Loss": 0.009882686255315448
+            },
+            {
+              "Brier Score": 0.11615993660392608,
+              "ECE": 0.19095615540132965,
+              "Label Index": 1,
+              "Label Name": "Host_cell_membrane",
+              "Log Loss": 0.39467438883067474
+            },
+            {
+              "Brier Score": 0.08271103669591781,
+              "ECE": 0.03517289107752054,
+              "Label Index": 2,
+              "Label Name": "Host_endoplasm_reticulum",
+              "Log Loss": 0.2897775199554016
+            },
+            {
+              "Brier Score": 0.2602053594083045,
+              "ECE": 0.14473435837169027,
+              "Label Index": 3,
+              "Label Name": "Host_cytoplasm",
+              "Log Loss": 0.7143937271038867
+            },
+            {
+              "Brier Score": 0.2914383381091856,
+              "ECE": 0.2723244040511375,
+              "Label Index": 4,
+              "Label Name": "Host_nucleus",
+              "Log Loss": 0.8015201144852854
+            },
+            {
+              "Brier Score": 0.07991827675728257,
+              "ECE": 0.12981620673523392,
+              "Label Index": 5,
+              "Label Name": "Secreted",
+              "Log Loss": 0.269660441729361
+            }
+          ],
+          "Reliability": [
+            {
+              "Absolute Gap": 0.015791237544531385,
+              "Bin": 0,
+              "Count": 108,
+              "Lower Bound": 0.0,
+              "Mean Predicted Probability": 0.0343097560630499,
+              "Observed Positive Rate": 0.018518518518518517,
+              "Upper Bound": 0.1
+            },
+            {
+              "Absolute Gap": 0.04891796949061941,
+              "Bin": 1,
+              "Count": 47,
+              "Lower Bound": 0.1,
+              "Mean Predicted Probability": 0.14257139221150825,
+              "Observed Positive Rate": 0.19148936170212766,
+              "Upper Bound": 0.2
+            },
+            {
+              "Absolute Gap": 0.15601788938045505,
+              "Bin": 2,
+              "Count": 25,
+              "Lower Bound": 0.2,
+              "Mean Predicted Probability": 0.24398211061954497,
+              "Observed Positive Rate": 0.4,
+              "Upper Bound": 0.3
+            },
+            {
+              "Absolute Gap": 0.03407221875692673,
+              "Bin": 3,
+              "Count": 19,
+              "Lower Bound": 0.3,
+              "Mean Predicted Probability": 0.34986169244113724,
+              "Observed Positive Rate": 0.3157894736842105,
+              "Upper Bound": 0.4
+            },
+            {
+              "Absolute Gap": 0.08088351786136627,
+              "Bin": 4,
+              "Count": 22,
+              "Lower Bound": 0.4,
+              "Mean Predicted Probability": 0.4445198814977299,
+              "Observed Positive Rate": 0.36363636363636365,
+              "Upper Bound": 0.5
+            },
+            {
+              "Absolute Gap": 0.37901145219802856,
+              "Bin": 5,
+              "Count": 18,
+              "Lower Bound": 0.5,
+              "Mean Predicted Probability": 0.5456781188646952,
+              "Observed Positive Rate": 0.16666666666666666,
+              "Upper Bound": 0.6
+            },
+            {
+              "Absolute Gap": 0.13297976056734717,
+              "Bin": 6,
+              "Count": 6,
+              "Lower Bound": 0.6,
+              "Mean Predicted Probability": 0.6329797605673472,
+              "Observed Positive Rate": 0.5,
+              "Upper Bound": 0.7
+            },
+            {
+              "Absolute Gap": 0.14534608125686643,
+              "Bin": 7,
+              "Count": 5,
+              "Lower Bound": 0.7,
+              "Mean Predicted Probability": 0.7453460812568664,
+              "Observed Positive Rate": 0.6,
+              "Upper Bound": 0.8
+            },
+            {
+              "Absolute Gap": 0.27996231828417095,
+              "Bin": 8,
+              "Count": 7,
+              "Lower Bound": 0.8,
+              "Mean Predicted Probability": 0.8513908897127423,
+              "Observed Positive Rate": 0.5714285714285714,
+              "Upper Bound": 0.9
+            },
+            {
+              "Absolute Gap": 0.0336567759513855,
+              "Bin": 9,
+              "Count": 1,
+              "Lower Bound": 0.9,
+              "Mean Predicted Probability": 0.9663432240486145,
+              "Observed Positive Rate": 1.0,
+              "Upper Bound": 1.0
+            }
+          ],
+          "Sample Label Count": 258
+        },
+        "Costs": {},
+        "Critical Labels": {
+          "Reason": "critical_labels is not configured by the domain",
+          "Records": [],
+          "Status": "N/A"
+        },
+        "Full": {
+          "Hamming Accuracy": 0.7751937984496124,
+          "Hamming Loss": 0.2248062015503876,
+          "Instance Jaccard": 0.2751937984496124,
+          "Instance-F1": 0.29069767441860467,
+          "Macro Precision": 0.27855477855477856,
+          "Macro Recall": 0.28921568627450983,
+          "Macro-F1": 0.2812865497076023,
+          "Micro-F1": 0.32558139534883723,
+          "Subset Accuracy": 0.23255813953488372
+        },
+        "Groups": {},
+        "Metric Contract Version": "3.0-contract",
+        "Model Metadata": {
+          "Calibration Audit": {
+            "calibrated_label_count": 6,
+            "fallback_label_count": 0,
+            "fit_sample_counts": [
+              164
+            ],
+            "labels": [
+              {
+                "class_counts": {
+                  "0": 158,
+                  "1": 6
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 164,
+                "label_index": 0,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 137,
+                  "1": 27
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 164,
+                "label_index": 1,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 148,
+                  "1": 16
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 164,
+                "label_index": 2,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 94,
+                  "1": 70
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 164,
+                "label_index": 3,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 96,
+                  "1": 68
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 164,
+                "label_index": 4,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 148,
+                  "1": 16
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 164,
+                "label_index": 5,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              }
+            ],
+            "outer_test_access": false
+          },
+          "Experiment Manifest": {
+            "base_learner": {
+              "backend": "sklearn.svm.LinearSVC+CalibratedClassifierCV",
+              "binary_parameters": {
+                "C": 1.0,
+                "dual": "auto",
+                "max_iter": 5000,
+                "tol": 0.001
+              },
+              "calibration": {
+                "cv": 3,
+                "method": "sigmoid",
+                "rare_label_strategy": "smoothed_prior",
+                "scope": "nested_in_training_fold"
+              },
+              "name": "svm_calibrated"
+            },
+            "experiment_config_schema": 1,
+            "family": "CC",
+            "model_id": "CC_SVM",
+            "model_parameters": {
+              "base_estimator": "svm_calibrated",
+              "order": null,
+              "random_state": 42
+            },
+            "selective": false
+          }
+        },
+        "Per Label": [
+          {
+            "Coverage": 1.0,
+            "Full F1": 1.0,
+            "Full Hamming Accuracy": 1.0,
+            "Full Precision": 1.0,
+            "Full Recall": 1.0,
+            "Label Index": 0,
+            "Label Name": "Viral_capsid",
+            "Negative Support": 41,
+            "Positive Support": 2,
+            "Prevalence": 0.046511627906976744,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 1.0,
+            "Selective Precision": 1.0,
+            "Selective Recall": 1.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.8604651162790697,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 1,
+            "Label Name": "Host_cell_membrane",
+            "Negative Support": 37,
+            "Positive Support": 6,
+            "Prevalence": 0.13953488372093023,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9069767441860465,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 2,
+            "Label Name": "Host_endoplasm_reticulum",
+            "Negative Support": 39,
+            "Positive Support": 4,
+            "Prevalence": 0.09302325581395349,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.26666666666666666,
+            "Full Hamming Accuracy": 0.4883720930232558,
+            "Full Precision": 0.3076923076923077,
+            "Full Recall": 0.23529411764705882,
+            "Label Index": 3,
+            "Label Name": "Host_cytoplasm",
+            "Negative Support": 26,
+            "Positive Support": 17,
+            "Prevalence": 0.3953488372093023,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.26666666666666666,
+            "Selective Precision": 0.3076923076923077,
+            "Selective Recall": 0.23529411764705882
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.42105263157894735,
+            "Full Hamming Accuracy": 0.4883720930232558,
+            "Full Precision": 0.36363636363636365,
+            "Full Recall": 0.5,
+            "Label Index": 4,
+            "Label Name": "Host_nucleus",
+            "Negative Support": 27,
+            "Positive Support": 16,
+            "Prevalence": 0.37209302325581395,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.42105263157894735,
+            "Selective Precision": 0.36363636363636365,
+            "Selective Recall": 0.5
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9069767441860465,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 5,
+            "Label Name": "Secreted",
+            "Negative Support": 39,
+            "Positive Support": 4,
+            "Prevalence": 0.09302325581395349,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          }
+        ],
+        "Schema Version": 3
+      }
+    },
+    "5": {
+      "metadata": {
+        "Test Size": 45,
+        "Train And Evaluate Seconds": 0.07749104499816895,
+        "Train Size": 162
+      },
+      "metrics": {
+        "Calibration": {
+          "Bin Count": 10,
+          "Metrics": {
+            "Brier Score": 0.12047860995466572,
+            "ECE": 0.05213256103021127,
+            "Log Loss": 0.37779478722053783
+          },
+          "Per Label": [
+            {
+              "Brier Score": 0.0004871238179455975,
+              "ECE": 0.010761918091318674,
+              "Label Index": 0,
+              "Label Name": "Viral_capsid",
+              "Log Loss": 0.011020540531073975
+            },
+            {
+              "Brier Score": 0.1159750595780739,
+              "ECE": 0.12627347062031427,
+              "Label Index": 1,
+              "Label Name": "Host_cell_membrane",
+              "Log Loss": 0.3976799398986747
+            },
+            {
+              "Brier Score": 0.07518003963664652,
+              "ECE": 0.02351237225035826,
+              "Label Index": 2,
+              "Label Name": "Host_endoplasm_reticulum",
+              "Log Loss": 0.2737548293398681
+            },
+            {
+              "Brier Score": 0.23814808482479455,
+              "ECE": 0.10452981458769907,
+              "Label Index": 3,
+              "Label Name": "Host_cytoplasm",
+              "Log Loss": 0.6683464622477194
+            },
+            {
+              "Brier Score": 0.21131414510474375,
+              "ECE": 0.11372737040122348,
+              "Label Index": 4,
+              "Label Name": "Host_nucleus",
+              "Log Loss": 0.6182309638460107
+            },
+            {
+              "Brier Score": 0.0817672067657899,
+              "ECE": 0.047952274072708356,
+              "Label Index": 5,
+              "Label Name": "Secreted",
+              "Log Loss": 0.2977359874598798
+            }
+          ],
+          "Reliability": [
+            {
+              "Absolute Gap": 0.01444456615207488,
+              "Bin": 0,
+              "Count": 114,
+              "Lower Bound": 0.0,
+              "Mean Predicted Probability": 0.03818701279529354,
+              "Observed Positive Rate": 0.05263157894736842,
+              "Upper Bound": 0.1
+            },
+            {
+              "Absolute Gap": 0.07244978734153383,
+              "Bin": 1,
+              "Count": 47,
+              "Lower Bound": 0.1,
+              "Mean Predicted Probability": 0.13627957457557638,
+              "Observed Positive Rate": 0.06382978723404255,
+              "Upper Bound": 0.2
+            },
+            {
+              "Absolute Gap": 0.004604338109493233,
+              "Bin": 2,
+              "Count": 20,
+              "Lower Bound": 0.2,
+              "Mean Predicted Probability": 0.25460433810949323,
+              "Observed Positive Rate": 0.25,
+              "Upper Bound": 0.3
+            },
+            {
+              "Absolute Gap": 0.08552383599073993,
+              "Bin": 3,
+              "Count": 23,
+              "Lower Bound": 0.3,
+              "Mean Predicted Probability": 0.3463934012081312,
+              "Observed Positive Rate": 0.2608695652173913,
+              "Upper Bound": 0.4
+            },
+            {
+              "Absolute Gap": 0.1432218689184922,
+              "Bin": 4,
+              "Count": 26,
+              "Lower Bound": 0.4,
+              "Mean Predicted Probability": 0.4509141766107999,
+              "Observed Positive Rate": 0.3076923076923077,
+              "Upper Bound": 0.5
+            },
+            {
+              "Absolute Gap": 0.08618558446566266,
+              "Bin": 5,
+              "Count": 24,
+              "Lower Bound": 0.5,
+              "Mean Predicted Probability": 0.544518917798996,
+              "Observed Positive Rate": 0.4583333333333333,
+              "Upper Bound": 0.6
+            },
+            {
+              "Absolute Gap": 0.022990670469072105,
+              "Bin": 6,
+              "Count": 9,
+              "Lower Bound": 0.6,
+              "Mean Predicted Probability": 0.6436759961975945,
+              "Observed Positive Rate": 0.6666666666666666,
+              "Upper Bound": 0.7
+            },
+            {
+              "Absolute Gap": 0.020124927163124084,
+              "Bin": 7,
+              "Count": 4,
+              "Lower Bound": 0.7,
+              "Mean Predicted Probability": 0.7298750728368759,
+              "Observed Positive Rate": 0.75,
+              "Upper Bound": 0.8
+            },
+            {
+              "Absolute Gap": 0.39787280559539795,
+              "Bin": 8,
+              "Count": 2,
+              "Lower Bound": 0.8,
+              "Mean Predicted Probability": 0.897872805595398,
+              "Observed Positive Rate": 0.5,
+              "Upper Bound": 0.9
+            },
+            {
+              "Absolute Gap": 0.08945196866989136,
+              "Bin": 9,
+              "Count": 1,
+              "Lower Bound": 0.9,
+              "Mean Predicted Probability": 0.9105480313301086,
+              "Observed Positive Rate": 1.0,
+              "Upper Bound": 1.0
+            }
+          ],
+          "Sample Label Count": 270
+        },
+        "Costs": {},
+        "Critical Labels": {
+          "Reason": "critical_labels is not configured by the domain",
+          "Records": [],
+          "Status": "N/A"
+        },
+        "Full": {
+          "Hamming Accuracy": 0.8296296296296296,
+          "Hamming Loss": 0.17037037037037037,
+          "Instance Jaccard": 0.4222222222222222,
+          "Instance-F1": 0.4444444444444444,
+          "Macro Precision": 0.42291666666666666,
+          "Macro Recall": 0.38071895424836605,
+          "Macro-F1": 0.38714851214851215,
+          "Micro-F1": 0.4888888888888889,
+          "Subset Accuracy": 0.35555555555555557
+        },
+        "Groups": {},
+        "Metric Contract Version": "3.0-contract",
+        "Model Metadata": {
+          "Calibration Audit": {
+            "calibrated_label_count": 6,
+            "fallback_label_count": 0,
+            "fit_sample_counts": [
+              162
+            ],
+            "labels": [
+              {
+                "class_counts": {
+                  "0": 156,
+                  "1": 6
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 162,
+                "label_index": 0,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 135,
+                  "1": 27
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 162,
+                "label_index": 1,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 146,
+                  "1": 16
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 162,
+                "label_index": 2,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 92,
+                  "1": 70
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 162,
+                "label_index": 3,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 95,
+                  "1": 67
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 162,
+                "label_index": 4,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 146,
+                  "1": 16
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 162,
+                "label_index": 5,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              }
+            ],
+            "outer_test_access": false
+          },
+          "Experiment Manifest": {
+            "base_learner": {
+              "backend": "sklearn.svm.LinearSVC+CalibratedClassifierCV",
+              "binary_parameters": {
+                "C": 1.0,
+                "dual": "auto",
+                "max_iter": 5000,
+                "tol": 0.001
+              },
+              "calibration": {
+                "cv": 3,
+                "method": "sigmoid",
+                "rare_label_strategy": "smoothed_prior",
+                "scope": "nested_in_training_fold"
+              },
+              "name": "svm_calibrated"
+            },
+            "experiment_config_schema": 1,
+            "family": "CC",
+            "model_id": "CC_SVM",
+            "model_parameters": {
+              "base_estimator": "svm_calibrated",
+              "order": null,
+              "random_state": 42
+            },
+            "selective": false
+          }
+        },
+        "Per Label": [
+          {
+            "Coverage": 1.0,
+            "Full F1": 1.0,
+            "Full Hamming Accuracy": 1.0,
+            "Full Precision": 1.0,
+            "Full Recall": 1.0,
+            "Label Index": 0,
+            "Label Name": "Viral_capsid",
+            "Negative Support": 43,
+            "Positive Support": 2,
+            "Prevalence": 0.044444444444444446,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 1.0,
+            "Selective Precision": 1.0,
+            "Selective Recall": 1.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.25,
+            "Full Hamming Accuracy": 0.8666666666666667,
+            "Full Precision": 0.5,
+            "Full Recall": 0.16666666666666666,
+            "Label Index": 1,
+            "Label Name": "Host_cell_membrane",
+            "Negative Support": 39,
+            "Positive Support": 6,
+            "Prevalence": 0.13333333333333333,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.25,
+            "Selective Precision": 0.5,
+            "Selective Recall": 0.16666666666666666
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9111111111111111,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 2,
+            "Label Name": "Host_endoplasm_reticulum",
+            "Negative Support": 41,
+            "Positive Support": 4,
+            "Prevalence": 0.08888888888888889,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.42424242424242425,
+            "Full Hamming Accuracy": 0.5777777777777777,
+            "Full Precision": 0.4375,
+            "Full Recall": 0.4117647058823529,
+            "Label Index": 3,
+            "Label Name": "Host_cytoplasm",
+            "Negative Support": 28,
+            "Positive Support": 17,
+            "Prevalence": 0.37777777777777777,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.42424242424242425,
+            "Selective Precision": 0.4375,
+            "Selective Recall": 0.4117647058823529
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.6486486486486487,
+            "Full Hamming Accuracy": 0.7111111111111111,
+            "Full Precision": 0.6,
+            "Full Recall": 0.7058823529411765,
+            "Label Index": 4,
+            "Label Name": "Host_nucleus",
+            "Negative Support": 28,
+            "Positive Support": 17,
+            "Prevalence": 0.37777777777777777,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.6486486486486487,
+            "Selective Precision": 0.6,
+            "Selective Recall": 0.7058823529411765
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.0,
+            "Full Hamming Accuracy": 0.9111111111111111,
+            "Full Precision": 0.0,
+            "Full Recall": 0.0,
+            "Label Index": 5,
+            "Label Name": "Secreted",
+            "Negative Support": 41,
+            "Positive Support": 4,
+            "Prevalence": 0.08888888888888889,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.0,
+            "Selective Precision": 0.0,
+            "Selective Recall": 0.0
+          }
+        ],
+        "Schema Version": 3
+      }
+    }
+  },
+  "metric_contract_version": "3.0-contract",
+  "model": "CC_SVM",
+  "schema_version": 3,
+  "status": "complete",
+  "updated_at": "2026-09-20T08:39:01.573247+00:00"
+}

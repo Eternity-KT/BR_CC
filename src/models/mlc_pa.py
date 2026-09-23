@@ -20,10 +20,10 @@ from ..decision import HammingBOPPolicy
 from .base_learners import create_multilabel_estimator
 
 
-def _make_base_estimator(base_estimator, random_state):
+def _make_base_estimator(base_estimator, random_state, **kwargs):
     """Compatibility wrapper around the shared marginal-estimator factory."""
 
-    return create_multilabel_estimator(base_estimator, random_state)
+    return create_multilabel_estimator(base_estimator, random_state, **kwargs)
 
 
 class MLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
@@ -61,12 +61,20 @@ class MLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         penalty="linear",
         abstain_value=-1,
         random_state=42,
+        decision_policy="hamming",
+        min_coverage=None,
+        validation_size=0.2,
+        **base_kwargs,
     ):
         self.base_estimator = base_estimator
         self.cost = cost
         self.penalty = penalty
         self.abstain_value = abstain_value
         self.random_state = random_state
+        self.decision_policy = decision_policy
+        self.min_coverage = min_coverage
+        self.validation_size = validation_size
+        self.base_kwargs = base_kwargs
 
     def _validate_parameters(self):
         if not 0.0 <= float(self.cost) <= 1.0:
@@ -77,8 +85,9 @@ class MLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             raise ValueError("abstain_value must be different from 0 and 1.")
 
     def fit(self, X, Y):
-        """Fit the marginal-probability estimator."""
+        """Fit the marginal-probability estimator and decision policy."""
         self._validate_parameters()
+        X_arr = np.asarray(X)
         Y_arr = np.asarray(Y, dtype=np.int32)
         if Y_arr.ndim != 2:
             raise ValueError("Y must be a two-dimensional binary label matrix.")
@@ -88,10 +97,47 @@ class MLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             raise ValueError("Y must contain only binary values 0 and 1.")
 
         self.n_labels_ = Y_arr.shape[1]
-        self.base_estimator_ = _make_base_estimator(
-            self.base_estimator, self.random_state
+        from ..decision import create_configured_policy
+        self.decision_policy_ = create_configured_policy(
+            self.decision_policy,
+            cost=self.cost,
+            penalty=self.penalty,
+            allow_abstention=True,
+            abstain_value=self.abstain_value,
+            hamming_boundary="minimum_loss",
+            min_coverage=self.min_coverage,
         )
-        self.base_estimator_.fit(X, Y_arr)
+
+        if hasattr(self.decision_policy_, "fit"):
+            from sklearn.model_selection import train_test_split
+            n_samples = X_arr.shape[0]
+            if n_samples > 10:
+                tr_idx, val_idx = train_test_split(
+                    np.arange(n_samples),
+                    test_size=float(self.validation_size),
+                    random_state=int(self.random_state),
+                )
+                self.base_estimator_ = _make_base_estimator(
+                    self.base_estimator, self.random_state, **self.base_kwargs
+                )
+                self.base_estimator_.fit(X_arr[tr_idx], Y_arr[tr_idx])
+                val_probs = np.asarray(self.base_estimator_.predict_proba(X_arr[val_idx]), dtype=np.float64)
+                self.decision_policy_.fit(val_probs, Y_arr[val_idx], cost=self.cost, penalty=self.penalty)
+                # Refit base estimator on full X, Y
+                self.base_estimator_.fit(X_arr, Y_arr)
+            else:
+                self.base_estimator_ = _make_base_estimator(
+                    self.base_estimator, self.random_state, **self.base_kwargs
+                )
+                self.base_estimator_.fit(X_arr, Y_arr)
+                val_probs = np.asarray(self.base_estimator_.predict_proba(X_arr), dtype=np.float64)
+                self.decision_policy_.fit(val_probs, Y_arr, cost=self.cost, penalty=self.penalty)
+        else:
+            self.base_estimator_ = _make_base_estimator(
+                self.base_estimator, self.random_state, **self.base_kwargs
+            )
+            self.base_estimator_.fit(X_arr, Y_arr)
+
         if hasattr(self.base_estimator_, "calibration_audit_"):
             self.calibration_audit_ = dict(
                 self.base_estimator_.calibration_audit_
@@ -140,6 +186,8 @@ class MLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
     def decision_mask(self, X):
         """Return True at label positions on which the classifier decides."""
         probabilities = self.predict_proba(X)
+        if hasattr(self, "decision_policy_") and self.decision_policy_ is not None:
+            return self.decision_policy_.decision_mask(probabilities)
         return HammingBOPPolicy(
             cost=self.cost,
             penalty=self.penalty,
@@ -159,12 +207,13 @@ class MLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         probabilities = np.asarray(probabilities, dtype=np.float64)
         if probabilities.ndim != 2 or probabilities.shape[1] != self.n_labels_:
             raise ValueError("probabilities must have shape (n_samples, n_labels).")
+        if hasattr(self, "decision_policy_") and self.decision_policy_ is not None:
+            return self.decision_policy_.predict_from_proba(probabilities, cost=cost)
         return HammingBOPPolicy(
             cost=self.cost,
             penalty=self.penalty,
             abstain_value=self.abstain_value,
         ).predict_from_proba(probabilities, cost=cost)
-
     def decision_function(self, X):
         """Return base scores when available, otherwise probability logits."""
         check_is_fitted(self, ("base_estimator_", "n_labels_"))

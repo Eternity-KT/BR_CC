@@ -189,18 +189,26 @@ def create_registered_model(
     gsi_partition_random_state=None,
     gsi_fixed_independent_labels=None,
     gsi_final_order="correlation",
+    min_coverage=None,
+    cc_label_noise=0.0,
+    mlp_loss="bce",
 ):
     """Instantiate one of the eight preregistered Logistic/MLP baselines."""
 
     spec = get_model_spec(model_id)
+    extra_base_kwargs = {}
+    if spec.base_learner == "mlp" and mlp_loss != "bce":
+        extra_base_kwargs["loss"] = mlp_loss
+
     if spec.family == "BR":
         model = create_multilabel_estimator(
-            spec.base_learner, random_state=random_state
+            spec.base_learner, random_state=random_state, **extra_base_kwargs
         )
     elif spec.family == "CC":
         model = ClassifierChainClassifier(
             base_estimator=spec.base_learner,
             random_state=random_state,
+            label_noise=cc_label_noise,
         )
     elif spec.family == "MLC_PA":
         model = MLCPartialAbstentionClassifier(
@@ -208,6 +216,10 @@ def create_registered_model(
             cost=abstention_cost,
             penalty=abstention_penalty,
             random_state=random_state,
+            decision_policy=gsi_decision_policy,
+            min_coverage=min_coverage,
+            validation_size=gsi_validation_size,
+            **extra_base_kwargs,
         )
     else:
         model = GSIMLCPartialAbstentionClassifier(
@@ -223,5 +235,8 @@ def create_registered_model(
             fixed_independent_labels=gsi_fixed_independent_labels,
             final_order=gsi_final_order,
             base_learner=spec.base_learner,
+            min_coverage=min_coverage,
+            cc_label_noise=cc_label_noise,
+            mlp_loss=mlp_loss,
         )
     return _attach_manifest(model, spec)

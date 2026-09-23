@@ -14,11 +14,47 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.linear_model import LogisticRegression
 
 
 def get_default_device():
     """Return 'cuda' if GPU is available, else 'cpu'."""
     return "cuda" if torch.cuda.is_available() else "cpu"
+
+
+class AsymmetricLoss(nn.Module):
+    """
+    Asymmetric Loss (ASL) for multi-label classification.
+    Reference: Ridnik et al., "Asymmetric Loss For Multi-Label Classification", ICCV 2021.
+    Suppresses gradients from easy negative samples and prevents under-confident positive predictions.
+    """
+    def __init__(self, gamma_neg=2.0, gamma_pos=0.0, clip=0.05, eps=1e-8):
+        super().__init__()
+        self.gamma_neg = gamma_neg
+        self.gamma_pos = gamma_pos
+        self.clip = clip
+        self.eps = eps
+
+    def forward(self, x, y):
+        xs_pos = torch.sigmoid(x)
+        xs_neg = 1.0 - xs_pos
+
+        if self.clip is not None and self.clip > 0.0:
+            xs_neg = (xs_neg + self.clip).clamp(max=1.0)
+
+        los_pos = y * torch.log(xs_pos.clamp(min=self.eps))
+        los_neg = (1.0 - y) * torch.log(xs_neg.clamp(min=self.eps))
+        loss = los_pos + los_neg
+
+        if self.gamma_neg > 0.0 or self.gamma_pos > 0.0:
+            pt0 = xs_pos * y
+            pt1 = xs_neg * (1.0 - y)
+            pt = pt0 + pt1
+            one_sided_gamma = self.gamma_pos * y + self.gamma_neg * (1.0 - y)
+            one_sided_w = torch.pow(1.0 - pt, one_sided_gamma)
+            loss = loss * one_sided_w
+
+        return -loss.sum(dim=1).mean()
 
 
 class MultiLabelMLPClassifier(BaseEstimator, ClassifierMixin):
@@ -29,16 +65,22 @@ class MultiLabelMLPClassifier(BaseEstimator, ClassifierMixin):
     Parameters:
         hidden_layer_sizes (tuple, default=(128, 64)):
             Neurons in hidden layers.
-        lr (float, default=3e-3):
+        lr (float, default=1e-3):
             Learning rate for AdamW optimizer.
         weight_decay (float, default=1e-3):
             L2 regularization strength.
-        epochs (int, default=150):
+        epochs (int, default=30):
             Number of training epochs.
         dropout (float, default=0.15):
             Dropout probability for regularization.
         pos_weight_clamp (float, default=15.0):
-            Maximum positive class imbalance weight clamp.
+            Maximum pos_weight clamp value for class imbalance weighting.
+        unbias_pos_weight (bool, default=False):
+            If True and calibration is None, subtract log(pos_weight) from logits.
+        calibration (str, default='sigmoid'):
+            Probability calibration method: 'sigmoid' (Platt scaling) or None.
+        loss_name (str, default='bce'):
+            'bce' for standard BCEWithLogitsLoss, or 'asymmetric' / 'asl' for Asymmetric Loss.
         device (str, default=None):
             'cuda', 'cpu', or None (auto-detects).
         random_state (int, default=42):
@@ -52,6 +94,9 @@ class MultiLabelMLPClassifier(BaseEstimator, ClassifierMixin):
         epochs=30,
         dropout=0.15,
         pos_weight_clamp=15.0,
+        unbias_pos_weight=False,
+        calibration="sigmoid",
+        loss_name="bce",
         device=None,
         random_state=42,
         **kwargs
@@ -64,12 +109,17 @@ class MultiLabelMLPClassifier(BaseEstimator, ClassifierMixin):
         self.epochs = epochs
         self.dropout = dropout
         self.pos_weight_clamp = pos_weight_clamp
+        self.unbias_pos_weight = unbias_pos_weight
+        self.calibration = calibration
+        self.loss_name = loss_name
         self.device = device
         self.random_state = random_state
         self.extra_kwargs = kwargs
         self.model_ = None
         self.device_ = None
         self.n_labels_ = 0
+        self.pos_weight_ = None
+        self.calibrators_ = {}
 
     def _get_device(self):
         if self.device is not None:
@@ -129,8 +179,13 @@ class MultiLabelMLPClassifier(BaseEstimator, ClassifierMixin):
         pos_counts = Y_tensor.sum(dim=0).clamp(min=1.0)
         neg_counts = (float(n_samples) - pos_counts).clamp(min=1.0)
         pos_weight = (neg_counts / pos_counts).clamp(min=1.0, max=self.pos_weight_clamp)
+        self.pos_weight_ = pos_weight.detach()
 
-        criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+        if str(self.loss_name).lower() in ("asymmetric", "asl"):
+            criterion = AsymmetricLoss(gamma_neg=2.0, gamma_pos=0.0, clip=0.05)
+        else:
+            criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+
         optimizer = optim.AdamW(
             self.model_.parameters(),
             lr=self.lr,
@@ -147,17 +202,59 @@ class MultiLabelMLPClassifier(BaseEstimator, ClassifierMixin):
             optimizer.step()
             scheduler.step()
 
+        # Vectorized Platt scaling (calibration="sigmoid") on GPU
+        self.calibrators_ = {}
+        if self.calibration == "sigmoid":
+            self.model_.eval()
+            with torch.no_grad():
+                raw_logits_t = self.model_(X_tensor)
+
+            # Fast vectorized calibration on GPU (all labels simultaneously)
+            a_param = nn.Parameter(torch.ones(self.n_labels_, device=self.device_))
+            b_param = nn.Parameter(torch.zeros(self.n_labels_, device=self.device_))
+            cal_opt = optim.Adam([a_param, b_param], lr=0.05)
+            cal_loss_fn = nn.BCEWithLogitsLoss()
+
+            with torch.enable_grad():
+                for _ in range(30):
+                    cal_opt.zero_grad(set_to_none=True)
+                    scaled = raw_logits_t * a_param + b_param
+                    loss_cal = cal_loss_fn(scaled, Y_tensor)
+                    loss_cal.backward()
+                    cal_opt.step()
+
+            a_arr = a_param.detach().clamp(min=0.01).cpu().numpy()
+            b_arr = b_param.detach().cpu().numpy()
+
+            for j in range(self.n_labels_):
+                if j in self.constant_labels_:
+                    continue
+                pos_c = int(np.sum(Y_arr[:, j] == 1))
+                neg_c = n_samples - pos_c
+                if min(pos_c, neg_c) < 2:
+                    p_prior = (pos_c + 1.0) / (n_samples + 2.0)
+                    b_prior = float(np.log(p_prior / (1.0 - p_prior)))
+                    self.calibrators_[j] = (0.0, b_prior)
+                else:
+                    self.calibrators_[j] = (float(a_arr[j]), float(b_arr[j]))
+
         return self
 
     def decision_function(self, X):
-        """Return raw output logits."""
+        """Return output logits (calibrated if calibration='sigmoid')."""
         self.model_.eval()
         X_arr = np.asarray(X, dtype=np.float32)
         X_tensor = torch.as_tensor(X_arr, device=self.device_)
 
         with torch.no_grad():
             logits = self.model_(X_tensor)
+            if self.unbias_pos_weight and not self.calibration and hasattr(self, "pos_weight_") and self.pos_weight_ is not None:
+                logits = logits - torch.log(self.pos_weight_)
             scores = logits.cpu().numpy()
+
+        if self.calibration == "sigmoid" and hasattr(self, "calibrators_"):
+            for j, (a_j, b_j) in self.calibrators_.items():
+                scores[:, j] = a_j * scores[:, j] + b_j
 
         if hasattr(self, 'constant_labels_') and self.constant_labels_:
             for j, val in self.constant_labels_.items():
@@ -166,14 +263,9 @@ class MultiLabelMLPClassifier(BaseEstimator, ClassifierMixin):
         return scores
 
     def predict_proba(self, X):
-        """Return sigmoid predicted probabilities for all labels."""
-        self.model_.eval()
-        X_arr = np.asarray(X, dtype=np.float32)
-        X_tensor = torch.as_tensor(X_arr, device=self.device_)
-
-        with torch.no_grad():
-            logits = self.model_(X_tensor)
-            probs = torch.sigmoid(logits).cpu().numpy()
+        """Return calibrated predicted probabilities for all labels."""
+        scores = self.decision_function(X)
+        probs = 1.0 / (1.0 + np.exp(-np.clip(scores, -50.0, 50.0)))
 
         if hasattr(self, 'constant_labels_') and self.constant_labels_:
             for j, val in self.constant_labels_.items():
@@ -198,6 +290,9 @@ class FastPyTorchBinaryMLP(BaseEstimator, ClassifierMixin):
         lr=1e-3,
         weight_decay=1e-3,
         epochs=30,
+        unbias_pos_weight=False,
+        calibration="sigmoid",
+        loss_name="bce",
         device=None,
         random_state=42,
         **kwargs
@@ -208,11 +303,17 @@ class FastPyTorchBinaryMLP(BaseEstimator, ClassifierMixin):
         self.lr = lr
         self.weight_decay = weight_decay
         self.epochs = epochs
+        self.unbias_pos_weight = unbias_pos_weight
+        self.calibration = calibration
+        self.loss_name = loss_name
         self.device = device
         self.random_state = random_state
         self.extra_kwargs = kwargs
         self.model_ = None
         self.device_ = None
+        self.pos_weight_ = None
+        self.calibrator_ = None
+        self.constant_label_ = None
 
     def _get_device(self):
         if self.device is not None:
@@ -230,6 +331,12 @@ class FastPyTorchBinaryMLP(BaseEstimator, ClassifierMixin):
         y_arr = np.asarray(y, dtype=np.float32).reshape(-1, 1)
 
         n_samples, in_features = X_arr.shape
+        unique_y = np.unique(y_arr)
+        if len(unique_y) <= 1:
+            self.constant_label_ = int(unique_y[0]) if len(unique_y) == 1 else 0
+            return self
+        self.constant_label_ = None
+
         h_dim = self.hidden_layer_sizes[0] if len(self.hidden_layer_sizes) > 0 else 64
 
         self.model_ = nn.Sequential(
@@ -244,8 +351,13 @@ class FastPyTorchBinaryMLP(BaseEstimator, ClassifierMixin):
         pos_count = float(y_tensor.sum().item())
         neg_count = float(n_samples) - pos_count
         pos_weight = torch.tensor([min(max(neg_count / max(pos_count, 1.0), 1.0), 10.0)], device=self.device_)
+        self.pos_weight_ = pos_weight.detach()
 
-        criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+        if str(self.loss_name).lower() in ("asymmetric", "asl"):
+            criterion = AsymmetricLoss(gamma_neg=2.0, gamma_pos=0.0, clip=0.05)
+        else:
+            criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+
         optimizer = optim.AdamW(
             self.model_.parameters(),
             lr=self.lr,
@@ -259,29 +371,60 @@ class FastPyTorchBinaryMLP(BaseEstimator, ClassifierMixin):
             loss.backward()
             optimizer.step()
 
+        # Calibration
+        self.calibrator_ = None
+        if self.calibration == "sigmoid":
+            self.model_.eval()
+            with torch.no_grad():
+                raw_logits = self.model_(X_tensor).squeeze(1).cpu().numpy().reshape(-1, 1)
+            pos_c = int(pos_count)
+            neg_c = int(neg_count)
+            if min(pos_c, neg_c) < 2:
+                p_prior = (pos_c + 1.0) / (n_samples + 2.0)
+                b_prior = float(np.log(p_prior / (1.0 - p_prior)))
+                self.calibrator_ = (0.0, b_prior)
+            else:
+                lr_cal = LogisticRegression(
+                    C=1.0,
+                    solver="liblinear",
+                    random_state=self.random_state if self.random_state is not None else 42,
+                )
+                lr_cal.fit(raw_logits, y_arr.ravel())
+                a = float(lr_cal.coef_[0, 0])
+                b = float(lr_cal.intercept_[0])
+                if a <= 0.0:
+                    a = 1.0
+                self.calibrator_ = (a, b)
+
         return self
 
     def decision_function(self, X):
+        if self.constant_label_ is not None:
+            return np.full(len(X), 50.0 if self.constant_label_ == 1 else -50.0, dtype=np.float32)
+
         self.model_.eval()
         X_arr = np.asarray(X, dtype=np.float32)
         X_tensor = torch.as_tensor(X_arr, device=self.device_)
         with torch.no_grad():
             scores = self.model_(X_tensor).squeeze(1).cpu().numpy()
+            if self.unbias_pos_weight and not self.calibration and hasattr(self, "pos_weight_") and self.pos_weight_ is not None:
+                scores = scores - float(torch.log(self.pos_weight_).item())
+
+        if self.calibration == "sigmoid" and hasattr(self, "calibrator_") and self.calibrator_ is not None:
+            a, b = self.calibrator_
+            scores = a * scores + b
+
         return scores
 
     def predict_proba(self, X):
-        self.model_.eval()
-        X_arr = np.asarray(X, dtype=np.float32)
-        X_tensor = torch.as_tensor(X_arr, device=self.device_)
-        with torch.no_grad():
-            p1 = torch.sigmoid(self.model_(X_tensor).squeeze(1)).cpu().numpy()
+        if self.constant_label_ is not None:
+            p1 = np.full(len(X), float(self.constant_label_), dtype=np.float32)
+            p0 = 1.0 - p1
+            return np.column_stack([p0, p1])
+        scores = self.decision_function(X)
+        p1 = 1.0 / (1.0 + np.exp(-np.clip(scores, -50.0, 50.0)))
         p0 = 1.0 - p1
         return np.column_stack([p0, p1])
 
     def predict(self, X):
-        self.model_.eval()
-        X_arr = np.asarray(X, dtype=np.float32)
-        X_tensor = torch.as_tensor(X_arr, device=self.device_)
-        with torch.no_grad():
-            preds = (torch.sigmoid(self.model_(X_tensor).squeeze(1)) >= 0.5).int().cpu().numpy()
-        return preds
+        return (self.decision_function(X) >= 0.0).astype(np.int32)

@@ -154,6 +154,9 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         fixed_independent_labels=None,
         final_order="correlation",
         base_learner="mlp",
+        min_coverage=None,
+        cc_label_noise=0.0,
+        mlp_loss="bce",
     ):
         self.cost = cost
         self.validation_size = validation_size
@@ -172,6 +175,9 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         self.fixed_independent_labels = fixed_independent_labels
         self.final_order = final_order
         self.base_learner = base_learner
+        self.min_coverage = min_coverage
+        self.cc_label_noise = cc_label_noise
+        self.mlp_loss = mlp_loss
 
     def _validate_parameters(self):
         if not 0.0 <= float(self.cost) <= 1.0:
@@ -205,20 +211,27 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
 
     def _make_br_model(self):
         if self.br_estimator is None:
+            extra = {}
+            if self.base_learner == "mlp" and self.mlp_loss != "bce":
+                extra["loss"] = self.mlp_loss
             return create_multilabel_estimator(
-                self.base_learner, random_state=self.random_state
+                self.base_learner, random_state=self.random_state, **extra
             )
         return _clone_or_copy(self.br_estimator)
 
     def _make_cc_model(self, order=None):
         requested_order = self.order_ if order is None else list(order)
         if self.cc_estimator is None:
+            extra = {}
+            if self.base_learner == "mlp" and self.mlp_loss != "bce":
+                extra["loss"] = self.mlp_loss
             return ClassifierChainClassifier(
                 base_estimator=create_binary_estimator(
-                    self.base_learner, random_state=self.random_state
+                    self.base_learner, random_state=self.random_state, **extra
                 ),
                 order=requested_order,
                 random_state=self.random_state,
+                label_noise=self.cc_label_noise,
             )
         estimator = _clone_or_copy(self.cc_estimator)
         if hasattr(estimator, "set_params"):
@@ -418,7 +431,10 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
 
     def _apply_bop(self, probabilities, cost=None):
         """Apply BOP once, after all final probabilities have been produced."""
-        return self._make_decision_policy().predict_from_proba(
+        policy = getattr(self, "decision_policy_", None)
+        if policy is None:
+            policy = self._make_decision_policy()
+        return policy.predict_from_proba(
             probabilities, cost=cost
         )
 
@@ -433,6 +449,7 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             allow_abstention=True,
             abstain_value=self.abstain_value,
             hamming_boundary="symmetric_thresholds",
+            min_coverage=self.min_coverage,
         )
 
     def _evaluate_configuration(self, Y, probabilities):
@@ -732,6 +749,26 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
                 desired_final_order = list(self.selection_order_)
             else:
                 desired_final_order = list(range(self.n_labels_))
+
+        # Fit decision policy on true out-of-sample validation probabilities
+        # BEFORE any full-data refit occurs to prevent in-sample data leakage.
+        self.decision_policy_ = self._make_decision_policy()
+        if hasattr(self.decision_policy_, "fit"):
+            val_direct = self._direct_probabilities(
+                selection_br, X_array[validation]
+            )
+            val_probs = self._configured_probabilities(
+                X_array[validation],
+                val_direct,
+                selection_cc,
+                self.independent_labels_,
+            )
+            self.decision_policy_.fit(
+                val_probs,
+                Y_array[validation],
+                cost=self.cost,
+                penalty=self.penalty,
+            )
 
         # Final fitting uses no validation score and never sees the outer test
         # fold supplied later to predict().

@@ -6,6 +6,7 @@ import math
 import os
 import re
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -104,7 +105,14 @@ def atomic_json_dump_v3(payload, path):
             stream.write("\n")
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary_name, target)
+        for attempt in range(20):
+            try:
+                os.replace(temporary_name, target)
+                break
+            except PermissionError:
+                if attempt == 19:
+                    raise
+                time.sleep(0.05 * (attempt + 1))
     except Exception:
         try:
             os.unlink(temporary_name)

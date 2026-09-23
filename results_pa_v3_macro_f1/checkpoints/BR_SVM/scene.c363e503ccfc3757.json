@@ -1,0 +1,2339 @@
+{
+  "config": {
+    "abstention_costs": [
+      0.2,
+      0.25,
+      0.3,
+      0.35,
+      0.4,
+      0.5
+    ],
+    "abstention_penalty": "linear",
+    "critical_labels": null,
+    "dataset": "scene",
+    "dataset_fingerprint": "051e3b445ea292ac",
+    "dataset_shape": {
+      "features": 294,
+      "labels": 6,
+      "samples": 2407
+    },
+    "evaluation_policy": {
+      "acceptance_confidence": "2*abs(probability-0.5)",
+      "calibration": "none",
+      "full_threshold": 0.5,
+      "partial_policy": null
+    },
+    "gsi_beta": 1.0,
+    "gsi_decision_policy": "macro_f1",
+    "gsi_final_order": "correlation",
+    "gsi_fixed_independent_labels": null,
+    "gsi_partition_mode": "learned",
+    "gsi_penalty": "linear",
+    "gsi_selection_objective": "full_macro_f1",
+    "gsi_validation_size": 0.2,
+    "label_names": [
+      "beach",
+      "sunset",
+      "foliage",
+      "field",
+      "mountain",
+      "urban"
+    ],
+    "label_policy_hash": null,
+    "metric_contract_version": "3.0-contract",
+    "mlc_pa_base": "logistic",
+    "model": "BR_SVM",
+    "model_signature": {
+      "backend": "sklearn.svm.LinearSVC+CalibratedClassifierCV",
+      "class": "src.models.binary_relevance.BinaryRelevanceClassifier",
+      "experiment_manifest": {
+        "base_learner": {
+          "backend": "sklearn.svm.LinearSVC+CalibratedClassifierCV",
+          "binary_parameters": {
+            "C": 1.0,
+            "dual": "auto",
+            "max_iter": 5000,
+            "tol": 0.001
+          },
+          "calibration": {
+            "cv": 3,
+            "method": "sigmoid",
+            "rare_label_strategy": "smoothed_prior",
+            "scope": "nested_in_training_fold"
+          },
+          "name": "svm_calibrated"
+        },
+        "experiment_config_schema": 1,
+        "family": "BR",
+        "model_id": "BR_SVM",
+        "model_parameters": {
+          "base_estimator": {
+            "class": "src.models.probability_adapter.ProbabilityAdapter",
+            "parameters": {
+              "cv": 3,
+              "estimator": {
+                "class": "sklearn.svm._classes.LinearSVC",
+                "parameters": {
+                  "C": 1.0,
+                  "class_weight": null,
+                  "dual": "auto",
+                  "fit_intercept": true,
+                  "intercept_scaling": 1,
+                  "loss": "squared_hinge",
+                  "max_iter": 5000,
+                  "multi_class": "ovr",
+                  "penalty": "l2",
+                  "random_state": 42,
+                  "tol": 0.001,
+                  "verbose": 0
+                }
+              },
+              "method": "sigmoid",
+              "random_state": 42,
+              "rare_label_strategy": "smoothed_prior"
+            }
+          },
+          "random_state": 42
+        },
+        "selective": false
+      },
+      "parameters": {
+        "base_estimator": {
+          "class": "src.models.probability_adapter.ProbabilityAdapter",
+          "parameters": {
+            "cv": 3,
+            "estimator": {
+              "class": "sklearn.svm._classes.LinearSVC",
+              "parameters": {
+                "C": 1.0,
+                "class_weight": null,
+                "dual": "auto",
+                "fit_intercept": true,
+                "intercept_scaling": 1,
+                "loss": "squared_hinge",
+                "max_iter": 5000,
+                "multi_class": "ovr",
+                "penalty": "l2",
+                "random_state": 42,
+                "tol": 0.001,
+                "verbose": 0
+              }
+            },
+            "method": "sigmoid",
+            "random_state": 42,
+            "rare_label_strategy": "smoothed_prior"
+          }
+        },
+        "random_state": 42
+      }
+    },
+    "n_splits": 5,
+    "operating_point": {
+      "coverage_gamma": 0.8,
+      "risk_epsilon": 0.1,
+      "rule": "min_generalized_loss",
+      "selection_scope": "inner_validation",
+      "validation_size": 0.2
+    },
+    "random_state": 42,
+    "report_cost": 0.3,
+    "scaler": "MaxAbsScaler",
+    "schema_version": 3,
+    "split_hash": "d23e89b5f19a2f88"
+  },
+  "config_hash": "c363e503ccfc3757",
+  "created_at": "2026-09-11T13:57:52.472219+00:00",
+  "dataset": "scene",
+  "folds": {
+    "1": {
+      "metadata": {
+        "Test Size": 479,
+        "Train And Evaluate Seconds": 1.5177083015441895,
+        "Train Size": 1928
+      },
+      "metrics": {
+        "Calibration": {
+          "Bin Count": 10,
+          "Metrics": {
+            "Brier Score": 0.08077590990804678,
+            "ECE": 0.026912052415421803,
+            "Log Loss": 0.27143101071235015
+          },
+          "Per Label": [
+            {
+              "Brier Score": 0.08087040069757509,
+              "ECE": 0.04534524565284084,
+              "Label Index": 0,
+              "Label Name": "beach",
+              "Log Loss": 0.2684602723678409
+            },
+            {
+              "Brier Score": 0.04458540540092944,
+              "ECE": 0.026186129039150158,
+              "Label Index": 1,
+              "Label Name": "sunset",
+              "Log Loss": 0.1826703382207599
+            },
+            {
+              "Brier Score": 0.07380806475352919,
+              "ECE": 0.0474247972331545,
+              "Label Index": 2,
+              "Label Name": "foliage",
+              "Log Loss": 0.2507002417699464
+            },
+            {
+              "Brier Score": 0.053171552041736174,
+              "ECE": 0.028339360945012135,
+              "Label Index": 3,
+              "Label Name": "field",
+              "Log Loss": 0.1933998666493817
+            },
+            {
+              "Brier Score": 0.12785035677698586,
+              "ECE": 0.0542519072869463,
+              "Label Index": 4,
+              "Label Name": "mountain",
+              "Log Loss": 0.39582291383958645
+            },
+            {
+              "Brier Score": 0.10436967977752498,
+              "ECE": 0.033460707811628757,
+              "Label Index": 5,
+              "Label Name": "urban",
+              "Log Loss": 0.3375324314265856
+            }
+          ],
+          "Reliability": [
+            {
+              "Absolute Gap": 0.009378294769251186,
+              "Bin": 0,
+              "Count": 1626,
+              "Lower Bound": 0.0,
+              "Mean Predicted Probability": 0.030288503871342208,
+              "Observed Positive Rate": 0.020910209102091022,
+              "Upper Bound": 0.1
+            },
+            {
+              "Absolute Gap": 0.01672080807136686,
+              "Bin": 1,
+              "Count": 445,
+              "Lower Bound": 0.1,
+              "Mean Predicted Probability": 0.1448106957118163,
+              "Observed Positive Rate": 0.12808988764044943,
+              "Upper Bound": 0.2
+            },
+            {
+              "Absolute Gap": 0.034123908566392,
+              "Bin": 2,
+              "Count": 230,
+              "Lower Bound": 0.2,
+              "Mean Predicted Probability": 0.24716738682726155,
+              "Observed Positive Rate": 0.21304347826086956,
+              "Upper Bound": 0.3
+            },
+            {
+              "Absolute Gap": 0.07883128775677212,
+              "Bin": 3,
+              "Count": 142,
+              "Lower Bound": 0.3,
+              "Mean Predicted Probability": 0.35074617703196026,
+              "Observed Positive Rate": 0.4295774647887324,
+              "Upper Bound": 0.4
+            },
+            {
+              "Absolute Gap": 0.07296789677675108,
+              "Bin": 4,
+              "Count": 121,
+              "Lower Bound": 0.4,
+              "Mean Predicted Probability": 0.44769326024804235,
+              "Observed Positive Rate": 0.5206611570247934,
+              "Upper Bound": 0.5
+            },
+            {
+              "Absolute Gap": 0.09769843624095731,
+              "Bin": 5,
+              "Count": 99,
+              "Lower Bound": 0.5,
+              "Mean Predicted Probability": 0.5487662102236892,
+              "Observed Positive Rate": 0.6464646464646465,
+              "Upper Bound": 0.6
+            },
+            {
+              "Absolute Gap": 0.2062811441719532,
+              "Bin": 6,
+              "Count": 48,
+              "Lower Bound": 0.6,
+              "Mean Predicted Probability": 0.6478855224947134,
+              "Observed Positive Rate": 0.8541666666666666,
+              "Upper Bound": 0.7
+            },
+            {
+              "Absolute Gap": 0.1149918115139007,
+              "Bin": 7,
+              "Count": 50,
+              "Lower Bound": 0.7,
+              "Mean Predicted Probability": 0.7450081884860993,
+              "Observed Positive Rate": 0.86,
+              "Upper Bound": 0.8
+            },
+            {
+              "Absolute Gap": 0.025281048134753625,
+              "Bin": 8,
+              "Count": 38,
+              "Lower Bound": 0.8,
+              "Mean Predicted Probability": 0.8431400044968254,
+              "Observed Positive Rate": 0.868421052631579,
+              "Upper Bound": 0.9
+            },
+            {
+              "Absolute Gap": 0.006664052009582533,
+              "Bin": 9,
+              "Count": 75,
+              "Lower Bound": 0.9,
+              "Mean Predicted Probability": 0.9666640520095825,
+              "Observed Positive Rate": 0.96,
+              "Upper Bound": 1.0
+            }
+          ],
+          "Sample Label Count": 2874
+        },
+        "Costs": {},
+        "Critical Labels": {
+          "Reason": "critical_labels is not configured by the domain",
+          "Records": [],
+          "Status": "N/A"
+        },
+        "Full": {
+          "Hamming Accuracy": 0.8883089770354906,
+          "Hamming Loss": 0.11169102296450939,
+          "Instance Jaccard": 0.4801670146137787,
+          "Instance-F1": 0.49338900487125953,
+          "Macro Precision": 0.8131723246327708,
+          "Macro Recall": 0.5074753967173978,
+          "Macro-F1": 0.6046583638264269,
+          "Micro-F1": 0.6118500604594922,
+          "Subset Accuracy": 0.4405010438413361
+        },
+        "Groups": {},
+        "Metric Contract Version": "3.0-contract",
+        "Model Metadata": {
+          "Calibration Audit": {
+            "calibrated_label_count": 6,
+            "fallback_label_count": 0,
+            "fit_sample_counts": [
+              1928
+            ],
+            "labels": [
+              {
+                "class_counts": {
+                  "0": 1586,
+                  "1": 342
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1928,
+                "label_index": 0,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 1636,
+                  "1": 292
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1928,
+                "label_index": 1,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 1611,
+                  "1": 317
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1928,
+                "label_index": 2,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 1582,
+                  "1": 346
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1928,
+                "label_index": 3,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 1502,
+                  "1": 426
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1928,
+                "label_index": 4,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 1583,
+                  "1": 345
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1928,
+                "label_index": 5,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              }
+            ],
+            "outer_test_access": false
+          },
+          "Experiment Manifest": {
+            "base_learner": {
+              "backend": "sklearn.svm.LinearSVC+CalibratedClassifierCV",
+              "binary_parameters": {
+                "C": 1.0,
+                "dual": "auto",
+                "max_iter": 5000,
+                "tol": 0.001
+              },
+              "calibration": {
+                "cv": 3,
+                "method": "sigmoid",
+                "rare_label_strategy": "smoothed_prior",
+                "scope": "nested_in_training_fold"
+              },
+              "name": "svm_calibrated"
+            },
+            "experiment_config_schema": 1,
+            "family": "BR",
+            "model_id": "BR_SVM",
+            "model_parameters": {
+              "base_estimator": {
+                "class": "src.models.probability_adapter.ProbabilityAdapter",
+                "parameters": {
+                  "cv": 3,
+                  "estimator": {
+                    "class": "sklearn.svm._classes.LinearSVC",
+                    "parameters": {
+                      "C": 1.0,
+                      "class_weight": null,
+                      "dual": "auto",
+                      "fit_intercept": true,
+                      "intercept_scaling": 1,
+                      "loss": "squared_hinge",
+                      "max_iter": 5000,
+                      "multi_class": "ovr",
+                      "penalty": "l2",
+                      "random_state": 42,
+                      "tol": 0.001,
+                      "verbose": 0
+                    }
+                  },
+                  "method": "sigmoid",
+                  "random_state": 42,
+                  "rare_label_strategy": "smoothed_prior"
+                }
+              },
+              "random_state": 42
+            },
+            "selective": false
+          }
+        },
+        "Per Label": [
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.6131386861313869,
+            "Full Hamming Accuracy": 0.8893528183716075,
+            "Full Precision": 0.8076923076923077,
+            "Full Recall": 0.49411764705882355,
+            "Label Index": 0,
+            "Label Name": "beach",
+            "Negative Support": 394,
+            "Positive Support": 85,
+            "Prevalence": 0.17745302713987474,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.6131386861313869,
+            "Selective Precision": 0.8076923076923077,
+            "Selective Recall": 0.49411764705882355
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.8,
+            "Full Hamming Accuracy": 0.9457202505219207,
+            "Full Precision": 0.896551724137931,
+            "Full Recall": 0.7222222222222222,
+            "Label Index": 1,
+            "Label Name": "sunset",
+            "Negative Support": 407,
+            "Positive Support": 72,
+            "Prevalence": 0.15031315240083507,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.8,
+            "Selective Precision": 0.896551724137931,
+            "Selective Recall": 0.7222222222222222
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.6533333333333333,
+            "Full Hamming Accuracy": 0.8914405010438413,
+            "Full Precision": 0.7,
+            "Full Recall": 0.6125,
+            "Label Index": 2,
+            "Label Name": "foliage",
+            "Negative Support": 399,
+            "Positive Support": 80,
+            "Prevalence": 0.16701461377870563,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.6533333333333333,
+            "Selective Precision": 0.7,
+            "Selective Recall": 0.6125
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.8,
+            "Full Hamming Accuracy": 0.9352818371607515,
+            "Full Precision": 0.9117647058823529,
+            "Full Recall": 0.7126436781609196,
+            "Label Index": 3,
+            "Label Name": "field",
+            "Negative Support": 392,
+            "Positive Support": 87,
+            "Prevalence": 0.18162839248434237,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.8,
+            "Selective Precision": 0.9117647058823529,
+            "Selective Recall": 0.7126436781609196
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.3404255319148936,
+            "Full Hamming Accuracy": 0.8058455114822547,
+            "Full Precision": 0.7058823529411765,
+            "Full Recall": 0.22429906542056074,
+            "Label Index": 4,
+            "Label Name": "mountain",
+            "Negative Support": 372,
+            "Positive Support": 107,
+            "Prevalence": 0.22338204592901878,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.3404255319148936,
+            "Selective Precision": 0.7058823529411765,
+            "Selective Recall": 0.22429906542056074
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.42105263157894735,
+            "Full Hamming Accuracy": 0.8622129436325678,
+            "Full Precision": 0.8571428571428571,
+            "Full Recall": 0.27906976744186046,
+            "Label Index": 5,
+            "Label Name": "urban",
+            "Negative Support": 393,
+            "Positive Support": 86,
+            "Prevalence": 0.17954070981210857,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.42105263157894735,
+            "Selective Precision": 0.8571428571428571,
+            "Selective Recall": 0.27906976744186046
+          }
+        ],
+        "Schema Version": 3
+      }
+    },
+    "2": {
+      "metadata": {
+        "Test Size": 478,
+        "Train And Evaluate Seconds": 1.5094048976898193,
+        "Train Size": 1929
+      },
+      "metrics": {
+        "Calibration": {
+          "Bin Count": 10,
+          "Metrics": {
+            "Brier Score": 0.07704878532298544,
+            "ECE": 0.03352704983214855,
+            "Log Loss": 0.2527557733118553
+          },
+          "Per Label": [
+            {
+              "Brier Score": 0.08338665035061932,
+              "ECE": 0.03509692382545403,
+              "Label Index": 0,
+              "Label Name": "beach",
+              "Log Loss": 0.273352232615757
+            },
+            {
+              "Brier Score": 0.025502612808014424,
+              "ECE": 0.03339113613005089,
+              "Label Index": 1,
+              "Label Name": "sunset",
+              "Log Loss": 0.09536302513868047
+            },
+            {
+              "Brier Score": 0.05952558158365122,
+              "ECE": 0.05147966924725026,
+              "Label Index": 2,
+              "Label Name": "foliage",
+              "Log Loss": 0.20499849889434507
+            },
+            {
+              "Brier Score": 0.05469852673287998,
+              "ECE": 0.039108219555587145,
+              "Label Index": 3,
+              "Label Name": "field",
+              "Log Loss": 0.18862840611126205
+            },
+            {
+              "Brier Score": 0.136535677975772,
+              "ECE": 0.04998396705666123,
+              "Label Index": 4,
+              "Label Name": "mountain",
+              "Log Loss": 0.4197736991715526
+            },
+            {
+              "Brier Score": 0.10264366248697561,
+              "ECE": 0.040658934145304186,
+              "Label Index": 5,
+              "Label Name": "urban",
+              "Log Loss": 0.33441877793953434
+            }
+          ],
+          "Reliability": [
+            {
+              "Absolute Gap": 0.01378569638184507,
+              "Bin": 0,
+              "Count": 1637,
+              "Lower Bound": 0.0,
+              "Mean Predicted Probability": 0.03150102930792937,
+              "Observed Positive Rate": 0.0177153329260843,
+              "Upper Bound": 0.1
+            },
+            {
+              "Absolute Gap": 0.03223716542124749,
+              "Bin": 1,
+              "Count": 440,
+              "Lower Bound": 0.1,
+              "Mean Predicted Probability": 0.14360080178488385,
+              "Observed Positive Rate": 0.11136363636363636,
+              "Upper Bound": 0.2
+            },
+            {
+              "Absolute Gap": 0.0016656676230351886,
+              "Bin": 2,
+              "Count": 242,
+              "Lower Bound": 0.2,
+              "Mean Predicted Probability": 0.24626821667448548,
+              "Observed Positive Rate": 0.24793388429752067,
+              "Upper Bound": 0.3
+            },
+            {
+              "Absolute Gap": 0.12425727624419736,
+              "Bin": 3,
+              "Count": 141,
+              "Lower Bound": 0.3,
+              "Mean Predicted Probability": 0.3438278301387814,
+              "Observed Positive Rate": 0.46808510638297873,
+              "Upper Bound": 0.4
+            },
+            {
+              "Absolute Gap": 0.17413394168169816,
+              "Bin": 4,
+              "Count": 99,
+              "Lower Bound": 0.4,
+              "Mean Predicted Probability": 0.45212868458092814,
+              "Observed Positive Rate": 0.6262626262626263,
+              "Upper Bound": 0.5
+            },
+            {
+              "Absolute Gap": 0.1148139273011407,
+              "Bin": 5,
+              "Count": 86,
+              "Lower Bound": 0.5,
+              "Mean Predicted Probability": 0.5479767703732779,
+              "Observed Positive Rate": 0.6627906976744186,
+              "Upper Bound": 0.6
+            },
+            {
+              "Absolute Gap": 0.0645977480936859,
+              "Bin": 6,
+              "Count": 59,
+              "Lower Bound": 0.6,
+              "Mean Predicted Probability": 0.6472666586859751,
+              "Observed Positive Rate": 0.711864406779661,
+              "Upper Bound": 0.7
+            },
+            {
+              "Absolute Gap": 0.13854315413369067,
+              "Bin": 7,
+              "Count": 45,
+              "Lower Bound": 0.7,
+              "Mean Predicted Probability": 0.7503457347551982,
+              "Observed Positive Rate": 0.8888888888888888,
+              "Upper Bound": 0.8
+            },
+            {
+              "Absolute Gap": 0.07611545435217926,
+              "Bin": 8,
+              "Count": 43,
+              "Lower Bound": 0.8,
+              "Mean Predicted Probability": 0.8541171037873556,
+              "Observed Positive Rate": 0.9302325581395349,
+              "Upper Bound": 0.9
+            },
+            {
+              "Absolute Gap": 0.013799237577538759,
+              "Bin": 9,
+              "Count": 76,
+              "Lower Bound": 0.9,
+              "Mean Predicted Probability": 0.9598849729487771,
+              "Observed Positive Rate": 0.9736842105263158,
+              "Upper Bound": 1.0
+            }
+          ],
+          "Sample Label Count": 2868
+        },
+        "Costs": {},
+        "Critical Labels": {
+          "Reason": "critical_labels is not configured by the domain",
+          "Records": [],
+          "Status": "N/A"
+        },
+        "Full": {
+          "Hamming Accuracy": 0.8877266387726639,
+          "Hamming Loss": 0.11227336122733612,
+          "Instance Jaccard": 0.49198047419804747,
+          "Instance-F1": 0.50278940027894,
+          "Macro Precision": 0.7927367089875541,
+          "Macro Recall": 0.5106875462685244,
+          "Macro-F1": 0.6006731832511968,
+          "Micro-F1": 0.6111111111111112,
+          "Subset Accuracy": 0.4602510460251046
+        },
+        "Groups": {},
+        "Metric Contract Version": "3.0-contract",
+        "Model Metadata": {
+          "Calibration Audit": {
+            "calibrated_label_count": 6,
+            "fallback_label_count": 0,
+            "fit_sample_counts": [
+              1929
+            ],
+            "labels": [
+              {
+                "class_counts": {
+                  "0": 1588,
+                  "1": 341
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1929,
+                "label_index": 0,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 1638,
+                  "1": 291
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1929,
+                "label_index": 1,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 1611,
+                  "1": 318
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1929,
+                "label_index": 2,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 1583,
+                  "1": 346
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1929,
+                "label_index": 3,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 1503,
+                  "1": 426
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1929,
+                "label_index": 4,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 1585,
+                  "1": 344
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1929,
+                "label_index": 5,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              }
+            ],
+            "outer_test_access": false
+          },
+          "Experiment Manifest": {
+            "base_learner": {
+              "backend": "sklearn.svm.LinearSVC+CalibratedClassifierCV",
+              "binary_parameters": {
+                "C": 1.0,
+                "dual": "auto",
+                "max_iter": 5000,
+                "tol": 0.001
+              },
+              "calibration": {
+                "cv": 3,
+                "method": "sigmoid",
+                "rare_label_strategy": "smoothed_prior",
+                "scope": "nested_in_training_fold"
+              },
+              "name": "svm_calibrated"
+            },
+            "experiment_config_schema": 1,
+            "family": "BR",
+            "model_id": "BR_SVM",
+            "model_parameters": {
+              "base_estimator": {
+                "class": "src.models.probability_adapter.ProbabilityAdapter",
+                "parameters": {
+                  "cv": 3,
+                  "estimator": {
+                    "class": "sklearn.svm._classes.LinearSVC",
+                    "parameters": {
+                      "C": 1.0,
+                      "class_weight": null,
+                      "dual": "auto",
+                      "fit_intercept": true,
+                      "intercept_scaling": 1,
+                      "loss": "squared_hinge",
+                      "max_iter": 5000,
+                      "multi_class": "ovr",
+                      "penalty": "l2",
+                      "random_state": 42,
+                      "tol": 0.001,
+                      "verbose": 0
+                    }
+                  },
+                  "method": "sigmoid",
+                  "random_state": 42,
+                  "rare_label_strategy": "smoothed_prior"
+                }
+              },
+              "random_state": 42
+            },
+            "selective": false
+          }
+        },
+        "Per Label": [
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.6111111111111112,
+            "Full Hamming Accuracy": 0.8828451882845189,
+            "Full Precision": 0.7586206896551724,
+            "Full Recall": 0.5116279069767442,
+            "Label Index": 0,
+            "Label Name": "beach",
+            "Negative Support": 392,
+            "Positive Support": 86,
+            "Prevalence": 0.1799163179916318,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.6111111111111112,
+            "Selective Precision": 0.7586206896551724,
+            "Selective Recall": 0.5116279069767442
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.8794326241134752,
+            "Full Hamming Accuracy": 0.9644351464435147,
+            "Full Precision": 0.9117647058823529,
+            "Full Recall": 0.8493150684931506,
+            "Label Index": 1,
+            "Label Name": "sunset",
+            "Negative Support": 405,
+            "Positive Support": 73,
+            "Prevalence": 0.15271966527196654,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.8794326241134752,
+            "Selective Precision": 0.9117647058823529,
+            "Selective Recall": 0.8493150684931506
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.6666666666666666,
+            "Full Hamming Accuracy": 0.9100418410041841,
+            "Full Precision": 0.86,
+            "Full Recall": 0.5443037974683544,
+            "Label Index": 2,
+            "Label Name": "foliage",
+            "Negative Support": 399,
+            "Positive Support": 79,
+            "Prevalence": 0.16527196652719664,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.6666666666666666,
+            "Selective Precision": 0.86,
+            "Selective Recall": 0.5443037974683544
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.779874213836478,
+            "Full Hamming Accuracy": 0.9267782426778243,
+            "Full Precision": 0.8611111111111112,
+            "Full Recall": 0.7126436781609196,
+            "Label Index": 3,
+            "Label Name": "field",
+            "Negative Support": 391,
+            "Positive Support": 87,
+            "Prevalence": 0.18200836820083682,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.779874213836478,
+            "Selective Precision": 0.8611111111111112,
+            "Selective Recall": 0.7126436781609196
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.2537313432835821,
+            "Full Hamming Accuracy": 0.7907949790794979,
+            "Full Precision": 0.6296296296296297,
+            "Full Recall": 0.1588785046728972,
+            "Label Index": 4,
+            "Label Name": "mountain",
+            "Negative Support": 371,
+            "Positive Support": 107,
+            "Prevalence": 0.22384937238493724,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.2537313432835821,
+            "Selective Precision": 0.6296296296296297,
+            "Selective Recall": 0.1588785046728972
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.4132231404958678,
+            "Full Hamming Accuracy": 0.8514644351464435,
+            "Full Precision": 0.7352941176470589,
+            "Full Recall": 0.28735632183908044,
+            "Label Index": 5,
+            "Label Name": "urban",
+            "Negative Support": 391,
+            "Positive Support": 87,
+            "Prevalence": 0.18200836820083682,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.4132231404958678,
+            "Selective Precision": 0.7352941176470589,
+            "Selective Recall": 0.28735632183908044
+          }
+        ],
+        "Schema Version": 3
+      }
+    },
+    "3": {
+      "metadata": {
+        "Test Size": 488,
+        "Train And Evaluate Seconds": 1.4893548488616943,
+        "Train Size": 1919
+      },
+      "metrics": {
+        "Calibration": {
+          "Bin Count": 10,
+          "Metrics": {
+            "Brier Score": 0.08044390517728156,
+            "ECE": 0.022698627012320453,
+            "Log Loss": 0.26574483706794977
+          },
+          "Per Label": [
+            {
+              "Brier Score": 0.0866005660588751,
+              "ECE": 0.04776801973717053,
+              "Label Index": 0,
+              "Label Name": "beach",
+              "Log Loss": 0.2785539441611307
+            },
+            {
+              "Brier Score": 0.040740957952930514,
+              "ECE": 0.016276537569220623,
+              "Label Index": 1,
+              "Label Name": "sunset",
+              "Log Loss": 0.15833575367292796
+            },
+            {
+              "Brier Score": 0.0702412237312289,
+              "ECE": 0.019821835779782946,
+              "Label Index": 2,
+              "Label Name": "foliage",
+              "Log Loss": 0.24033771159986664
+            },
+            {
+              "Brier Score": 0.0482748805169376,
+              "ECE": 0.03236743507094565,
+              "Label Index": 3,
+              "Label Name": "field",
+              "Log Loss": 0.16487085452142194
+            },
+            {
+              "Brier Score": 0.13317589795848156,
+              "ECE": 0.06059294242272774,
+              "Label Index": 4,
+              "Label Name": "mountain",
+              "Log Loss": 0.41868933299362626
+            },
+            {
+              "Brier Score": 0.1036299048452357,
+              "ECE": 0.04117073495575317,
+              "Label Index": 5,
+              "Label Name": "urban",
+              "Log Loss": 0.33368142545872487
+            }
+          ],
+          "Reliability": [
+            {
+              "Absolute Gap": 0.007783611241794018,
+              "Bin": 0,
+              "Count": 1660,
+              "Lower Bound": 0.0,
+              "Mean Predicted Probability": 0.030675177506854258,
+              "Observed Positive Rate": 0.02289156626506024,
+              "Upper Bound": 0.1
+            },
+            {
+              "Absolute Gap": 0.01673075509784014,
+              "Bin": 1,
+              "Count": 460,
+              "Lower Bound": 0.1,
+              "Mean Predicted Probability": 0.14499162466305754,
+              "Observed Positive Rate": 0.1282608695652174,
+              "Upper Bound": 0.2
+            },
+            {
+              "Absolute Gap": 0.01934607292195703,
+              "Bin": 2,
+              "Count": 257,
+              "Lower Bound": 0.2,
+              "Mean Predicted Probability": 0.2450270067740971,
+              "Observed Positive Rate": 0.22568093385214008,
+              "Upper Bound": 0.3
+            },
+            {
+              "Absolute Gap": 0.07997573371976613,
+              "Bin": 3,
+              "Count": 160,
+              "Lower Bound": 0.3,
+              "Mean Predicted Probability": 0.34502426628023386,
+              "Observed Positive Rate": 0.425,
+              "Upper Bound": 0.4
+            },
+            {
+              "Absolute Gap": 0.063105318857276,
+              "Bin": 4,
+              "Count": 92,
+              "Lower Bound": 0.4,
+              "Mean Predicted Probability": 0.44776424636011536,
+              "Observed Positive Rate": 0.5108695652173914,
+              "Upper Bound": 0.5
+            },
+            {
+              "Absolute Gap": 0.13314663055466447,
+              "Bin": 5,
+              "Count": 82,
+              "Lower Bound": 0.5,
+              "Mean Predicted Probability": 0.5497801987136283,
+              "Observed Positive Rate": 0.6829268292682927,
+              "Upper Bound": 0.6
+            },
+            {
+              "Absolute Gap": 0.027658142473386715,
+              "Bin": 6,
+              "Count": 46,
+              "Lower Bound": 0.6,
+              "Mean Predicted Probability": 0.6462549010048741,
+              "Observed Positive Rate": 0.6739130434782609,
+              "Upper Bound": 0.7
+            },
+            {
+              "Absolute Gap": 0.08846056212981546,
+              "Bin": 7,
+              "Count": 48,
+              "Lower Bound": 0.7,
+              "Mean Predicted Probability": 0.7448727712035179,
+              "Observed Positive Rate": 0.8333333333333334,
+              "Upper Bound": 0.8
+            },
+            {
+              "Absolute Gap": 0.08809492106621075,
+              "Bin": 8,
+              "Count": 52,
+              "Lower Bound": 0.8,
+              "Mean Predicted Probability": 0.8542127712414815,
+              "Observed Positive Rate": 0.9423076923076923,
+              "Upper Bound": 0.9
+            },
+            {
+              "Absolute Gap": 0.01765562363073858,
+              "Bin": 9,
+              "Count": 71,
+              "Lower Bound": 0.9,
+              "Mean Predicted Probability": 0.9682598693270079,
+              "Observed Positive Rate": 0.9859154929577465,
+              "Upper Bound": 1.0
+            }
+          ],
+          "Sample Label Count": 2928
+        },
+        "Costs": {},
+        "Critical Labels": {
+          "Reason": "critical_labels is not configured by the domain",
+          "Records": [],
+          "Status": "N/A"
+        },
+        "Full": {
+          "Hamming Accuracy": 0.8896857923497268,
+          "Hamming Loss": 0.11031420765027322,
+          "Instance Jaccard": 0.4702868852459016,
+          "Instance-F1": 0.4788251366120219,
+          "Macro Precision": 0.8091751815436027,
+          "Macro Recall": 0.4923105655733715,
+          "Macro-F1": 0.5973662690468077,
+          "Micro-F1": 0.603680981595092,
+          "Subset Accuracy": 0.444672131147541
+        },
+        "Groups": {},
+        "Metric Contract Version": "3.0-contract",
+        "Model Metadata": {
+          "Calibration Audit": {
+            "calibrated_label_count": 6,
+            "fallback_label_count": 0,
+            "fit_sample_counts": [
+              1919
+            ],
+            "labels": [
+              {
+                "class_counts": {
+                  "0": 1577,
+                  "1": 342
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1919,
+                "label_index": 0,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 1628,
+                  "1": 291
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1919,
+                "label_index": 1,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 1602,
+                  "1": 317
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1919,
+                "label_index": 2,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 1572,
+                  "1": 347
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1919,
+                "label_index": 3,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 1492,
+                  "1": 427
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1919,
+                "label_index": 4,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 1574,
+                  "1": 345
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1919,
+                "label_index": 5,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              }
+            ],
+            "outer_test_access": false
+          },
+          "Experiment Manifest": {
+            "base_learner": {
+              "backend": "sklearn.svm.LinearSVC+CalibratedClassifierCV",
+              "binary_parameters": {
+                "C": 1.0,
+                "dual": "auto",
+                "max_iter": 5000,
+                "tol": 0.001
+              },
+              "calibration": {
+                "cv": 3,
+                "method": "sigmoid",
+                "rare_label_strategy": "smoothed_prior",
+                "scope": "nested_in_training_fold"
+              },
+              "name": "svm_calibrated"
+            },
+            "experiment_config_schema": 1,
+            "family": "BR",
+            "model_id": "BR_SVM",
+            "model_parameters": {
+              "base_estimator": {
+                "class": "src.models.probability_adapter.ProbabilityAdapter",
+                "parameters": {
+                  "cv": 3,
+                  "estimator": {
+                    "class": "sklearn.svm._classes.LinearSVC",
+                    "parameters": {
+                      "C": 1.0,
+                      "class_weight": null,
+                      "dual": "auto",
+                      "fit_intercept": true,
+                      "intercept_scaling": 1,
+                      "loss": "squared_hinge",
+                      "max_iter": 5000,
+                      "multi_class": "ovr",
+                      "penalty": "l2",
+                      "random_state": 42,
+                      "tol": 0.001,
+                      "verbose": 0
+                    }
+                  },
+                  "method": "sigmoid",
+                  "random_state": 42,
+                  "rare_label_strategy": "smoothed_prior"
+                }
+              },
+              "random_state": 42
+            },
+            "selective": false
+          }
+        },
+        "Per Label": [
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.5365853658536586,
+            "Full Hamming Accuracy": 0.8831967213114754,
+            "Full Precision": 0.868421052631579,
+            "Full Recall": 0.38823529411764707,
+            "Label Index": 0,
+            "Label Name": "beach",
+            "Negative Support": 403,
+            "Positive Support": 85,
+            "Prevalence": 0.17418032786885246,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.5365853658536586,
+            "Selective Precision": 0.868421052631579,
+            "Selective Recall": 0.38823529411764707
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.8217054263565892,
+            "Full Hamming Accuracy": 0.9528688524590164,
+            "Full Precision": 0.9464285714285714,
+            "Full Recall": 0.726027397260274,
+            "Label Index": 1,
+            "Label Name": "sunset",
+            "Negative Support": 415,
+            "Positive Support": 73,
+            "Prevalence": 0.14959016393442623,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.8217054263565892,
+            "Selective Precision": 0.9464285714285714,
+            "Selective Recall": 0.726027397260274
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.6666666666666666,
+            "Full Hamming Accuracy": 0.9098360655737705,
+            "Full Precision": 0.8461538461538461,
+            "Full Recall": 0.55,
+            "Label Index": 2,
+            "Label Name": "foliage",
+            "Negative Support": 408,
+            "Positive Support": 80,
+            "Prevalence": 0.16393442622950818,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.6666666666666666,
+            "Selective Precision": 0.8461538461538461,
+            "Selective Recall": 0.55
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.7926829268292683,
+            "Full Hamming Accuracy": 0.930327868852459,
+            "Full Precision": 0.8333333333333334,
+            "Full Recall": 0.7558139534883721,
+            "Label Index": 3,
+            "Label Name": "field",
+            "Negative Support": 402,
+            "Positive Support": 86,
+            "Prevalence": 0.1762295081967213,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.7926829268292683,
+            "Selective Precision": 0.8333333333333334,
+            "Selective Recall": 0.7558139534883721
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.3698630136986301,
+            "Full Hamming Accuracy": 0.8114754098360656,
+            "Full Precision": 0.675,
+            "Full Recall": 0.25471698113207547,
+            "Label Index": 4,
+            "Label Name": "mountain",
+            "Negative Support": 382,
+            "Positive Support": 106,
+            "Prevalence": 0.21721311475409835,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.3698630136986301,
+            "Selective Precision": 0.675,
+            "Selective Recall": 0.25471698113207547
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.39669421487603307,
+            "Full Hamming Accuracy": 0.8504098360655737,
+            "Full Precision": 0.6857142857142857,
+            "Full Recall": 0.27906976744186046,
+            "Label Index": 5,
+            "Label Name": "urban",
+            "Negative Support": 402,
+            "Positive Support": 86,
+            "Prevalence": 0.1762295081967213,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.39669421487603307,
+            "Selective Precision": 0.6857142857142857,
+            "Selective Recall": 0.27906976744186046
+          }
+        ],
+        "Schema Version": 3
+      }
+    },
+    "4": {
+      "metadata": {
+        "Test Size": 481,
+        "Train And Evaluate Seconds": 1.4802987575531006,
+        "Train Size": 1926
+      },
+      "metrics": {
+        "Calibration": {
+          "Bin Count": 10,
+          "Metrics": {
+            "Brier Score": 0.08534098298216763,
+            "ECE": 0.016613618747577365,
+            "Log Loss": 0.283153796659754
+          },
+          "Per Label": [
+            {
+              "Brier Score": 0.0930254821522091,
+              "ECE": 0.021873462216598482,
+              "Label Index": 0,
+              "Label Name": "beach",
+              "Log Loss": 0.30832962916664397
+            },
+            {
+              "Brier Score": 0.0471434817619731,
+              "ECE": 0.02718690759172825,
+              "Label Index": 1,
+              "Label Name": "sunset",
+              "Log Loss": 0.1800629919510725
+            },
+            {
+              "Brier Score": 0.07854411370936555,
+              "ECE": 0.023496084653599605,
+              "Label Index": 2,
+              "Label Name": "foliage",
+              "Log Loss": 0.25892339554631644
+            },
+            {
+              "Brier Score": 0.0595964441388137,
+              "ECE": 0.029671343592329962,
+              "Label Index": 3,
+              "Label Name": "field",
+              "Log Loss": 0.21334657813674734
+            },
+            {
+              "Brier Score": 0.13098238478898047,
+              "ECE": 0.0586571569600251,
+              "Label Index": 4,
+              "Label Name": "mountain",
+              "Log Loss": 0.4048798976213372
+            },
+            {
+              "Brier Score": 0.10275399134166385,
+              "ECE": 0.04269230241877348,
+              "Label Index": 5,
+              "Label Name": "urban",
+              "Log Loss": 0.33338028753640625
+            }
+          ],
+          "Reliability": [
+            {
+              "Absolute Gap": 0.0009958249698492627,
+              "Bin": 0,
+              "Count": 1666,
+              "Lower Bound": 0.0,
+              "Mean Predicted Probability": 0.026615219447917844,
+              "Observed Positive Rate": 0.027611044417767107,
+              "Upper Bound": 0.1
+            },
+            {
+              "Absolute Gap": 0.02603064652122379,
+              "Bin": 1,
+              "Count": 418,
+              "Lower Bound": 0.1,
+              "Mean Predicted Probability": 0.14564787140160657,
+              "Observed Positive Rate": 0.11961722488038277,
+              "Upper Bound": 0.2
+            },
+            {
+              "Absolute Gap": 0.029389485652866282,
+              "Bin": 2,
+              "Count": 233,
+              "Lower Bound": 0.2,
+              "Mean Predicted Probability": 0.24528862593511655,
+              "Observed Positive Rate": 0.27467811158798283,
+              "Upper Bound": 0.3
+            },
+            {
+              "Absolute Gap": 0.042873779932657896,
+              "Bin": 3,
+              "Count": 138,
+              "Lower Bound": 0.3,
+              "Mean Predicted Probability": 0.3484305678934291,
+              "Observed Positive Rate": 0.391304347826087,
+              "Upper Bound": 0.4
+            },
+            {
+              "Absolute Gap": 0.03503185483542354,
+              "Bin": 4,
+              "Count": 110,
+              "Lower Bound": 0.4,
+              "Mean Predicted Probability": 0.4467863269827583,
+              "Observed Positive Rate": 0.4818181818181818,
+              "Upper Bound": 0.5
+            },
+            {
+              "Absolute Gap": 0.10048664908811267,
+              "Bin": 5,
+              "Count": 83,
+              "Lower Bound": 0.5,
+              "Mean Predicted Probability": 0.5501157605504415,
+              "Observed Positive Rate": 0.6506024096385542,
+              "Upper Bound": 0.6
+            },
+            {
+              "Absolute Gap": 0.024466692276720714,
+              "Bin": 6,
+              "Count": 53,
+              "Lower Bound": 0.6,
+              "Mean Predicted Probability": 0.647108201710683,
+              "Observed Positive Rate": 0.6226415094339622,
+              "Upper Bound": 0.7
+            },
+            {
+              "Absolute Gap": 0.08914502036003846,
+              "Bin": 7,
+              "Count": 42,
+              "Lower Bound": 0.7,
+              "Mean Predicted Probability": 0.7441883129732949,
+              "Observed Positive Rate": 0.8333333333333334,
+              "Upper Bound": 0.8
+            },
+            {
+              "Absolute Gap": 0.006440614952760604,
+              "Bin": 8,
+              "Count": 51,
+              "Lower Bound": 0.8,
+              "Mean Predicted Probability": 0.8495778698547214,
+              "Observed Positive Rate": 0.8431372549019608,
+              "Upper Bound": 0.9
+            },
+            {
+              "Absolute Gap": 0.055212222363637875,
+              "Bin": 9,
+              "Count": 92,
+              "Lower Bound": 0.9,
+              "Mean Predicted Probability": 0.9682557006245074,
+              "Observed Positive Rate": 0.9130434782608695,
+              "Upper Bound": 1.0
+            }
+          ],
+          "Sample Label Count": 2886
+        },
+        "Costs": {},
+        "Critical Labels": {
+          "Reason": "critical_labels is not configured by the domain",
+          "Records": [],
+          "Status": "N/A"
+        },
+        "Full": {
+          "Hamming Accuracy": 0.8825363825363826,
+          "Hamming Loss": 0.11746361746361747,
+          "Instance Jaccard": 0.4757449757449757,
+          "Instance-F1": 0.48891198891198895,
+          "Macro Precision": 0.7669576136892472,
+          "Macro Recall": 0.4997826509563028,
+          "Macro-F1": 0.5894999657131329,
+          "Micro-F1": 0.5949820788530465,
+          "Subset Accuracy": 0.4365904365904366
+        },
+        "Groups": {},
+        "Metric Contract Version": "3.0-contract",
+        "Model Metadata": {
+          "Calibration Audit": {
+            "calibrated_label_count": 6,
+            "fallback_label_count": 0,
+            "fit_sample_counts": [
+              1926
+            ],
+            "labels": [
+              {
+                "class_counts": {
+                  "0": 1584,
+                  "1": 342
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1926,
+                "label_index": 0,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 1635,
+                  "1": 291
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1926,
+                "label_index": 1,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 1608,
+                  "1": 318
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1926,
+                "label_index": 2,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 1579,
+                  "1": 347
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1926,
+                "label_index": 3,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 1500,
+                  "1": 426
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1926,
+                "label_index": 4,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 1581,
+                  "1": 345
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1926,
+                "label_index": 5,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              }
+            ],
+            "outer_test_access": false
+          },
+          "Experiment Manifest": {
+            "base_learner": {
+              "backend": "sklearn.svm.LinearSVC+CalibratedClassifierCV",
+              "binary_parameters": {
+                "C": 1.0,
+                "dual": "auto",
+                "max_iter": 5000,
+                "tol": 0.001
+              },
+              "calibration": {
+                "cv": 3,
+                "method": "sigmoid",
+                "rare_label_strategy": "smoothed_prior",
+                "scope": "nested_in_training_fold"
+              },
+              "name": "svm_calibrated"
+            },
+            "experiment_config_schema": 1,
+            "family": "BR",
+            "model_id": "BR_SVM",
+            "model_parameters": {
+              "base_estimator": {
+                "class": "src.models.probability_adapter.ProbabilityAdapter",
+                "parameters": {
+                  "cv": 3,
+                  "estimator": {
+                    "class": "sklearn.svm._classes.LinearSVC",
+                    "parameters": {
+                      "C": 1.0,
+                      "class_weight": null,
+                      "dual": "auto",
+                      "fit_intercept": true,
+                      "intercept_scaling": 1,
+                      "loss": "squared_hinge",
+                      "max_iter": 5000,
+                      "multi_class": "ovr",
+                      "penalty": "l2",
+                      "random_state": 42,
+                      "tol": 0.001,
+                      "verbose": 0
+                    }
+                  },
+                  "method": "sigmoid",
+                  "random_state": 42,
+                  "rare_label_strategy": "smoothed_prior"
+                }
+              },
+              "random_state": 42
+            },
+            "selective": false
+          }
+        },
+        "Per Label": [
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.5755395683453237,
+            "Full Hamming Accuracy": 0.8773388773388774,
+            "Full Precision": 0.7407407407407407,
+            "Full Recall": 0.47058823529411764,
+            "Label Index": 0,
+            "Label Name": "beach",
+            "Negative Support": 396,
+            "Positive Support": 85,
+            "Prevalence": 0.17671517671517672,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.5755395683453237,
+            "Selective Precision": 0.7407407407407407,
+            "Selective Recall": 0.47058823529411764
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.7761194029850746,
+            "Full Hamming Accuracy": 0.9376299376299376,
+            "Full Precision": 0.8524590163934426,
+            "Full Recall": 0.7123287671232876,
+            "Label Index": 1,
+            "Label Name": "sunset",
+            "Negative Support": 408,
+            "Positive Support": 73,
+            "Prevalence": 0.15176715176715178,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.7761194029850746,
+            "Selective Precision": 0.8524590163934426,
+            "Selective Recall": 0.7123287671232876
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.5826771653543307,
+            "Full Hamming Accuracy": 0.8898128898128899,
+            "Full Precision": 0.7708333333333334,
+            "Full Recall": 0.46835443037974683,
+            "Label Index": 2,
+            "Label Name": "foliage",
+            "Negative Support": 402,
+            "Positive Support": 79,
+            "Prevalence": 0.16424116424116425,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.5826771653543307,
+            "Selective Precision": 0.7708333333333334,
+            "Selective Recall": 0.46835443037974683
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.7682926829268293,
+            "Full Hamming Accuracy": 0.920997920997921,
+            "Full Precision": 0.8076923076923077,
+            "Full Recall": 0.7325581395348837,
+            "Label Index": 3,
+            "Label Name": "field",
+            "Negative Support": 395,
+            "Positive Support": 86,
+            "Prevalence": 0.1787941787941788,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.7682926829268293,
+            "Selective Precision": 0.8076923076923077,
+            "Selective Recall": 0.7325581395348837
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.3088235294117647,
+            "Full Hamming Accuracy": 0.8045738045738046,
+            "Full Precision": 0.7241379310344828,
+            "Full Recall": 0.19626168224299065,
+            "Label Index": 4,
+            "Label Name": "mountain",
+            "Negative Support": 374,
+            "Positive Support": 107,
+            "Prevalence": 0.22245322245322247,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.3088235294117647,
+            "Selective Precision": 0.7241379310344828,
+            "Selective Recall": 0.19626168224299065
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.5255474452554745,
+            "Full Hamming Accuracy": 0.8648648648648649,
+            "Full Precision": 0.7058823529411765,
+            "Full Recall": 0.4186046511627907,
+            "Label Index": 5,
+            "Label Name": "urban",
+            "Negative Support": 395,
+            "Positive Support": 86,
+            "Prevalence": 0.1787941787941788,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.5255474452554745,
+            "Selective Precision": 0.7058823529411765,
+            "Selective Recall": 0.4186046511627907
+          }
+        ],
+        "Schema Version": 3
+      }
+    },
+    "5": {
+      "metadata": {
+        "Test Size": 481,
+        "Train And Evaluate Seconds": 1.4989333152770996,
+        "Train Size": 1926
+      },
+      "metrics": {
+        "Calibration": {
+          "Bin Count": 10,
+          "Metrics": {
+            "Brier Score": 0.07961916698272045,
+            "ECE": 0.028747565444204298,
+            "Log Loss": 0.2612163425911259
+          },
+          "Per Label": [
+            {
+              "Brier Score": 0.08939469773673711,
+              "ECE": 0.02233118064844475,
+              "Label Index": 0,
+              "Label Name": "beach",
+              "Log Loss": 0.2961861479123801
+            },
+            {
+              "Brier Score": 0.025690637712792893,
+              "ECE": 0.028396074060196244,
+              "Label Index": 1,
+              "Label Name": "sunset",
+              "Log Loss": 0.09645178594454966
+            },
+            {
+              "Brier Score": 0.07783841229287553,
+              "ECE": 0.04197299647824587,
+              "Label Index": 2,
+              "Label Name": "foliage",
+              "Log Loss": 0.2518761840177105
+            },
+            {
+              "Brier Score": 0.05450428841031111,
+              "ECE": 0.04914084501165958,
+              "Label Index": 3,
+              "Label Name": "field",
+              "Log Loss": 0.19301917705282015
+            },
+            {
+              "Brier Score": 0.13172384868453685,
+              "ECE": 0.050066578079846616,
+              "Label Index": 4,
+              "Label Name": "mountain",
+              "Log Loss": 0.41368963990673463
+            },
+            {
+              "Brier Score": 0.09856311705906917,
+              "ECE": 0.06546692276539778,
+              "Label Index": 5,
+              "Label Name": "urban",
+              "Log Loss": 0.3160751207125601
+            }
+          ],
+          "Reliability": [
+            {
+              "Absolute Gap": 0.009554828116089095,
+              "Bin": 0,
+              "Count": 1655,
+              "Lower Bound": 0.0,
+              "Mean Predicted Probability": 0.03070286436986553,
+              "Observed Positive Rate": 0.021148036253776436,
+              "Upper Bound": 0.1
+            },
+            {
+              "Absolute Gap": 0.039891904779696105,
+              "Bin": 1,
+              "Count": 406,
+              "Lower Bound": 0.1,
+              "Mean Predicted Probability": 0.14334018064176507,
+              "Observed Positive Rate": 0.10344827586206896,
+              "Upper Bound": 0.2
+            },
+            {
+              "Absolute Gap": 0.027841125189522198,
+              "Bin": 2,
+              "Count": 243,
+              "Lower Bound": 0.2,
+              "Mean Predicted Probability": 0.24787903941953132,
+              "Observed Positive Rate": 0.2757201646090535,
+              "Upper Bound": 0.3
+            },
+            {
+              "Absolute Gap": 0.014322386295707146,
+              "Bin": 3,
+              "Count": 162,
+              "Lower Bound": 0.3,
+              "Mean Predicted Probability": 0.34765571962904046,
+              "Observed Positive Rate": 0.3333333333333333,
+              "Upper Bound": 0.4
+            },
+            {
+              "Absolute Gap": 0.15665820841827705,
+              "Bin": 4,
+              "Count": 124,
+              "Lower Bound": 0.4,
+              "Mean Predicted Probability": 0.4481805012591423,
+              "Observed Positive Rate": 0.6048387096774194,
+              "Upper Bound": 0.5
+            },
+            {
+              "Absolute Gap": 0.10915397107601166,
+              "Bin": 5,
+              "Count": 68,
+              "Lower Bound": 0.5,
+              "Mean Predicted Probability": 0.5526107348063413,
+              "Observed Positive Rate": 0.6617647058823529,
+              "Upper Bound": 0.6
+            },
+            {
+              "Absolute Gap": 0.14030868337865465,
+              "Bin": 6,
+              "Count": 57,
+              "Lower Bound": 0.6,
+              "Mean Predicted Probability": 0.6491650008318717,
+              "Observed Positive Rate": 0.7894736842105263,
+              "Upper Bound": 0.7
+            },
+            {
+              "Absolute Gap": 0.0011757466257835691,
+              "Bin": 7,
+              "Count": 49,
+              "Lower Bound": 0.7,
+              "Mean Predicted Probability": 0.75627778744211,
+              "Observed Positive Rate": 0.7551020408163265,
+              "Upper Bound": 0.8
+            },
+            {
+              "Absolute Gap": 0.1324683807112954,
+              "Bin": 8,
+              "Count": 44,
+              "Lower Bound": 0.8,
+              "Mean Predicted Probability": 0.8448043465614319,
+              "Observed Positive Rate": 0.9772727272727273,
+              "Upper Bound": 0.9
+            },
+            {
+              "Absolute Gap": 0.014597395291695237,
+              "Bin": 9,
+              "Count": 78,
+              "Lower Bound": 0.9,
+              "Mean Predicted Probability": 0.9633153440096439,
+              "Observed Positive Rate": 0.9487179487179487,
+              "Upper Bound": 1.0
+            }
+          ],
+          "Sample Label Count": 2886
+        },
+        "Costs": {},
+        "Critical Labels": {
+          "Reason": "critical_labels is not configured by the domain",
+          "Records": [],
+          "Status": "N/A"
+        },
+        "Full": {
+          "Hamming Accuracy": 0.8873873873873874,
+          "Hamming Loss": 0.11261261261261261,
+          "Instance Jaccard": 0.4705474705474706,
+          "Instance-F1": 0.4809424809424809,
+          "Macro Precision": 0.8083694083694084,
+          "Macro Recall": 0.4889154778569184,
+          "Macro-F1": 0.5916310138406764,
+          "Micro-F1": 0.6002460024600246,
+          "Subset Accuracy": 0.4407484407484408
+        },
+        "Groups": {},
+        "Metric Contract Version": "3.0-contract",
+        "Model Metadata": {
+          "Calibration Audit": {
+            "calibrated_label_count": 6,
+            "fallback_label_count": 0,
+            "fit_sample_counts": [
+              1926
+            ],
+            "labels": [
+              {
+                "class_counts": {
+                  "0": 1585,
+                  "1": 341
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1926,
+                "label_index": 0,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 1635,
+                  "1": 291
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1926,
+                "label_index": 1,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 1608,
+                  "1": 318
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1926,
+                "label_index": 2,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 1580,
+                  "1": 346
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1926,
+                "label_index": 3,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 1499,
+                  "1": 427
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1926,
+                "label_index": 4,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              },
+              {
+                "class_counts": {
+                  "0": 1581,
+                  "1": 345
+                },
+                "effective_cv": 3,
+                "fallback": null,
+                "fallback_probability": null,
+                "fit_sample_count": 1926,
+                "label_index": 5,
+                "method": "sigmoid",
+                "outer_test_access": false,
+                "rare_label_strategy": "smoothed_prior",
+                "requested_cv": 3,
+                "strategy": "calibrated_sigmoid_cv"
+              }
+            ],
+            "outer_test_access": false
+          },
+          "Experiment Manifest": {
+            "base_learner": {
+              "backend": "sklearn.svm.LinearSVC+CalibratedClassifierCV",
+              "binary_parameters": {
+                "C": 1.0,
+                "dual": "auto",
+                "max_iter": 5000,
+                "tol": 0.001
+              },
+              "calibration": {
+                "cv": 3,
+                "method": "sigmoid",
+                "rare_label_strategy": "smoothed_prior",
+                "scope": "nested_in_training_fold"
+              },
+              "name": "svm_calibrated"
+            },
+            "experiment_config_schema": 1,
+            "family": "BR",
+            "model_id": "BR_SVM",
+            "model_parameters": {
+              "base_estimator": {
+                "class": "src.models.probability_adapter.ProbabilityAdapter",
+                "parameters": {
+                  "cv": 3,
+                  "estimator": {
+                    "class": "sklearn.svm._classes.LinearSVC",
+                    "parameters": {
+                      "C": 1.0,
+                      "class_weight": null,
+                      "dual": "auto",
+                      "fit_intercept": true,
+                      "intercept_scaling": 1,
+                      "loss": "squared_hinge",
+                      "max_iter": 5000,
+                      "multi_class": "ovr",
+                      "penalty": "l2",
+                      "random_state": 42,
+                      "tol": 0.001,
+                      "verbose": 0
+                    }
+                  },
+                  "method": "sigmoid",
+                  "random_state": 42,
+                  "rare_label_strategy": "smoothed_prior"
+                }
+              },
+              "random_state": 42
+            },
+            "selective": false
+          }
+        },
+        "Per Label": [
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.5531914893617021,
+            "Full Hamming Accuracy": 0.8690228690228691,
+            "Full Precision": 0.7090909090909091,
+            "Full Recall": 0.45348837209302323,
+            "Label Index": 0,
+            "Label Name": "beach",
+            "Negative Support": 395,
+            "Positive Support": 86,
+            "Prevalence": 0.1787941787941788,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.5531914893617021,
+            "Selective Precision": 0.7090909090909091,
+            "Selective Recall": 0.45348837209302323
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.8776978417266187,
+            "Full Hamming Accuracy": 0.9646569646569647,
+            "Full Precision": 0.9242424242424242,
+            "Full Recall": 0.8356164383561644,
+            "Label Index": 1,
+            "Label Name": "sunset",
+            "Negative Support": 408,
+            "Positive Support": 73,
+            "Prevalence": 0.15176715176715178,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.8776978417266187,
+            "Selective Precision": 0.9242424242424242,
+            "Selective Recall": 0.8356164383561644
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.5853658536585366,
+            "Full Hamming Accuracy": 0.893970893970894,
+            "Full Precision": 0.8181818181818182,
+            "Full Recall": 0.45569620253164556,
+            "Label Index": 2,
+            "Label Name": "foliage",
+            "Negative Support": 402,
+            "Positive Support": 79,
+            "Prevalence": 0.16424116424116425,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.5853658536585366,
+            "Selective Precision": 0.8181818181818182,
+            "Selective Recall": 0.45569620253164556
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.7712418300653595,
+            "Full Hamming Accuracy": 0.9272349272349273,
+            "Full Precision": 0.8939393939393939,
+            "Full Recall": 0.6781609195402298,
+            "Label Index": 3,
+            "Label Name": "field",
+            "Negative Support": 394,
+            "Positive Support": 87,
+            "Prevalence": 0.18087318087318088,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.7712418300653595,
+            "Selective Precision": 0.8939393939393939,
+            "Selective Recall": 0.6781609195402298
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.3829787234042553,
+            "Full Hamming Accuracy": 0.8191268191268192,
+            "Full Precision": 0.7714285714285715,
+            "Full Recall": 0.25471698113207547,
+            "Label Index": 4,
+            "Label Name": "mountain",
+            "Negative Support": 375,
+            "Positive Support": 106,
+            "Prevalence": 0.2203742203742204,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.3829787234042553,
+            "Selective Precision": 0.7714285714285715,
+            "Selective Recall": 0.25471698113207547
+          },
+          {
+            "Coverage": 1.0,
+            "Full F1": 0.3793103448275862,
+            "Full Hamming Accuracy": 0.8503118503118503,
+            "Full Precision": 0.7333333333333333,
+            "Full Recall": 0.2558139534883721,
+            "Label Index": 5,
+            "Label Name": "urban",
+            "Negative Support": 395,
+            "Positive Support": 86,
+            "Prevalence": 0.1787941787941788,
+            "Rejected Error Count": 0,
+            "Rejected Position Count": 0,
+            "Selective F1": 0.3793103448275862,
+            "Selective Precision": 0.7333333333333333,
+            "Selective Recall": 0.2558139534883721
+          }
+        ],
+        "Schema Version": 3
+      }
+    }
+  },
+  "metric_contract_version": "3.0-contract",
+  "model": "BR_SVM",
+  "schema_version": 3,
+  "status": "complete",
+  "updated_at": "2026-09-11T13:58:00.045976+00:00"
+}

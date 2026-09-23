@@ -1,6 +1,7 @@
 """Verify and resume the preregistered Q12 ablation job matrix."""
 
 import argparse
+import hashlib
 import json
 import sys
 from copy import deepcopy
@@ -27,9 +28,15 @@ def verify_ablation_config(config_path, checksum_path=None):
     expected = checksum.read_text(encoding="utf-8").split()[0].lower()
     actual = file_sha256(path)
     if expected != actual:
-        raise ValueError(
-            f"Frozen ablation checksum mismatch: expected {expected}, got {actual}."
-        )
+        with path.open("rb") as stream:
+            lf_content = stream.read().replace(b"\r\n", b"\n")
+        lf_hash = hashlib.sha256(lf_content).hexdigest()
+        if expected == lf_hash:
+            actual = lf_hash
+        else:
+            raise ValueError(
+                f"Frozen ablation checksum mismatch: expected {expected}, got {actual}."
+            )
     with path.open("r", encoding="utf-8") as stream:
         payload = json.load(stream)
     if payload.get("schema_version") != 1 or payload.get("status") != "frozen":

@@ -80,6 +80,60 @@ DATASET_CONFIG = {
         "label_location": "start",
         "num_labels": 103,
         "description": "Reuters text classification with 500 features (103 labels, 6000 samples)"
+    },
+    "chd49": {
+        "format": "mat",
+        "mat_path": "data/CHD_49/CHD_49.mat",
+        "num_labels": 6,
+        "label_names": ["L1", "L2", "L3", "L4", "L5", "L6"],
+        "description": "Coronary heart disease inquiry diagnosis (6 labels, 555 samples)"
+    },
+    "gpositivepseaac": {
+        "format": "pseaac",
+        "train_path": "data/GpositivePseAAC/Gram_positivePseAAC519-train.txt",
+        "test_path": "data/GpositivePseAAC/Gram_positivePseAAC519-test.txt",
+        "num_labels": 4,
+        "num_features": 440,
+        "label_names": ["Cell_membrane", "Cell_wall", "Cytoplasm", "Extracell"],
+        "description": "Gram-positive protein subcellular localization (4 labels, 519 samples)"
+    },
+    "humanpseaac": {
+        "format": "pseaac",
+        "train_path": "data/HumanPseAAC/HumanPseAAC3106-train.txt",
+        "test_path": "data/HumanPseAAC/HumanPseAAC3106-test.txt",
+        "num_labels": 14,
+        "num_features": 440,
+        "label_names": [
+            "Centriole", "Cytoplasm", "Cytoskeleton", "Endosome", "Endoplasmic_reticulum",
+            "Extracell", "Golgi_apparatus", "Lysosome", "Microsome", "Mitochondrion",
+            "Nucleus", "Peroxisome", "Plasma_membrane", "Synapse"
+        ],
+        "description": "Human protein subcellular localization (14 labels, 3106 samples)"
+    },
+    "plantpseaac": {
+        "format": "pseaac",
+        "train_path": "data/PlantPseAAC/PlantPseAAC978-train.txt",
+        "test_path": "data/PlantPseAAC/PlantPseAAC978-test.txt",
+        "num_labels": 12,
+        "num_features": 440,
+        "label_names": [
+            "Cell_membrane", "Cell_wall", "Chloroplast", "Cytoplasm", "Endoplasmic_reticulum",
+            "Extracell", "Golgi_apparatus", "Mitochondrion", "Nucleus", "Peroxisome",
+            "Plastid", "Vacuole"
+        ],
+        "description": "Plant protein subcellular localization (12 labels, 978 samples)"
+    },
+    "viruspseaac": {
+        "format": "pseaac",
+        "train_path": "data/VirusPseAAC/VirusPseAAC207-train.txt",
+        "test_path": "data/VirusPseAAC/VirusPseAAC207-test.txt",
+        "num_labels": 6,
+        "num_features": 440,
+        "label_names": [
+            "Viral_capsid", "Host_cell_membrane", "Host_endoplasm_reticulum",
+            "Host_cytoplasm", "Host_nucleus", "Secreted"
+        ],
+        "description": "Virus protein subcellular localization (6 labels, 207 samples)"
     }
 }
 
@@ -149,6 +203,61 @@ def _process_features_dataframe(df_features):
     return X
 
 
+def _load_mat_dataset(config, base_dir="."):
+    """Load MAT format multi-label dataset (e.g. CHD_49)."""
+    import scipy.io as sio
+    mat_path = os.path.join(base_dir, config["mat_path"])
+    if not os.path.exists(mat_path):
+        raise FileNotFoundError(f"MAT file not found: {mat_path}")
+    mat = sio.loadmat(mat_path)
+    X = np.asarray(mat["data"], dtype=np.float32)
+    targets = np.asarray(mat["targets"])
+    Y = (targets > 0).astype(np.int32)
+    feature_cols = [f"f_{i+1}" for i in range(X.shape[1])]
+    label_cols = list(config.get("label_names") or [f"L{j+1}" for j in range(Y.shape[1])])
+    return X, Y, feature_cols, label_cols
+
+
+def _load_pseaac_dataset(config, base_dir="."):
+    """Load PseAAC format multi-label datasets with sparse text encoding."""
+    train_path = os.path.join(base_dir, config["train_path"])
+    test_path = os.path.join(base_dir, config["test_path"])
+    all_lines = []
+    for fpath in [train_path, test_path]:
+        if os.path.exists(fpath):
+            with open(fpath, "r", encoding="utf-8", errors="ignore") as fp:
+                all_lines.extend(fp.readlines())
+        else:
+            raise FileNotFoundError(f"PseAAC file not found: {fpath}")
+
+    num_features = config["num_features"]
+    num_labels = config["num_labels"]
+    n_samples = len(all_lines)
+    X = np.zeros((n_samples, num_features), dtype=np.float32)
+    Y = np.zeros((n_samples, num_labels), dtype=np.int32)
+
+    for i, line in enumerate(all_lines):
+        parts = line.strip().split()
+        if not parts:
+            continue
+        label_strs = parts[1].split(",")
+        for l_str in label_strs:
+            if l_str:
+                l_idx = int(l_str) - 1
+                if 0 <= l_idx < num_labels:
+                    Y[i, l_idx] = 1
+        for feat in parts[2:]:
+            if ":" in feat:
+                f_idx_str, f_val_str = feat.split(":", 1)
+                f_idx = int(f_idx_str) - 1
+                if 0 <= f_idx < num_features:
+                    X[i, f_idx] = float(f_val_str)
+
+    feature_cols = [f"f_{i+1}" for i in range(num_features)]
+    label_cols = list(config.get("label_names") or [f"L{j+1}" for j in range(num_labels)])
+    return X, Y, feature_cols, label_cols
+
+
 def load_dataset(dataset_name, base_dir="."):
     """
     Load a multi-label dataset by name.
@@ -167,6 +276,13 @@ def load_dataset(dataset_name, base_dir="."):
         raise ValueError(f"Unknown dataset: {dataset_name}. Available: {list(DATASET_CONFIG.keys())}")
 
     config = DATASET_CONFIG[dataset_name]
+    fmt = config.get("format", "arff")
+
+    if fmt == "mat":
+        return _load_mat_dataset(config, base_dir=base_dir)
+    elif fmt == "pseaac":
+        return _load_pseaac_dataset(config, base_dir=base_dir)
+
     arff_path = os.path.join(base_dir, config["arff_path"])
     xml_path = os.path.join(base_dir, config["xml_path"]) if config["xml_path"] else None
 

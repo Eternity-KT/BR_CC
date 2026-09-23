@@ -87,6 +87,9 @@ def _create_model(
     gsi_partition_random_state=None,
     gsi_fixed_independent_labels=None,
     gsi_final_order="correlation",
+    min_coverage=None,
+    cc_label_noise=0.0,
+    mlp_loss="bce",
 ):
     """Create a supported model from its standardized name."""
     model_key = model_name.upper()
@@ -105,6 +108,9 @@ def _create_model(
             gsi_partition_random_state=gsi_partition_random_state,
             gsi_fixed_independent_labels=gsi_fixed_independent_labels,
             gsi_final_order=gsi_final_order,
+            min_coverage=min_coverage,
+            cc_label_noise=cc_label_noise,
+            mlp_loss=mlp_loss,
         )
     if model_key in ("BR", "BR_SVC", "BR_LINEARSVC"):
         return BinaryRelevanceClassifier(
@@ -113,25 +119,38 @@ def _create_model(
     if model_key in ("BR_LOGISTIC", "BR_LR", "BR_LOGREG"):
         return BinaryRelevanceLogisticRegression(random_state=random_state)
     if model_key in ("BR_MLP", "BR_NEURAL_NETWORK", "BR_NN"):
-        return BinaryRelevanceMLP(random_state=random_state)
+        extra = {}
+        if mlp_loss != "bce":
+            extra["loss"] = mlp_loss
+        return BinaryRelevanceMLP(random_state=random_state, **extra)
     if model_key in ("CC", "CC_SVC", "CC_LINEARSVC"):
         return ClassifierChainClassifier(
-            base_estimator="svm", random_state=random_state
+            base_estimator="svm", random_state=random_state, label_noise=cc_label_noise
         )
     if model_key in ("CC_LOGISTIC", "CC_LR", "CC_LOGREG"):
         return ClassifierChainClassifier(
-            base_estimator="logistic", random_state=random_state
+            base_estimator="logistic", random_state=random_state, label_noise=cc_label_noise
         )
     if model_key in ("CC_MLP", "CC_NEURAL_NETWORK", "CC_NN"):
+        extra = {}
+        if mlp_loss != "bce":
+            extra["loss"] = mlp_loss
+        from src.models.base_learners import create_binary_estimator
         return ClassifierChainClassifier(
-            base_estimator="mlp", random_state=random_state
+            base_estimator=create_binary_estimator("mlp", random_state=random_state, **extra),
+            random_state=random_state,
+            label_noise=cc_label_noise,
         )
     if model_key in ("MLC_PA", "MLCPA", "MLC_PARTIAL_ABSTENTION"):
+        extra = {}
+        if mlc_pa_base == "mlp" and mlp_loss != "bce":
+            extra["loss"] = mlp_loss
         return MLCPartialAbstentionClassifier(
             base_estimator=mlc_pa_base,
             cost=abstention_cost,
             penalty=abstention_penalty,
             random_state=random_state,
+            **extra,
         )
     if model_key in (
         "GSI_MLC_PA",
@@ -150,6 +169,9 @@ def _create_model(
             partition_random_state=gsi_partition_random_state,
             fixed_independent_labels=gsi_fixed_independent_labels,
             final_order=gsi_final_order,
+            min_coverage=min_coverage,
+            cc_label_noise=cc_label_noise,
+            mlp_loss=mlp_loss,
         )
     raise ValueError(
         f"Unknown model name: {model_name}. Registered: {MATCHED_MODEL_IDS}; "
@@ -182,6 +204,16 @@ def _canonicalize_dataset_name(name):
     aliases = {
         "gengase": "genbase",
         "reuters_k500": "reuters-k500",
+        "chd-49": "chd49",
+        "chd49": "chd49",
+        "gpositive-pseaac": "gpositivepseaac",
+        "gpositivepseaac": "gpositivepseaac",
+        "human-pseaac": "humanpseaac",
+        "humanpseaac": "humanpseaac",
+        "plant-pseaac": "plantpseaac",
+        "plantpseaac": "plantpseaac",
+        "virus-pseaac": "viruspseaac",
+        "viruspseaac": "viruspseaac",
     }
     return aliases.get(normalized, normalized)
 
@@ -203,11 +235,20 @@ def _cache_settings(
     gsi_partition_random_state=None,
     gsi_fixed_independent_labels=None,
     gsi_final_order="correlation",
+    min_coverage=None,
+    cc_label_noise=0.0,
+    mlp_loss="bce",
 ):
     settings = {
         "n_splits": int(n_splits),
         "random_state": int(random_state),
     }
+    if min_coverage is not None:
+        settings["min_coverage"] = float(min_coverage)
+    if float(cc_label_noise) > 0.0:
+        settings["cc_label_noise"] = float(cc_label_noise)
+    if mlp_loss != "bce":
+        settings["mlp_loss"] = mlp_loss
     family = model_family(model_name)
     configured_base = model_base_learner(
         model_name, legacy_mlc_pa_base=mlc_pa_base
@@ -373,19 +414,22 @@ def _evaluate_model_v3(
         inference_seconds = float(time.perf_counter() - inference_started)
         full_prediction = classifier.predict_full_from_proba(probabilities)
         acceptance_confidence = np.abs(probabilities - 0.5) * 2.0
-        decision_policy = create_configured_policy(
-            getattr(classifier, "decision_policy", "hamming"),
-            cost=getattr(classifier, "cost", 0.3),
-            penalty=getattr(classifier, "penalty", "linear"),
-            beta=getattr(classifier, "beta", 1.0),
-            allow_abstention=True,
-            abstain_value=classifier.abstain_value,
-            hamming_boundary=(
-                "symmetric_thresholds"
-                if _is_gsi_model(model_name)
-                else "minimum_loss"
-            ),
-        )
+        decision_policy = getattr(classifier, "decision_policy_", None)
+        if decision_policy is None:
+            decision_policy = create_configured_policy(
+                getattr(classifier, "decision_policy", "hamming"),
+                cost=getattr(classifier, "cost", 0.3),
+                penalty=getattr(classifier, "penalty", "linear"),
+                beta=getattr(classifier, "beta", 1.0),
+                allow_abstention=True,
+                abstain_value=classifier.abstain_value,
+                hamming_boundary=(
+                    "symmetric_thresholds"
+                    if _is_gsi_model(model_name)
+                    else "minimum_loss"
+                ),
+                min_coverage=getattr(classifier, "min_coverage", None),
+            )
         model_metadata["Decision Policy"] = decision_policy.get_config()
         if _is_gsi_model(model_name):
             model_metadata["Probability Inference Seconds"] = inference_seconds
@@ -623,6 +667,9 @@ def run_experiment(
     operating_coverage_gamma=0.8,
     operating_risk_epsilon=0.1,
     operating_validation_size=0.2,
+    min_coverage=None,
+    cc_label_noise=0.0,
+    mlp_loss="bce",
 ):
     """Run only missing model/dataset pairs and then rebuild all plots.
 
@@ -694,6 +741,9 @@ def run_experiment(
             operating_coverage_gamma=operating_coverage_gamma,
             operating_risk_epsilon=operating_risk_epsilon,
             operating_validation_size=operating_validation_size,
+            min_coverage=min_coverage,
+            cc_label_noise=cc_label_noise,
+            mlp_loss=mlp_loss,
         )
 
     figures_dir = os.path.join(output_dir, "plots_pa")
@@ -1065,6 +1115,12 @@ def main():
         )
     )
     parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Path to JSON configuration file.",
+    )
+    parser.add_argument(
         "--datasets",
         nargs="+",
         default=None,
@@ -1203,7 +1259,7 @@ def main():
     )
     parser.add_argument(
         "--gsi_decision_policy",
-        choices=["hamming", "fbeta", "jaccard"],
+        choices=["hamming", "fbeta", "jaccard", "macro_f1"],
         default="hamming",
         help="Final GSI decision policy used after probability inference.",
     )
@@ -1254,6 +1310,32 @@ def main():
         default="correlation",
         help="Final GSI chain order after the IL/DL partition is frozen.",
     )
+    parser.add_argument(
+        "--min_coverage",
+        type=float,
+        default=None,
+        help="Minimum coverage constraint for selective decision policies (e.g. 0.80).",
+    )
+    parser.add_argument(
+        "--cc_label_noise",
+        type=float,
+        default=0.0,
+        help="Label noise rate applied to Classifier Chain training to reduce exposure bias.",
+    )
+    parser.add_argument(
+        "--mlp_loss",
+        choices=["bce", "asymmetric"],
+        default="bce",
+        help="Loss function for PyTorch MLP base learners (bce or asymmetric).",
+    )
+    config_parser = argparse.ArgumentParser(add_help=False)
+    config_parser.add_argument("--config", type=str, default=None)
+    config_args, _ = config_parser.parse_known_args()
+    if config_args.config:
+        import json
+        with open(config_args.config, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        parser.set_defaults(**cfg)
     args = parser.parse_args()
 
     resolved_costs = args.abstention_costs
@@ -1289,6 +1371,9 @@ def main():
         operating_coverage_gamma=args.operating_coverage_gamma,
         operating_risk_epsilon=args.operating_risk_epsilon,
         operating_validation_size=args.operating_validation_size,
+        min_coverage=args.min_coverage,
+        cc_label_noise=args.cc_label_noise,
+        mlp_loss=args.mlp_loss,
     )
 
 
