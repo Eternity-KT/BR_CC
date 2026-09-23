@@ -428,6 +428,7 @@ def _evaluate_model_v3(
                     if _is_gsi_model(model_name)
                     else "minimum_loss"
                 ),
+                min_coverage=getattr(classifier, "min_coverage", None),
             )
         model_metadata["Decision Policy"] = decision_policy.get_config()
         if _is_gsi_model(model_name):

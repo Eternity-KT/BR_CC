@@ -59,12 +59,8 @@ def _evaluation_policy_config(
     }
     family = model_family(model_name)
     if family in ("MLC_PA", "GSI_MLC_PA"):
-        policy_name = (
-            "hamming" if family == "MLC_PA" else gsi_decision_policy
-        )
-        penalty = (
-            abstention_penalty if family == "MLC_PA" else gsi_penalty
-        )
+        policy_name = gsi_decision_policy
+        penalty = gsi_penalty
         configuration["partial_policy"] = create_configured_policy(
             policy_name,
             cost=report_cost,

@@ -104,78 +104,79 @@ class PerLabelMacroF1Policy(DecisionPolicy):
             )
             m_thresh = len(thresholds)
 
-            if not self.allow_abstention:
-                # 1D search over complete thresholds
-                y_pos = (y_col == 1)
-                is_pos = p_col[:, None] >= thresholds[None, :]
-                tp_arr = y_pos @ is_pos
-                fp_arr = (~y_pos) @ is_pos
-                fn_arr = pos_count - tp_arr
-                denom = 2 * tp_arr + fp_arr + fn_arr
-                f1_arr = np.where(denom > 0, 2.0 * tp_arr / np.maximum(denom, 1e-12), 0.0)
-                best_idx = int(np.argmax(f1_arr))
-                tau_low[k] = float(thresholds[best_idx])
-                tau_high[k] = float(thresholds[best_idx])
+            y_pos = (y_col == 1).astype(np.float64)
+            y_neg = (y_col == 0).astype(np.float64)
+            is_pos = (p_col[:, None] >= thresholds[None, :]).astype(np.float64)
+            is_neg = (p_col[:, None] <= thresholds[None, :]).astype(np.float64)
+
+            tp_high = y_pos @ is_pos
+            fp_high = y_neg @ is_pos
+            fn_low = y_pos @ is_neg
+
+            denom_1d = 2 * tp_high + fp_high + (pos_count - tp_high)
+            f1_1d = np.where(denom_1d > 0, 2.0 * tp_high / np.maximum(denom_1d, 1e-12), 0.0)
+
+            prior = float(pos_count) / float(n_samples)
+            pos_rate = np.mean(is_pos, axis=0)
+
+            # Step 1: 1D center threshold search with anti-degeneracy guardrail
+            valid_1d = (thresholds > 0.0) & (thresholds < 1.0)
+            if prior < 0.4:
+                valid_1d = valid_1d & (pos_rate <= max(0.20, 2.5 * prior))
+
+            if np.any(valid_1d):
+                valid_indices = np.where(valid_1d)[0]
+                best_1d_idx = valid_indices[int(np.argmax(f1_1d[valid_1d]))]
+                tau_star = float(thresholds[best_1d_idx])
             else:
-                # 2D search with vectorized inner loop
-                is_pos = p_col[:, None] >= thresholds[None, :]
-                is_neg = p_col[:, None] <= thresholds[None, :]
-                y_pos = (y_col == 1)
+                tau_star = 0.5
 
-                tp_high = y_pos @ is_pos
-                fp_high = (~y_pos) @ is_pos
-                fn_low = y_pos @ is_neg
+            # If cost >= 0.5 or abstention not allowed: complete 1D decision, Coverage = 1.0
+            if not self.allow_abstention or cost >= 0.5 - 1e-9:
+                tau_low[k] = tau_star
+                tau_high[k] = tau_star
+                continue
 
-                best_utility = -np.inf
-                best_decided = -1
-                best_i = 0
-                best_j = m_thresh - 1
+            # Step 2: Vectorized 2D search for [tau_low, tau_high] bracketing tau_star
+            low_idx = np.where(thresholds <= tau_star)[0]
+            high_idx = np.where(thresholds >= tau_star)[0]
 
-                for i in range(m_thresh):
-                    neg_col = is_neg[:, i:i+1]
-                    pos_cols = is_pos[:, i:]
-                    decided = np.sum(neg_col | pos_cols, axis=0)
-                    a = n_samples - decided
+            neg_count = np.sum(is_neg[:, low_idx], axis=0)
+            pos_count_arr = np.sum(is_pos[:, high_idx], axis=0)
 
-                    tp = tp_high[i:]
-                    fp = fp_high[i:]
-                    fn = fn_low[i]
-                    denom = 2 * tp + fp + fn
-                    both_empty = (tp + fp + fn) == 0
-                    f1 = np.where(
-                        denom > 0,
-                        2.0 * tp / np.maximum(denom, 1e-12),
-                        np.where(both_empty, 1.0, 0.0),
-                    )
-                    f1[decided == 0] = 0.0
-                    pen = np.asarray(
-                        abstention_penalty(a, 1, cost, penalty),
-                        dtype=np.float64,
-                    ) / float(n_samples)
-                    utils = f1 - pen
-                    if self.min_coverage is not None:
-                        cov_ratio = decided / float(n_samples)
-                        cov_violation = np.maximum(0.0, float(self.min_coverage) - cov_ratio)
-                        utils = utils - 100.0 * cov_violation
+            decided_mat = np.clip(neg_count[:, None] + pos_count_arr[None, :], 0, n_samples)
+            overlap_mask = (thresholds[low_idx, None] == thresholds[None, high_idx])
+            decided_mat[overlap_mask] = n_samples
 
-                    max_idx = int(np.argmax(utils))
-                    candidate_util = utils[max_idx]
-                    candidate_decided = int(decided[max_idx])
+            tp_mat = tp_high[high_idx][None, :]
+            fp_mat = fp_high[high_idx][None, :]
+            fn_mat = fn_low[low_idx][:, None]
+            denom_mat = 2 * tp_mat + fp_mat + fn_mat
+            f1_mat = np.where(denom_mat > 0, 2.0 * tp_mat / np.maximum(denom_mat, 1e-12), 0.0)
 
-                    if (
-                        candidate_util > best_utility + 1e-12
-                        or (
-                            np.isclose(candidate_util, best_utility, atol=1e-12)
-                            and candidate_decided > best_decided
-                        )
-                    ):
-                        best_utility = candidate_util
-                        best_decided = candidate_decided
-                        best_i = i
-                        best_j = i + max_idx
+            a_mat = n_samples - decided_mat
+            cost_factor = float(cost) / 0.5
+            pen_mat = cost_factor * (a_mat / float(n_samples)) * 0.5
+            util_mat = f1_mat - pen_mat
 
-                tau_low[k] = float(thresholds[best_i])
-                tau_high[k] = float(thresholds[best_j])
+            if self.min_coverage is not None:
+                cov_ratio_mat = decided_mat / float(n_samples)
+                util_mat[cov_ratio_mat < self.min_coverage - 1e-6] = -np.inf
+
+            # Tie-breaking: maximize utility, then maximize coverage
+            max_util = np.max(util_mat)
+            if not np.isfinite(max_util):
+                # Fallback to complete decision at tau_star
+                tau_low[k] = tau_star
+                tau_high[k] = tau_star
+                continue
+
+            close_mask = np.isclose(util_mat, max_util, atol=1e-12)
+            masked_decided = np.where(close_mask, decided_mat, -1)
+            best_i, best_j = np.unravel_index(np.argmax(masked_decided), util_mat.shape)
+
+            tau_low[k] = float(thresholds[low_idx[best_i]])
+            tau_high[k] = float(thresholds[high_idx[best_j]])
 
         return tau_low, tau_high
 

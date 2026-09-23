@@ -216,6 +216,9 @@ def create_registered_model(
             cost=abstention_cost,
             penalty=abstention_penalty,
             random_state=random_state,
+            decision_policy=gsi_decision_policy,
+            min_coverage=min_coverage,
+            validation_size=gsi_validation_size,
             **extra_base_kwargs,
         )
     else:

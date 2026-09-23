@@ -750,6 +750,26 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             else:
                 desired_final_order = list(range(self.n_labels_))
 
+        # Fit decision policy on true out-of-sample validation probabilities
+        # BEFORE any full-data refit occurs to prevent in-sample data leakage.
+        self.decision_policy_ = self._make_decision_policy()
+        if hasattr(self.decision_policy_, "fit"):
+            val_direct = self._direct_probabilities(
+                selection_br, X_array[validation]
+            )
+            val_probs = self._configured_probabilities(
+                X_array[validation],
+                val_direct,
+                selection_cc,
+                self.independent_labels_,
+            )
+            self.decision_policy_.fit(
+                val_probs,
+                Y_array[validation],
+                cost=self.cost,
+                penalty=self.penalty,
+            )
+
         # Final fitting uses no validation score and never sees the outer test
         # fold supplied later to predict().
         if self.refit:
@@ -790,24 +810,6 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             "final_order": [int(label) for label in self.order_],
             "selection_time_seconds": self.selection_time_seconds_,
         })
-
-        self.decision_policy_ = self._make_decision_policy()
-        if hasattr(self.decision_policy_, "fit"):
-            val_direct = self._direct_probabilities(
-                self.br_model_, X_array[validation]
-            )
-            val_probs = self._configured_probabilities(
-                X_array[validation],
-                val_direct,
-                self.cc_model_,
-                self.independent_labels_,
-            )
-            self.decision_policy_.fit(
-                val_probs,
-                Y_array[validation],
-                cost=self.cost,
-                penalty=self.penalty,
-            )
 
         self.is_fitted_ = True
         return self
