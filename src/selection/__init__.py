@@ -1,5 +1,8 @@
-"""Selection objectives and partition infrastructure for GSI models."""
-
+from .complexity_penalty import (
+    ComplexityPenaltyConfig,
+    ComplexityPenaltyEvaluator,
+    PenaltyEvaluationResult,
+)
 from .objectives import (
     SelectionObjectiveResult,
     available_selection_objectives,
@@ -14,9 +17,20 @@ from .partition import (
     canonical_partition_mode,
     provide_partition,
 )
+from .stratified_peeling import (
+    StratifiedPeelingConfig,
+    StratifiedPeelingResult,
+    StratifiedPeelingSelector,
+    compute_label_correlation_matrix,
+    find_optimal_binary_threshold,
+    order_dl_by_correlation,
+)
 
 
 __all__ = [
+    "ComplexityPenaltyConfig",
+    "ComplexityPenaltyEvaluator",
+    "PenaltyEvaluationResult",
     "SelectionObjectiveResult",
     "available_selection_objectives",
     "canonical_selection_objective",
@@ -27,4 +41,10 @@ __all__ = [
     "canonical_final_order_strategy",
     "canonical_partition_mode",
     "provide_partition",
+    "StratifiedPeelingConfig",
+    "StratifiedPeelingResult",
+    "StratifiedPeelingSelector",
+    "compute_label_correlation_matrix",
+    "find_optimal_binary_threshold",
+    "order_dl_by_correlation",
 ]

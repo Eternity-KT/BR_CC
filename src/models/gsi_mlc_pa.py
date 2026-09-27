@@ -157,6 +157,12 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         min_coverage=None,
         cc_label_noise=0.0,
         mlp_loss="bce",
+        stratified_threshold=0.75,
+        max_peeling_depth=3,
+        dl_order_direction="ascending",
+        use_complexity_penalty=False,
+        complexity_penalty_lambda=0.01,
+        complexity_penalty_beta=0.5,
     ):
         self.cost = cost
         self.validation_size = validation_size
@@ -178,6 +184,12 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         self.min_coverage = min_coverage
         self.cc_label_noise = cc_label_noise
         self.mlp_loss = mlp_loss
+        self.stratified_threshold = float(stratified_threshold)
+        self.max_peeling_depth = int(max_peeling_depth)
+        self.dl_order_direction = str(dl_order_direction)
+        self.use_complexity_penalty = bool(use_complexity_penalty)
+        self.complexity_penalty_lambda = float(complexity_penalty_lambda)
+        self.complexity_penalty_beta = float(complexity_penalty_beta)
 
     def _validate_parameters(self):
         if not 0.0 <= float(self.cost) <= 1.0:
@@ -189,6 +201,12 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         beta = float(self.beta)
         if not np.isfinite(beta) or beta <= 0.0:
             raise ValueError("beta must be a finite positive number.")
+        if not 0.0 <= float(self.stratified_threshold) <= 1.0:
+            raise ValueError("stratified_threshold must lie in [0, 1].")
+        if int(self.max_peeling_depth) < 1:
+            raise ValueError("max_peeling_depth must be at least 1.")
+        if self.dl_order_direction not in ("ascending", "descending"):
+            raise ValueError("dl_order_direction must be 'ascending' or 'descending'.")
         canonical_selection_objective(self.selection_objective)
         canonical_policy_name(self.decision_policy)
         canonical_partition_mode(self.partition_mode)
@@ -369,16 +387,37 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         return correlation
 
     @staticmethod
-    def _correlation_order(correlation, independent_labels, dependent_labels):
+    def _correlation_order(
+        correlation,
+        independent_labels,
+        dependent_labels,
+        direction="descending",
+    ):
         """Order labels after IL/DL is frozen using absolute correlations.
 
-        Independent labels form deterministic roots.  Remaining dependent
-        labels are appended by strongest connection to an already placed
-        label.  Ties are resolved by label index.
+        Independent labels form deterministic roots. If direction == 'ascending',
+        remaining dependent labels are ordered by ascending cumulative correlation
+        (spec_V5_1.md requirement: least coupled labels first).
+        If direction == 'descending', remaining dependent labels are appended by
+        strongest connection to an already placed label (legacy behavior).
         """
         correlation = np.asarray(correlation, dtype=np.float64)
         independent = sorted(int(label) for label in independent_labels)
         remaining = set(int(label) for label in dependent_labels)
+
+        if direction == "ascending":
+            remaining_list = sorted(list(remaining))
+            scores = {}
+            for label in remaining_list:
+                other_labels = [j for j in remaining_list if j != label]
+                scores[label] = (
+                    float(np.sum(np.abs(correlation[label, other_labels])))
+                    if other_labels
+                    else 0.0
+                )
+            ordered_dl = sorted(remaining_list, key=lambda l: (scores[l], l))
+            return independent + ordered_dl
+
         order = list(independent)
         if not order and remaining:
             root = min(
@@ -642,12 +681,51 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             "learned_no_correlation_order",
             "random_matched",
         )
+        needs_stratified_peeling = self.partition_mode_ == "stratified_peeling"
         learned_independent = None
         learned_dependent = None
         learned_score = None
         learned_history = None
         learned_evaluation_count = 0
-        if needs_learned_reference:
+        self.stratified_peeling_audit_ = None
+
+        if needs_stratified_peeling:
+            from ..selection.stratified_peeling import (
+                StratifiedPeelingConfig,
+                StratifiedPeelingSelector,
+            )
+            from ..selection.complexity_penalty import ComplexityPenaltyConfig
+
+            penalty_cfg = ComplexityPenaltyConfig(
+                penalty_lambda=self.complexity_penalty_lambda,
+                penalty_beta=self.complexity_penalty_beta,
+                enabled=self.use_complexity_penalty,
+            )
+            peeling_cfg = StratifiedPeelingConfig(
+                threshold=self.stratified_threshold,
+                max_depth=self.max_peeling_depth,
+                dl_order_direction=self.dl_order_direction,
+                use_complexity_penalty=self.use_complexity_penalty,
+                penalty_config=penalty_cfg,
+            )
+            peeling_selector = StratifiedPeelingSelector(
+                config=peeling_cfg,
+                base_estimator_factory=lambda: create_binary_estimator(
+                    self.base_learner, random_state=self.random_state
+                ),
+            )
+            peeling_res = peeling_selector.fit_partition(
+                X_array[selection_train],
+                Y_array[selection_train],
+                X_array[validation],
+                Y_array[validation],
+            )
+            learned_independent = list(peeling_res.all_independent_labels)
+            learned_dependent = list(peeling_res.dependent_residual_labels)
+            self.stratified_peeling_audit_ = peeling_res.as_dict()
+            self.stratified_execution_order_ = list(peeling_res.final_execution_order)
+            learned_evaluation_count = peeling_res.num_stages_executed
+        elif needs_learned_reference:
             (
                 learned_independent,
                 learned_dependent,
@@ -713,6 +791,7 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         self.selection_config_.update({
             "base_learner": base_learner_manifest(self.base_learner),
             "partition": dict(self.partition_audit_),
+            "stratified_peeling": self.stratified_peeling_audit_,
             "learned_reference_independent_labels": (
                 self.reference_independent_labels_
             ),
@@ -729,10 +808,20 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         # objective/cost may affect selection, but correlation and outer-test
         # data cannot feed back into it.
         self.label_correlation_ = self._compute_label_correlation(Y_array)
+        order_dir = (
+            "ascending"
+            if self.requested_final_order_strategy_ == "ascending_correlation"
+            or (
+                self.partition_mode_ == "stratified_peeling"
+                and self.dl_order_direction == "ascending"
+            )
+            else "descending"
+        )
         correlation_order = self._correlation_order(
             self.label_correlation_,
             self.independent_labels_,
             self.dependent_labels_,
+            direction=order_dir,
         )
         self.correlation_order_ = [int(label) for label in correlation_order]
         if self.order is not None:
@@ -743,7 +832,11 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             if self.partition_mode_ == "learned_no_correlation_order":
                 effective_strategy = "selection"
             self.final_order_strategy_ = effective_strategy
-            if effective_strategy == "correlation":
+            if effective_strategy in (
+                "correlation",
+                "ascending_correlation",
+                "descending_correlation",
+            ):
                 desired_final_order = list(self.correlation_order_)
             elif effective_strategy == "selection":
                 desired_final_order = list(self.selection_order_)
@@ -826,10 +919,11 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             X_array, direct, self.cc_model_, self.independent_labels_
         )
 
-    def predict(self, X):
+    def predict(self, X, cost=None):
         """Return {0, abstain, 1} after one final BOP application."""
         probabilities = self.predict_proba(X)
-        return self.predict_from_proba(probabilities, cost=self.cost)
+        eff_cost = self.cost if cost is None else cost
+        return self.predict_from_proba(probabilities, cost=eff_cost)
 
     def predict_from_proba(self, probabilities, cost=None):
         """Apply BOP to one already-computed final probability matrix."""

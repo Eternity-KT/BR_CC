@@ -18,12 +18,27 @@ PARTITION_MODES = (
     "all_dl",
     "fixed",
     "random_matched",
+    "stratified_peeling",
 )
-FINAL_ORDER_STRATEGIES = ("correlation", "selection", "natural")
+FINAL_ORDER_STRATEGIES = (
+    "correlation",
+    "ascending_correlation",
+    "descending_correlation",
+    "selection",
+    "natural",
+)
 
 _PARTITION_ALIASES = {
     "learned_no_reorder": "learned_no_correlation_order",
     "random": "random_matched",
+    "stratified": "stratified_peeling",
+    "v5_1": "stratified_peeling",
+    "v5.1": "stratified_peeling",
+}
+
+_FINAL_ORDER_ALIASES = {
+    "ascending": "ascending_correlation",
+    "descending": "descending_correlation",
 }
 
 
@@ -43,6 +58,7 @@ def canonical_final_order_strategy(strategy):
     """Validate the strategy used after a partition has been frozen."""
 
     key = str(strategy).strip().lower().replace("-", "_")
+    key = _FINAL_ORDER_ALIASES.get(key, key)
     if key not in FINAL_ORDER_STRATEGIES:
         raise ValueError(
             "Unknown final order strategy: "
@@ -137,6 +153,7 @@ def provide_partition(
         "learned",
         "learned_no_correlation_order",
         "random_matched",
+        "stratified_peeling",
     ):
         learned = _validated_label_set(
             learned_independent_labels,
@@ -145,7 +162,7 @@ def provide_partition(
         )
         reference_count = len(learned)
 
-    if canonical_mode in ("learned", "learned_no_correlation_order"):
+    if canonical_mode in ("learned", "learned_no_correlation_order", "stratified_peeling"):
         independent = learned
     elif canonical_mode == "all_il":
         independent = tuple(range(n_labels))
