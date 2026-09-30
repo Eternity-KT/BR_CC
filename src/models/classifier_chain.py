@@ -62,14 +62,33 @@ class ClassifierChainClassifier(BaseEstimator, ClassifierMixin):
         random_state (int, default=42):
             Random seed for reproducibility.
     """
-    def __init__(self, base_estimator=None, order=None, random_state=42, label_noise=0.0):
+    def __init__(
+        self,
+        base_estimator=None,
+        order=None,
+        random_state=42,
+        label_noise=0.0,
+        correlation_matrix=None,
+        correlation_threshold=None,
+        independent_labels=None,
+    ):
         self.base_estimator = base_estimator
         self.order = order
         self.random_state = random_state
         self.label_noise = float(label_noise)
+        self.correlation_matrix = correlation_matrix
+        self.correlation_threshold = (
+            float(correlation_threshold) if correlation_threshold is not None else None
+        )
+        self.independent_labels = (
+            set(int(l) for l in independent_labels)
+            if independent_labels is not None
+            else None
+        )
         self.classifiers_ = []
         self.order_ = None
         self.n_labels_ = 0
+        self.active_parents_map_ = {}
 
     def fit(self, X, Y):
         """
@@ -93,17 +112,35 @@ class ClassifierChainClassifier(BaseEstimator, ClassifierMixin):
             self.order_ = list(self.order)
 
         self.classifiers_ = []
+        self.active_parents_map_ = {}
         template_estimator = _get_base_estimator(self.base_estimator, self.random_state)
 
         for i, label_idx in enumerate(self.order_):
             y_j = Y[:, label_idx]
             unique_classes = np.unique(y_j)
 
+            # Determine active predecessor labels
+            candidate_indices = self.order_[:i]
+            if (
+                self.correlation_threshold is not None
+                and self.correlation_threshold > 0.0
+                and self.correlation_matrix is not None
+            ):
+                corr_mat = np.asarray(self.correlation_matrix, dtype=np.float32)
+                prev_indices = [
+                    p for p in candidate_indices
+                    if (self.independent_labels is not None and p in self.independent_labels)
+                    or (float(corr_mat[p, label_idx]) >= self.correlation_threshold)
+                ]
+            else:
+                prev_indices = candidate_indices
+
+            self.active_parents_map_[label_idx] = prev_indices
+
             # Build extended feature vector
-            if i == 0:
+            if not prev_indices:
                 X_extended = X
             else:
-                prev_indices = self.order_[:i]
                 prev_features = Y[:, prev_indices].astype(np.float32)
                 if self.label_noise > 0.0:
                     rng = np.random.default_rng(self.random_state + i if self.random_state is not None else None)
@@ -145,10 +182,10 @@ class ClassifierChainClassifier(BaseEstimator, ClassifierMixin):
         Y_pred = np.zeros((n_samples, self.n_labels_), dtype=np.int32)
 
         for i, (label_idx, clf) in enumerate(zip(self.order_, self.classifiers_)):
-            if i == 0:
+            prev_indices = self.active_parents_map_.get(label_idx, self.order_[:i])
+            if not prev_indices:
                 X_extended = X
             else:
-                prev_indices = self.order_[:i]
                 prev_preds = Y_pred[:, prev_indices].astype(np.float32)
                 X_extended = np.hstack([X, prev_preds])
 
@@ -173,10 +210,10 @@ class ClassifierChainClassifier(BaseEstimator, ClassifierMixin):
         Y_proba = np.zeros((n_samples, self.n_labels_), dtype=np.float32)
 
         for i, (label_idx, clf) in enumerate(zip(self.order_, self.classifiers_)):
-            if i == 0:
+            prev_indices = self.active_parents_map_.get(label_idx, self.order_[:i])
+            if not prev_indices:
                 X_extended = X
             else:
-                prev_indices = self.order_[:i]
                 prev_preds = Y_pred[:, prev_indices].astype(np.float32)
                 X_extended = np.hstack([X, prev_preds])
 

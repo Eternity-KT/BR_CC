@@ -138,6 +138,57 @@ def order_dl_by_correlation(
     return ordered
 
 
+def normalize_augmented_probabilities(
+    probs: np.ndarray,
+    reference_X: np.ndarray,
+    strategy: str = "matching",
+) -> np.ndarray:
+    """Normalize augmented soft probability features to match the distribution/scale of reference_X.
+
+    Strategies:
+      - "matching" (default): Checks reference_X. If reference_X has negative values
+        (e.g., scaled to [-1, 1] by MaxAbsScaler or standardized by StandardScaler),
+        transforms probs from [0, 1] to [-1, 1] via 2*p - 1.0 (centered).
+        If reference_X is strictly non-negative in [0, 1], leaves probs in [0, 1].
+      - "centered": Linearly maps p in [0, 1] to 2*p - 1 in [-1, 1].
+      - "standard": Z-score standardization (mean=0, std=1) with safety epsilon.
+      - "logit": Log-odds transform log(p / (1-p)) clipped to [-10, 10], then standardized.
+      - "none": Leaves raw probabilities in [0, 1].
+    """
+    probs = np.clip(np.asarray(probs, dtype=np.float32), 0.0, 1.0)
+    if strategy == "none":
+        return probs
+
+    if strategy == "matching":
+        has_negative = bool(np.nanmin(reference_X) < -1e-5)
+        if has_negative:
+            return 2.0 * probs - 1.0
+        return probs
+
+    if strategy == "centered":
+        return 2.0 * probs - 1.0
+
+    if strategy == "standard":
+        mean = np.mean(probs, axis=0, keepdims=True)
+        std = np.std(probs, axis=0, keepdims=True)
+        std = np.where(std < 1e-6, 1.0, std)
+        return (probs - mean) / std
+
+    if strategy == "logit":
+        eps = 1e-4
+        clipped = np.clip(probs, eps, 1.0 - eps)
+        logit = np.log(clipped / (1.0 - clipped))
+        mean = np.mean(logit, axis=0, keepdims=True)
+        std = np.std(logit, axis=0, keepdims=True)
+        std = np.where(std < 1e-6, 1.0, std)
+        return (logit - mean) / std
+
+    raise ValueError(
+        f"Unknown aug_normalization strategy '{strategy}'. "
+        f"Available: ['matching', 'centered', 'standard', 'logit', 'none']."
+    )
+
+
 @dataclass(frozen=True)
 class StratifiedPeelingConfig:
     """Configuration for Stratified Data-Driven Peeling Selector.
@@ -149,6 +200,9 @@ class StratifiedPeelingConfig:
         min_labels_residual: Minimum number of remaining DL labels to continue peeling.
         use_complexity_penalty: Whether to evaluate the complexity penalty module (default False).
         penalty_config: Optional ComplexityPenaltyConfig when penalty is enabled.
+        aug_normalization: Strategy to normalize augmented probability features ("matching", "centered", "standard", "logit", "none").
+        decaying_threshold: Whether to decay threshold across stages.
+        threshold_decay_step: Amount to decrease threshold at each stage if decaying_threshold is True.
     """
     threshold: float = 0.75
     max_depth: int = 3
@@ -156,6 +210,9 @@ class StratifiedPeelingConfig:
     min_labels_residual: int = 1
     use_complexity_penalty: bool = False
     penalty_config: Optional[ComplexityPenaltyConfig] = None
+    aug_normalization: str = "matching"
+    decaying_threshold: bool = False
+    threshold_decay_step: float = 0.05
 
     def as_dict(self) -> Dict[str, Any]:
         return {
@@ -167,6 +224,9 @@ class StratifiedPeelingConfig:
             "penalty_config": (
                 None if self.penalty_config is None else self.penalty_config.as_dict()
             ),
+            "aug_normalization": self.aug_normalization,
+            "decaying_threshold": bool(self.decaying_threshold),
+            "threshold_decay_step": float(self.threshold_decay_step),
         }
 
 
@@ -182,6 +242,52 @@ class StratifiedPeelingResult:
     num_stages_executed: int
     selection_time_seconds: float
 
+    @property
+    def n_il_stage_1(self) -> int:
+        return len(self.independent_layers[0]) if len(self.independent_layers) > 0 else 0
+
+    @property
+    def n_il_stage_2(self) -> int:
+        return len(self.independent_layers[1]) if len(self.independent_layers) > 1 else 0
+
+    @property
+    def n_il_stage_3(self) -> int:
+        return len(self.independent_layers[2]) if len(self.independent_layers) > 2 else 0
+
+    @property
+    def labels_il_stage_1(self) -> Tuple[int, ...]:
+        return self.independent_layers[0] if len(self.independent_layers) > 0 else ()
+
+    @property
+    def labels_il_stage_2(self) -> Tuple[int, ...]:
+        return self.independent_layers[1] if len(self.independent_layers) > 1 else ()
+
+    @property
+    def labels_il_stage_3(self) -> Tuple[int, ...]:
+        return self.independent_layers[2] if len(self.independent_layers) > 2 else ()
+
+    @property
+    def n_total_il(self) -> int:
+        return len(self.all_independent_labels)
+
+    @property
+    def n_residual_dl(self) -> int:
+        return len(self.dependent_residual_labels)
+
+    @property
+    def total_labels(self) -> int:
+        return self.n_total_il + self.n_residual_dl
+
+    @property
+    def pct_total_il(self) -> float:
+        total = self.total_labels
+        return float(self.n_total_il / total * 100.0) if total > 0 else 0.0
+
+    @property
+    def pct_residual_dl(self) -> float:
+        total = self.total_labels
+        return float(self.n_residual_dl / total * 100.0) if total > 0 else 0.0
+
     def as_dict(self) -> Dict[str, Any]:
         return {
             "independent_layers": [list(layer) for layer in self.independent_layers],
@@ -194,6 +300,17 @@ class StratifiedPeelingResult:
             "stopping_reason": self.stopping_reason,
             "num_stages_executed": int(self.num_stages_executed),
             "selection_time_seconds": float(self.selection_time_seconds),
+            "n_il_stage_1": self.n_il_stage_1,
+            "labels_il_stage_1": list(self.labels_il_stage_1),
+            "n_il_stage_2": self.n_il_stage_2,
+            "labels_il_stage_2": list(self.labels_il_stage_2),
+            "n_il_stage_3": self.n_il_stage_3,
+            "labels_il_stage_3": list(self.labels_il_stage_3),
+            "n_total_il": self.n_total_il,
+            "pct_total_il": self.pct_total_il,
+            "n_residual_dl": self.n_residual_dl,
+            "pct_residual_dl": self.pct_residual_dl,
+            "labels_residual_dl": list(self.dependent_residual_labels),
         }
 
 
@@ -293,6 +410,15 @@ class StratifiedPeelingSelector:
             stage_thresholds = {}
             new_promoted_labels = []
 
+            # Determine effective threshold for this stage
+            if self.config.decaying_threshold:
+                effective_threshold = max(
+                    0.50,
+                    float(self.config.threshold - (stage - 1) * self.config.threshold_decay_step),
+                )
+            else:
+                effective_threshold = float(self.config.threshold)
+
             # Step 1: Train & evaluate binary estimators for all current candidate DL labels
             stage_val_probs = {}
             stage_train_probs = {}
@@ -316,8 +442,8 @@ class StratifiedPeelingSelector:
                 all_train_probs[label] = train_probs
                 all_val_probs[label] = val_probs
 
-                # Promotion condition: Validation F1 >= threshold
-                if best_f1 >= self.config.threshold:
+                # Promotion condition: Validation F1 >= effective threshold
+                if best_f1 >= effective_threshold:
                     new_promoted_labels.append(label)
 
             # Calculate stage F1 gain across all candidate labels
@@ -331,6 +457,7 @@ class StratifiedPeelingSelector:
             # Record diagnostic record for this stage
             diag = {
                 "stage": int(stage),
+                "effective_threshold": float(effective_threshold),
                 "num_candidate_dl": int(len(candidate_dl)),
                 "num_promoted": int(len(new_promoted_labels)),
                 "promoted_labels": list(new_promoted_labels),
@@ -386,11 +513,19 @@ class StratifiedPeelingSelector:
                 stopping_reason = "max_depth_reached"
                 break
 
-            # Prepare augmented features for next stage: X^(t) = [X, P_hat(Y_{IL})]
-            aug_train_cols = [all_train_probs[l][:, np.newaxis] for l in accumulated_il]
-            aug_val_cols = [all_val_probs[l][:, np.newaxis] for l in accumulated_il]
-            current_X_train = np.hstack([X_train] + aug_train_cols)
-            current_X_val = np.hstack([X_val] + aug_val_cols)
+            # Prepare augmented features for next stage: X^(t) = [X, Normalize(P_hat(Y_{IL}))]
+            aug_train_raw = np.column_stack([all_train_probs[l] for l in accumulated_il])
+            aug_val_raw = np.column_stack([all_val_probs[l] for l in accumulated_il])
+
+            aug_train_norm = normalize_augmented_probabilities(
+                aug_train_raw, reference_X=X_train, strategy=self.config.aug_normalization
+            )
+            aug_val_norm = normalize_augmented_probabilities(
+                aug_val_raw, reference_X=X_val, strategy=self.config.aug_normalization
+            )
+
+            current_X_train = np.hstack([X_train, aug_train_norm])
+            current_X_val = np.hstack([X_val, aug_val_norm])
 
         # Post-peeling ordering:
         # 1. Independent labels preserve layer order [IL_1, IL_2, ...]

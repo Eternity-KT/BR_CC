@@ -163,6 +163,10 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         use_complexity_penalty=False,
         complexity_penalty_lambda=0.01,
         complexity_penalty_beta=0.5,
+        sparse_cc_threshold=None,
+        aug_normalization="matching",
+        decaying_threshold=False,
+        threshold_decay_step=0.05,
     ):
         self.cost = cost
         self.validation_size = validation_size
@@ -190,6 +194,12 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         self.use_complexity_penalty = bool(use_complexity_penalty)
         self.complexity_penalty_lambda = float(complexity_penalty_lambda)
         self.complexity_penalty_beta = float(complexity_penalty_beta)
+        self.sparse_cc_threshold = (
+            float(sparse_cc_threshold) if sparse_cc_threshold is not None else None
+        )
+        self.aug_normalization = str(aug_normalization)
+        self.decaying_threshold = bool(decaying_threshold)
+        self.threshold_decay_step = float(threshold_decay_step)
 
     def _validate_parameters(self):
         if not 0.0 <= float(self.cost) <= 1.0:
@@ -239,6 +249,8 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
 
     def _make_cc_model(self, order=None):
         requested_order = self.order_ if order is None else list(order)
+        corr_matrix = getattr(self, "label_correlation_", None)
+        ind_labels = getattr(self, "independent_labels_", None)
         if self.cc_estimator is None:
             extra = {}
             if self.base_learner == "mlp" and self.mlp_loss != "bce":
@@ -250,13 +262,26 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
                 order=requested_order,
                 random_state=self.random_state,
                 label_noise=self.cc_label_noise,
+                correlation_matrix=corr_matrix,
+                correlation_threshold=self.sparse_cc_threshold,
+                independent_labels=ind_labels,
             )
         estimator = _clone_or_copy(self.cc_estimator)
         if hasattr(estimator, "set_params"):
+            params_to_set = {"order": requested_order}
+            if corr_matrix is not None:
+                params_to_set["correlation_matrix"] = corr_matrix
+            if self.sparse_cc_threshold is not None:
+                params_to_set["correlation_threshold"] = self.sparse_cc_threshold
+            if ind_labels is not None:
+                params_to_set["independent_labels"] = ind_labels
             try:
-                estimator.set_params(order=requested_order)
+                estimator.set_params(**params_to_set)
             except (TypeError, ValueError):
-                pass
+                try:
+                    estimator.set_params(order=requested_order)
+                except (TypeError, ValueError):
+                    pass
         return estimator
 
     def _split_train_validation(self, X, Y):
@@ -333,10 +358,24 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
                 probabilities[:, label_index] = direct_probabilities[:, label_index]
                 continue
 
-            predecessors = self.order_[:position]
+            # Determine active predecessors for this label
+            if hasattr(cc_model, "active_parents_map_") and label_index in cc_model.active_parents_map_:
+                active_predecessors = cc_model.active_parents_map_[label_index]
+            elif self.sparse_cc_threshold is not None and self.sparse_cc_threshold > 0.0:
+                corr_mat = getattr(self, "label_correlation_", None)
+                if corr_mat is not None:
+                    active_predecessors = [
+                        p for p in self.order_[:position]
+                        if (p in independent) or (float(corr_mat[p, label_index]) >= self.sparse_cc_threshold)
+                    ]
+                else:
+                    active_predecessors = self.order_[:position]
+            else:
+                active_predecessors = self.order_[:position]
+
             classifier = cc_model.classifiers_[position]
-            if not predecessors:
-                # A DL chain root is the unconditional first CC classifier.
+            if not active_predecessors:
+                # A DL chain root or isolated DL node is the unconditional CC classifier.
                 probabilities[:, label_index] = _positive_probability(
                     classifier, X
                 )
@@ -345,8 +384,8 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             # These are the already-finalized probabilities under the current
             # configuration: BR for preceding IL labels and marginalized CC
             # probabilities for preceding DL labels.
-            predecessor_probabilities = probabilities[:, predecessors]
-            if len(predecessors) == 1:
+            predecessor_probabilities = probabilities[:, active_predecessors]
+            if len(active_predecessors) == 1:
                 zeros = np.zeros((X.shape[0], 1), dtype=np.float32)
                 ones = np.ones((X.shape[0], 1), dtype=np.float32)
                 probability_given_zero = _positive_probability(
@@ -707,6 +746,9 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
                 dl_order_direction=self.dl_order_direction,
                 use_complexity_penalty=self.use_complexity_penalty,
                 penalty_config=penalty_cfg,
+                aug_normalization=self.aug_normalization,
+                decaying_threshold=self.decaying_threshold,
+                threshold_decay_step=self.threshold_decay_step,
             )
             peeling_selector = StratifiedPeelingSelector(
                 config=peeling_cfg,

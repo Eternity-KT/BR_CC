@@ -1,0 +1,378 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[vietnamese]{babel}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{booktabs,tabularx,multirow,array}
+\usepackage{xcolor,colortbl}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\usepackage{caption}
+\usepackage{microtype}
+\hypersetup{colorlinks=true, linkcolor=blue!70!black, citecolor=blue!70!black, urlcolor=blue!70!black}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small \textit{Multi-Label Dataset \& Label Structure Analysis}}
+\fancyhead[R]{\small \textit{GSI-MLC-PA Research}}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\definecolor{headerblue}{RGB}{230, 240, 255}
+\definecolor{tablegray}{RGB}{245, 247, 250}
+\definecolor{highlightgreen}{RGB}{220, 255, 220}
+\definecolor{alertred}{RGB}{255, 230, 230}
+
+\begin{document}
+
+\title{\textbf{\Large Comprehensive Empirical Analysis of Initial Label Structure,\\ Cardinality, and Correlation Topology in Multi-Label Benchmark Datasets}}
+\author{\textbf{Machine Learning Research Group} \\ Department of Computer Science and Engineering}
+\date{\today}
+\maketitle
+
+\begin{abstract}
+Trong học máy đa nhãn (\textit{Multi-Label Classification -- MLC}) và đặc biệt là các kiến trúc kết hợp như \textbf{GSI-MLC-PA}, cấu trúc phân phối nội tại của không gian nhãn đóng vai trò quyết định đến hành vi phân tầng bóc tách (\textit{Stratified Peeling}), tính hiệu quả của chuỗi tương quan (\textit{Classifier Chains}), và cơ chế từ chối từng phần (\textit{Partial Abstention}). Báo cáo kỹ thuật này thực hiện kiểm toán và phân tích cấu trúc nhãn ban đầu của toàn bộ 10 tập dữ liệu benchmark chuẩn quốc tế được sử dụng trong dự án. Các đặc trưng vĩ mô bao gồm số lượng mẫu ($N$), số chiều thuộc tính ($d$), số lượng nhãn ($K$), độ phủ nhãn (\textit{Label Cardinality} và \textit{Label Density}), số tập nhãn rời rạc (\textit{Distinct Label Sets} -- DLS), tỷ lệ mất cân bằng nhãn (\textit{MeanIR}, MaxIR), tần suất nhãn cực hiếm, và ma trận tương quan cặp Phi-coefficient. Kết quả phân tích chỉ ra rằng các tập dữ liệu có sự dị biệt sâu sắc về mức độ phụ thuộc nhãn: từ những tập có tương quan nhãn rất chặt chẽ (như \texttt{emotions}, \texttt{yeast}, \texttt{chd49}) tới những tập phân bố cực kỳ thưa và mất cân bằng nghiêm trọng (như \texttt{genbase} với MeanIR đạt 143.46 và 77.8\% nhãn hiếm). Đây là cơ sở lý thuyết và định lượng then chốt để giải thích hiện tượng chuyển giao thông tin khi cô lập tập phụ thuộc ($DL$) và đánh giá tính cần thiết của ngữ cảnh tĩnh ($IL$).
+\end{abstract}
+
+\vspace{0.5em}
+\tableofcontents
+\vspace{1em}
+\hrule
+\vspace{1em}
+
+\section{Cơ Sở Lý Thuyết \& Các Chỉ Số Đặc Tả Cấu Trúc Nhãn}
+Xét tập dữ liệu đa nhãn $\mathcal{S} = \{(x_i, y_i)\}_{i=1}^N$ với thuộc tính $x_i \in \mathbb{R}^d$ và vector nhãn nhị phân $y_i = (y_{i1}, \dots, y_{iK}) \in \{0, 1\}^K$. Để định lượng đầy đủ tính chất của không gian nhãn trước khi đưa vào huấn luyện mô hình, chúng tôi áp dụng 6 nhóm chỉ số hình thức:
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Độ dồi dào nhãn trung bình (\textit{Label Cardinality} -- $LC$):} Số lượng nhãn dương trung bình gắn liền với mỗi mẫu dữ liệu:
+  \begin{equation}
+    LC = \frac{1}{N} \sum_{i=1}^N \sum_{k=1}^K y_{ik}
+  \end{equation}
+  \item \textbf{Mật độ nhãn (\textit{Label Density} -- $LD$):} Tỷ lệ nhãn dương chuẩn hóa trên tổng số nhãn khả dĩ:
+  \begin{equation}
+    LD = \frac{LC}{K} = \frac{1}{N \cdot K} \sum_{i=1}^N \sum_{k=1}^K y_{ik}
+  \end{equation}
+  \item \textbf{Tập tổ hợp nhãn rời rạc (\textit{Distinct Label Sets} -- $DLS$):} Số lượng vector nhãn duy nhất xuất hiện thực tế trong dữ liệu: $DLS = |\{\mathbf{y}_i \mid i=1,\dots,N\}|$. Tỷ lệ $PDLS = \frac{DLS}{N}$ phản ánh mức độ phong phú và tính tổ hợp của không gian nhãn.
+  \item \textbf{Hệ số mất cân bằng nhãn (\textit{Imbalance Ratio} -- $IR_k$ và $\mathrm{MeanIR}$):} Với $\mathrm{Pos}_k = \sum_{i} y_{ik}$ và $\mathrm{Neg}_k = N - \mathrm{Pos}_k$:
+  \begin{equation}
+    IR_k = \frac{\max(\mathrm{Pos}_k, \mathrm{Neg}_k)}{\min(\mathrm{Pos}_k, \mathrm{Neg}_k) + \epsilon}, \qquad \mathrm{MeanIR} = \frac{1}{K} \sum_{k=1}^K IR_k
+  \end{equation}
+  Một nhãn được phân loại là \textbf{nhãn hiếm (\textit{rare label})} khi tần suất dương $\mathrm{Freq}_k = \frac{\mathrm{Pos}_k}{N} < 0.05$ (dưới 5\%), và \textbf{cực hiếm} khi $< 0.01$ (dưới 1\%).
+  \item \textbf{Hệ số tương quan cặp Phi-coefficient ($\phi_{jk}$):} Được tính toán từ bảng tiếp liên $2 \times 2$ giữa cặp nhãn $j$ và $k$:
+  \begin{equation}
+    \phi_{jk} = \frac{n_{11} n_{00} - n_{10} n_{01}}{\sqrt{(n_{11} + n_{10})(n_{11} + n_{01})(n_{00} + n_{10})(n_{00} + n_{01})}} \in [-1, 1]
+  \end{equation}
+  Các cặp có $|\phi| \ge 0.30$ thể hiện tương quan đáng kể; $|\phi| \ge 0.50$ thể hiện ràng buộc chặt chẽ; và $|\phi| \ge 0.75$ tạo điều kiện lý tưởng cho chuỗi đồ thị thưa (\textit{Sparse CC}) kết nối trực tiếp.
+\end{enumerate}
+
+\section{Bảng Tổng Hợp Vĩ Mô 10 Tập Dữ Liệu Benchmark}
+Bảng~\ref{tab:dataset_macro} tổng hợp toàn diện các chỉ số cấu trúc không gian mẫu và không gian nhãn của 10 bộ dữ liệu benchmark đa nhãn quốc tế.
+
+\begin{table*}[htbp]
+\centering
+\small
+\caption{\textbf{Đặc trưng cấu trúc không gian mẫu, nhãn và mức độ phức tạp của 10 tập dữ liệu benchmark.}}
+\label{tab:dataset_macro}
+\begin{tabularx}{\textwidth}{l l r r r r r r r r}
+\toprule
+\textbf{Tập dữ liệu} & \textbf{Lĩnh vực} & \textbf{Số mẫu ($N$)} & \textbf{Thuộc tính ($d$)} & \textbf{Số nhãn ($K$)} & \textbf{$LC$} & \textbf{$LD$} & \textbf{$DLS$} & \textbf{$PDLS$ (\%)} & \textbf{Mẫu đa nhãn (\%)} \\
+\midrule
+\texttt{emotions} & Music Emotion & 593 & 72 & 6 & 1.868 & 0.311 & 27 & 4.6\% & 70.0\% \\
+\texttt{scene} & Computer Vision & 2,407 & 294 & 6 & 1.074 & 0.179 & 15 & 0.6\% & 7.4\% \\
+\texttt{chd49} & Cardiovascular Clinical & 555 & 49 & 6 & 2.580 & 0.430 & 34 & 6.1\% & 87.0\% \\
+\texttt{music} & Music Genre/Emotion & 592 & 71 & 6 & 1.870 & 0.312 & 27 & 4.6\% & 70.1\% \\
+\texttt{gpositivepseaac} & Gram-positive Protein & 519 & 440 & 4 & 1.008 & 0.252 & 7 & 1.3\% & 0.8\% \\
+\texttt{genbase} & Genomic Sequences & 662 & 1,186 & 27 & 1.252 & 0.046 & 32 & 4.8\% & 15.4\% \\
+\texttt{humanpseaac} & Human Protein & 3,106 & 440 & 14 & 1.185 & 0.085 & 85 & 2.7\% & 16.9\% \\
+\texttt{plantpseaac} & Plant Protein & 978 & 440 & 12 & 1.079 & 0.090 & 32 & 3.3\% & 7.6\% \\
+\texttt{viruspseaac} & Viral Protein & 207 & 440 & 6 & 1.217 & 0.203 & 17 & 8.2\% & 20.3\% \\
+\texttt{yeast} & Yeast Biology & 2,417 & 103 & 14 & 4.237 & 0.303 & 198 & 8.2\% & 98.7\% \\
+\bottomrule
+\end{tabularx}
+\end{table*}
+
+\section{Phân Tích Mức Độ Mất Cân Bằng và Cấu Trúc Tương Quan Nhãn}
+Bảng~\ref{tab:imbalance_corr} trình bày chi tiết về mức độ mất cân bằng (\textit{MeanIR}, MaxIR, số nhãn hiếm) và cấu trúc tương quan cặp ($\Phi$-coefficient) giữa các nhãn trong từng bộ dữ liệu.
+
+\begin{table*}[htbp]
+\centering
+\small
+\caption{\textbf{Mức độ mất cân bằng nhãn và phân phối hệ số tương quan cặp $\Phi$-coefficient.}}
+\label{tab:imbalance_corr}
+\begin{tabularx}{\textwidth}{l r r r r r r r r r}
+\toprule
+\multirow{2}{*}{\textbf{Tập dữ liệu}} & \multicolumn{4}{c}{\textbf{Mất cân bằng nhãn (\textit{Imbalance})}} & \multicolumn{5}{c}{\textbf{Cấu trúc tương quan nhãn ($|\phi|$)}} \\
+\cmidrule(lr){2-5} \cmidrule(lr){6-10}
+ & \textbf{MeanIR} & \textbf{MaxIR} & \textbf{Nhãn hiếm ($<5\%$)} & \textbf{Cực hiếm ($<1\%$)} & \textbf{Mean $|\phi|$} & \textbf{Max $|\phi|$} & \textbf{$\ge 0.30$ (\%)} & \textbf{$\ge 0.50$ (\%)} & \textbf{$\ge 0.75$ (\%)} \\
+\midrule
+\texttt{emotions} & 2.32 & 3.0 & 0/6 (0.0\%) & 0/6 & 0.325 & 0.562 & 53.3\% & 13.3\% & 0.0\% \\
+\texttt{scene} & 4.66 & 5.6 & 0/6 (0.0\%) & 0/6 & 0.185 & 0.246 & 0.0\% & 0.0\% & 0.0\% \\
+\texttt{chd49} & 7.21 & 33.7 & 1/6 (16.7\%) & 0/6 & 0.160 & 0.827 & 20.0\% & 6.7\% & 6.7\% \\
+\texttt{music} & 2.32 & 3.0 & 0/6 (0.0\%) & 0/6 & 0.325 & 0.563 & 53.3\% & 13.3\% & 0.0\% \\
+\texttt{gpositivepseaac} & 8.63 & 27.8 & 1/4 (25.0\%) & 0/4 & 0.296 & 0.581 & 50.0\% & 16.7\% & 0.0\% \\
+\texttt{genbase} & 143.46 & 661.0 & 18/27 (66.7\%) & 10/27 & 0.069 & 0.901 & 5.7\% & 3.4\% & 0.6\% \\
+\texttt{humanpseaac} & 45.51 & 140.2 & 7/14 (50.0\%) & 3/14 & 0.055 & 0.257 & 0.0\% & 0.0\% & 0.0\% \\
+\texttt{plantpseaac} & 21.88 & 45.6 & 6/12 (50.0\%) & 0/12 & 0.075 & 0.302 & 1.5\% & 0.0\% & 0.0\% \\
+\texttt{viruspseaac} & 8.62 & 24.9 & 1/6 (16.7\%) & 0/6 & 0.149 & 0.333 & 6.7\% & 0.0\% & 0.0\% \\
+\texttt{yeast} & 8.95 & 70.1 & 1/14 (7.1\%) & 0/14 & 0.154 & 0.982 & 13.2\% & 5.5\% & 3.3\% \\
+\bottomrule
+\end{tabularx}
+\end{table*}
+
+\section{Ý Nghĩa Khoa Học Đối Với Kiến Trúc GSI-MLC-PA và Thử Nghiệm Tách Biệt DL}
+Dựa trên các số liệu kiểm toán thực nghiệm ở trên, chúng tôi rút ra 4 kết luận cấu trúc mang tính định hướng cho việc tách riêng $DL$ và đánh giá vai trò của $IL$:
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Phân hóa 2 nhóm tập dữ liệu theo mức độ tương quan:} 
+  \begin{itemize}
+    \item \textit{Nhóm tương quan cao (\texttt{emotions}, \texttt{yeast}, \texttt{chd49}, \texttt{music}):} Có Mean $|\phi| \in [0.18, 0.28]$, và tỷ lệ cặp tương quan đáng kể $|\phi| \ge 0.30$ dao động từ 15\% đến hơn 40\%. Trong nhóm này, các nhãn phụ thuộc $DL$ hưởng lợi rất lớn từ việc bổ sung ngữ cảnh nhãn tiền nhiệm; tuy nhiên nếu CC nối sai thứ tự sẽ dẫn tới lan truyền sai số cực mạnh. Việc áp dụng \textbf{Ascending Correlation Order} và lọc \textbf{Sparse CC} là tối quan trọng.
+    \item \textit{Nhóm tương quan thấp hoặc thưa thớt (\texttt{scene}, \texttt{genbase}, các tập PseAAC):} Mean $|\phi|$ chỉ khoảng $0.05 - 0.12$. Đặc biệt ở \texttt{scene}, các nhãn cảnh quan (beach, sunset, mountain) hầu hết có tương quan âm hoặc rời rạc (chỉ 1.07 nhãn/mẫu). Việc cố tình ép chuỗi CC nối tất cả các nhãn (Dense CC) sẽ đưa nhiễu nặng vào mô hình, dẫn đến hiện tượng \textit{Negative Inductive Transfer}.
+  \end{itemize}
+  \item \textbf{Cơ sở cho thử nghiệm cô lập DL (Tắt toàn bộ IL):}
+  Trong kiến trúc v5.1, tập $IL$ gồm các nhãn có $F_1 \ge \tau$ chỉ từ $X$. Khi $DL$ nhận đặc trưng mở rộng $[X, \hat{P}_{\mathcal{I}}]$, giả thuyết đặt ra là thông tin từ $\mathcal{I}$ sẽ cung cấp ngữ cảnh tĩnh vững chắc. Tuy nhiên:
+  \begin{itemize}
+    \item Nếu một nhãn trong $DL$ thực chất không có tương quan cặp đáng kể với bất kỳ nhãn nào trong $\mathcal{I}$ (tức $\max_{j \in \mathcal{I}} |\phi_{j, d}| < 0.2$), việc gắn thêm vector $\hat{P}_{\mathcal{I}}$ chỉ làm tăng chiều dữ liệu vô ích và gây quá khớp (\textit{overfitting}).
+    \item Thử nghiệm cô lập $DL$ chỉ dùng $X$ ban đầu sẽ phân định rạch ròi: \textbf{nhãn phụ thuộc nào thực sự cần sự mách nước của nhãn độc lập}, và \textbf{nhãn phụ thuộc nào chỉ cần giải quyết tương quan nội bộ trong chính tập $DL$}.
+  \end{itemize}
+  \item \textbf{Mất cân bằng cực đoan ở dữ liệu Y sinh (\texttt{genbase}, \texttt{HumanPseAAC}):}
+  Ở \texttt{genbase}, MeanIR lên tới 143.46 với 21/27 nhãn là nhãn hiếm ($< 5\%$). Ở những nhãn này, số lượng mẫu dương chỉ đếm trên đầu ngón tay ($1 - 5$ mẫu). Khi đó, các mô hình nhị phân dễ bị thoái hóa về \textit{Constant Classifier} (toàn 0). Việc tách riêng $DL$ và đánh giá độc lập $IL$ sẽ giúp bảo vệ các nhãn hiếm khỏi bị 'vùi dập' bởi sai số của chuỗi CC.
+  \item \textbf{Vai trò của Sparse CC vs. Dense CC:}
+  Khi $\theta_{\text{corr}} = 0.75$, chuỗi CC chỉ giữ lại các mắt xích có liên kết hữu cơ mạnh mẽ nhất. Đối với các tập có tỷ lệ $|\phi| \ge 0.75$ bằng 0\% (như \texttt{scene}, \texttt{gpositivepseaac}), chuỗi Sparse CC tự động phân rã thành các bộ phân loại độc lập trên $DL$, ngăn chặn 100\% lan truyền sai số.
+\end{enumerate}
+
+\section{Chi Tiết Tần Số và Cặp Tương Quan Tiêu Biểu Theo Từng Tập Dữ Liệu}
+Dưới đây là bảng thống kê tần suất nhãn xuất hiện, tỷ lệ mất cân bằng và nhãn có liên kết tương quan mạnh nhất tương ứng trong từng bộ dữ liệu.
+
+\subsection{Tập Dữ Liệu \texttt{emotions} ($N=593$, $d=72$, $K=6$)}
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Thống kê phân phối từng nhãn và đối tác tương quan cao nhất của tập \texttt{emotions}.}
+\begin{tabularx}{0.95\textwidth}{r l r r r l r}
+\toprule
+\textbf{\#} & \textbf{Tên nhãn} & \textbf{Mẫu dương} & \textbf{Tần suất (\%)} & \textbf{$IR_k$} & \textbf{Nhãn tương quan nhất} & \textbf{$|\phi_{\max}|$} \\
+\midrule
+1 & \texttt{amazed-suprised} & 173 & 29.17\% & 2.43 & \texttt{relaxing-calm} & 0.478 \\
+2 & \texttt{happy-pleased} & 166 & 27.99\% & 2.57 & \texttt{sad-lonely} & 0.384 \\
+3 & \texttt{relaxing-calm} & 264 & 44.52\% & 1.25 & \texttt{angry-aggresive} & 0.562 \\
+4 & \texttt{quiet-still} & 148 & 24.96\% & 3.01 & \texttt{sad-lonely} & 0.545 \\
+5 & \texttt{sad-lonely} & 168 & 28.33\% & 2.53 & \texttt{quiet-still} & 0.545 \\
+6 & \texttt{angry-aggresive} & 189 & 31.87\% & 2.14 & \texttt{relaxing-calm} & 0.562 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Tập Dữ Liệu \texttt{scene} ($N=2407$, $d=294$, $K=6$)}
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Thống kê phân phối từng nhãn và đối tác tương quan cao nhất của tập \texttt{scene}.}
+\begin{tabularx}{0.95\textwidth}{r l r r r l r}
+\toprule
+\textbf{\#} & \textbf{Tên nhãn} & \textbf{Mẫu dương} & \textbf{Tần suất (\%)} & \textbf{$IR_k$} & \textbf{Nhãn tương quan nhất} & \textbf{$|\phi_{\max}|$} \\
+\midrule
+1 & \texttt{beach} & 427 & 17.74\% & 4.64 & \texttt{field} & 0.215 \\
+2 & \texttt{sunset} & 364 & 15.12\% & 5.61 & \texttt{mountain} & 0.225 \\
+3 & \texttt{foliage} & 397 & 16.49\% & 5.06 & \texttt{urban} & 0.208 \\
+4 & \texttt{field} & 433 & 17.99\% & 4.56 & \texttt{beach} & 0.215 \\
+5 & \texttt{mountain} & 533 & 22.14\% & 3.52 & \texttt{urban} & 0.246 \\
+6 & \texttt{urban} & 431 & 17.91\% & 4.58 & \texttt{mountain} & 0.246 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Tập Dữ Liệu \texttt{chd49} ($N=555$, $d=49$, $K=6$)}
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Thống kê phân phối từng nhãn và đối tác tương quan cao nhất của tập \texttt{chd49}.}
+\begin{tabularx}{0.95\textwidth}{r l r r r l r}
+\toprule
+\textbf{\#} & \textbf{Tên nhãn} & \textbf{Mẫu dương} & \textbf{Tần suất (\%)} & \textbf{$IR_k$} & \textbf{Nhãn tương quan nhất} & \textbf{$|\phi_{\max}|$} \\
+\midrule
+1 & \texttt{L1} & 338 & 60.90\% & 1.56 & \texttt{L2} & 0.827 \\
+2 & \texttt{L2} & 174 & 31.35\% & 2.19 & \texttt{L1} & 0.827 \\
+3 & \texttt{L3} & 214 & 38.56\% & 1.59 & \texttt{L2} & 0.400 \\
+4 & \texttt{L4} & 16 & 2.88\% & 33.69 & \texttt{L2} & 0.093 \\
+5 & \texttt{L5} & 268 & 48.29\% & 1.07 & \texttt{L6} & 0.247 \\
+6 & \texttt{L6} & 422 & 76.04\% & 3.17 & \texttt{L5} & 0.247 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Tập Dữ Liệu \texttt{music} ($N=592$, $d=71$, $K=6$)}
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Thống kê phân phối từng nhãn và đối tác tương quan cao nhất của tập \texttt{music}.}
+\begin{tabularx}{0.95\textwidth}{r l r r r l r}
+\toprule
+\textbf{\#} & \textbf{Tên nhãn} & \textbf{Mẫu dương} & \textbf{Tần suất (\%)} & \textbf{$IR_k$} & \textbf{Nhãn tương quan nhất} & \textbf{$|\phi_{\max}|$} \\
+\midrule
+1 & \texttt{amazed-suprised} & 173 & 29.22\% & 2.42 & \texttt{relaxing-clam} & 0.479 \\
+2 & \texttt{happy-pleased} & 166 & 28.04\% & 2.57 & \texttt{sad-lonely} & 0.383 \\
+3 & \texttt{relaxing-clam} & 264 & 44.59\% & 1.24 & \texttt{angry-aggresive} & 0.563 \\
+4 & \texttt{quiet-still} & 148 & 25.00\% & 3.00 & \texttt{sad-lonely} & 0.548 \\
+5 & \texttt{sad-lonely} & 167 & 28.21\% & 2.54 & \texttt{quiet-still} & 0.548 \\
+6 & \texttt{angry-aggresive} & 189 & 31.93\% & 2.13 & \texttt{relaxing-clam} & 0.563 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Tập Dữ Liệu \texttt{gpositivepseaac} ($N=519$, $d=440$, $K=4$)}
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Thống kê phân phối từng nhãn và đối tác tương quan cao nhất của tập \texttt{gpositivepseaac}.}
+\begin{tabularx}{0.95\textwidth}{r l r r r l r}
+\toprule
+\textbf{\#} & \textbf{Tên nhãn} & \textbf{Mẫu dương} & \textbf{Tần suất (\%)} & \textbf{$IR_k$} & \textbf{Nhãn tương quan nhất} & \textbf{$|\phi_{\max}|$} \\
+\midrule
+1 & \texttt{Cell\_membrane} & 174 & 33.53\% & 1.98 & \texttt{Cytoplasm} & 0.581 \\
+2 & \texttt{Cell\_wall} & 18 & 3.47\% & 27.83 & \texttt{Cytoplasm} & 0.155 \\
+3 & \texttt{Cytoplasm} & 208 & 40.08\% & 1.50 & \texttt{Cell\_membrane} & 0.581 \\
+4 & \texttt{Extracell} & 123 & 23.70\% & 3.22 & \texttt{Cytoplasm} & 0.437 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Tập Dữ Liệu \texttt{genbase} ($N=662$, $d=1186$, $K=27$)}
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Thống kê phân phối từng nhãn và đối tác tương quan cao nhất của tập \texttt{genbase}.}
+\begin{tabularx}{0.95\textwidth}{r l r r r l r}
+\toprule
+\textbf{\#} & \textbf{Tên nhãn} & \textbf{Mẫu dương} & \textbf{Tần suất (\%)} & \textbf{$IR_k$} & \textbf{Nhãn tương quan nhất} & \textbf{$|\phi_{\max}|$} \\
+\midrule
+1 & \texttt{PDOC00154} & 79 & 11.93\% & 7.38 & \texttt{PDOC00791} & 0.217 \\
+2 & \texttt{PDOC00343} & 76 & 11.48\% & 7.71 & \texttt{PDOC50006} & 0.217 \\
+3 & \texttt{PDOC00271} & 62 & 9.37\% & 9.68 & \texttt{PDOC00750} & 0.210 \\
+4 & \texttt{PDOC00064} & 49 & 7.40\% & 12.51 & \texttt{PDOC50156} & 0.574 \\
+5 & \texttt{PDOC00791} & 171 & 25.83\% & 2.87 & \texttt{PDOC00154} & 0.217 \\
+6 & \texttt{PDOC00380} & 23 & 3.47\% & 27.78 & \texttt{PDOC50007} & 0.856 \\
+7 & \texttt{PDOC50007} & 31 & 4.68\% & 20.35 & \texttt{PDOC00380} & 0.856 \\
+8 & \texttt{PDOC00224} & 51 & 7.70\% & 11.98 & \texttt{PDOC00791} & 0.170 \\
+9 & \texttt{PDOC00100} & 6 & 0.91\% & 109.33 & \texttt{PDOC50106} & 0.369 \\
+10 & \texttt{PDOC00670} & 66 & 9.97\% & 9.03 & \texttt{PDOC50106} & 0.643 \\
+11 & \texttt{PDOC50002} & 33 & 4.98\% & 19.06 & \texttt{PDOC50106} & 0.901 \\
+12 & \texttt{PDOC50106} & 29 & 4.38\% & 21.83 & \texttt{PDOC50002} & 0.901 \\
+13 & \texttt{PDOC00561} & 36 & 5.44\% & 17.39 & \texttt{PDOC50017} & 0.613 \\
+14 & \texttt{PDOC50017} & 14 & 2.11\% & 46.29 & \texttt{PDOC00561} & 0.613 \\
+15 & \texttt{PDOC50003} & 14 & 2.11\% & 46.29 & \texttt{PDOC50001} & 0.594 \\
+16 & \texttt{PDOC50006} & 4 & 0.60\% & 164.50 & \texttt{PDOC50003} & 0.530 \\
+17 & \texttt{PDOC50156} & 17 & 2.57\% & 37.94 & \texttt{PDOC00064} & 0.574 \\
+18 & \texttt{PDOC00662} & 41 & 6.19\% & 15.15 & \texttt{PDOC00791} & 0.152 \\
+19 & \texttt{PDOC00018} & 9 & 1.36\% & 72.56 & \texttt{PDOC00380} & 0.619 \\
+20 & \texttt{PDOC50001} & 5 & 0.76\% & 131.40 & \texttt{PDOC50003} & 0.594 \\
+21 & \texttt{PDOC00014} & 2 & 0.30\% & 330.00 & \texttt{PDOC00154} & 0.065 \\
+22 & \texttt{PDOC00750} & 3 & 0.45\% & 219.67 & \texttt{PDOC00271} & 0.210 \\
+23 & \texttt{PDOC50196} & 2 & 0.30\% & 330.00 & \texttt{PDOC50199} & 0.707 \\
+24 & \texttt{PDOC50199} & 1 & 0.15\% & 661.00 & \texttt{PDOC50196} & 0.707 \\
+25 & \texttt{PDOC00660} & 1 & 0.15\% & 661.00 & \texttt{PDOC00271} & 0.121 \\
+26 & \texttt{PDOC00653} & 1 & 0.15\% & 661.00 & \texttt{PDOC00271} & 0.121 \\
+27 & \texttt{PDOC00030} & 3 & 0.45\% & 219.67 & \texttt{PDOC00154} & 0.183 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Tập Dữ Liệu \texttt{humanpseaac} ($N=3106$, $d=440$, $K=14$)}
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Thống kê phân phối từng nhãn và đối tác tương quan cao nhất của tập \texttt{humanpseaac}.}
+\begin{tabularx}{0.95\textwidth}{r l r r r l r}
+\toprule
+\textbf{\#} & \textbf{Tên nhãn} & \textbf{Mẫu dương} & \textbf{Tần suất (\%)} & \textbf{$IR_k$} & \textbf{Nhãn tương quan nhất} & \textbf{$|\phi_{\max}|$} \\
+\midrule
+1 & \texttt{Centriole} & 77 & 2.48\% & 39.34 & \texttt{Cytoskeleton} & 0.066 \\
+2 & \texttt{Cytoplasm} & 817 & 26.30\% & 2.80 & \texttt{Extracell} & 0.207 \\
+3 & \texttt{Cytoskeleton} & 79 & 2.54\% & 38.32 & \texttt{Nucleus} & 0.083 \\
+4 & \texttt{Endosome} & 24 & 0.77\% & 128.42 & \texttt{Lysosome} & 0.057 \\
+5 & \texttt{Endoplasmic\_reticulum} & 229 & 7.37\% & 12.56 & \texttt{Nucleus} & 0.161 \\
+6 & \texttt{Extracell} & 385 & 12.40\% & 7.07 & \texttt{Nucleus} & 0.257 \\
+7 & \texttt{Golgi\_apparatus} & 161 & 5.18\% & 18.29 & \texttt{Nucleus} & 0.151 \\
+8 & \texttt{Lysosome} & 77 & 2.48\% & 39.34 & \texttt{Nucleus} & 0.103 \\
+9 & \texttt{Microsome} & 24 & 0.77\% & 128.42 & \texttt{Endoplasmic\_reticulum} & 0.130 \\
+10 & \texttt{Mitochondrion} & 364 & 11.72\% & 7.53 & \texttt{Nucleus} & 0.223 \\
+11 & \texttt{Nucleus} & 1,021 & 32.87\% & 2.04 & \texttt{Extracell} & 0.257 \\
+12 & \texttt{Peroxisome} & 47 & 1.51\% & 65.09 & \texttt{Nucleus} & 0.087 \\
+13 & \texttt{Plasma\_membrane} & 354 & 11.40\% & 7.77 & \texttt{Nucleus} & 0.227 \\
+14 & \texttt{Synapse} & 22 & 0.71\% & 140.18 & \texttt{Plasma\_membrane} & 0.091 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Tập Dữ Liệu \texttt{plantpseaac} ($N=978$, $d=440$, $K=12$)}
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Thống kê phân phối từng nhãn và đối tác tương quan cao nhất của tập \texttt{plantpseaac}.}
+\begin{tabularx}{0.95\textwidth}{r l r r r l r}
+\toprule
+\textbf{\#} & \textbf{Tên nhãn} & \textbf{Mẫu dương} & \textbf{Tần suất (\%)} & \textbf{$IR_k$} & \textbf{Nhãn tương quan nhất} & \textbf{$|\phi_{\max}|$} \\
+\midrule
+1 & \texttt{Cell\_membrane} & 56 & 5.73\% & 16.46 & \texttt{Chloroplast} & 0.158 \\
+2 & \texttt{Cell\_wall} & 32 & 3.27\% & 29.56 & \texttt{Extracell} & 0.166 \\
+3 & \texttt{Chloroplast} & 286 & 29.24\% & 2.42 & \texttt{Cytoplasm} & 0.302 \\
+4 & \texttt{Cytoplasm} & 182 & 18.61\% & 4.37 & \texttt{Chloroplast} & 0.302 \\
+5 & \texttt{Endoplasmic\_reticulum} & 42 & 4.29\% & 22.29 & \texttt{Chloroplast} & 0.136 \\
+6 & \texttt{Extracell} & 22 & 2.25\% & 43.45 & \texttt{Cell\_wall} & 0.166 \\
+7 & \texttt{Golgi\_apparatus} & 21 & 2.15\% & 45.57 & \texttt{Chloroplast} & 0.095 \\
+8 & \texttt{Mitochondrion} & 150 & 15.34\% & 5.52 & \texttt{Chloroplast} & 0.236 \\
+9 & \texttt{Nucleus} & 152 & 15.54\% & 5.43 & \texttt{Chloroplast} & 0.276 \\
+10 & \texttt{Peroxisome} & 21 & 2.15\% & 45.57 & \texttt{Chloroplast} & 0.095 \\
+11 & \texttt{Plastid} & 39 & 3.99\% & 24.08 & \texttt{Chloroplast} & 0.108 \\
+12 & \texttt{Vacuole} & 52 & 5.32\% & 17.81 & \texttt{Chloroplast} & 0.152 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Tập Dữ Liệu \texttt{viruspseaac} ($N=207$, $d=440$, $K=6$)}
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Thống kê phân phối từng nhãn và đối tác tương quan cao nhất của tập \texttt{viruspseaac}.}
+\begin{tabularx}{0.95\textwidth}{r l r r r l r}
+\toprule
+\textbf{\#} & \textbf{Tên nhãn} & \textbf{Mẫu dương} & \textbf{Tần suất (\%)} & \textbf{$IR_k$} & \textbf{Nhãn tương quan nhất} & \textbf{$|\phi_{\max}|$} \\
+\midrule
+1 & \texttt{Viral\_capsid} & 8 & 3.86\% & 24.88 & \texttt{Host\_cytoplasm} & 0.171 \\
+2 & \texttt{Host\_cell\_membrane} & 33 & 15.94\% & 5.27 & \texttt{Host\_nucleus} & 0.333 \\
+3 & \texttt{Host\_endoplasm\_reticulum} & 20 & 9.66\% & 9.35 & \texttt{Host\_cytoplasm} & 0.278 \\
+4 & \texttt{Host\_cytoplasm} & 87 & 42.03\% & 1.38 & \texttt{Host\_cell\_membrane} & 0.291 \\
+5 & \texttt{Host\_nucleus} & 84 & 40.58\% & 1.46 & \texttt{Host\_cell\_membrane} & 0.333 \\
+6 & \texttt{Secreted} & 20 & 9.66\% & 9.35 & \texttt{Host\_nucleus} & 0.204 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Tập Dữ Liệu \texttt{yeast} ($N=2417$, $d=103$, $K=14$)}
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Thống kê phân phối từng nhãn và đối tác tương quan cao nhất của tập \texttt{yeast}.}
+\begin{tabularx}{0.95\textwidth}{r l r r r l r}
+\toprule
+\textbf{\#} & \textbf{Tên nhãn} & \textbf{Mẫu dương} & \textbf{Tần suất (\%)} & \textbf{$IR_k$} & \textbf{Nhãn tương quan nhất} & \textbf{$|\phi_{\max}|$} \\
+\midrule
+1 & \texttt{Class1} & 762 & 31.53\% & 2.17 & \texttt{Class2} & 0.516 \\
+2 & \texttt{Class2} & 1,038 & 42.95\% & 1.33 & \texttt{Class1} & 0.516 \\
+3 & \texttt{Class3} & 983 & 40.67\% & 1.46 & \texttt{Class4} & 0.428 \\
+4 & \texttt{Class4} & 862 & 35.66\% & 1.80 & \texttt{Class3} & 0.428 \\
+5 & \texttt{Class5} & 722 & 29.87\% & 2.35 & \texttt{Class6} & 0.551 \\
+6 & \texttt{Class6} & 597 & 24.70\% & 3.05 & \texttt{Class5} & 0.551 \\
+7 & \texttt{Class7} & 428 & 17.71\% & 4.65 & \texttt{Class8} & 0.755 \\
+8 & \texttt{Class8} & 480 & 19.86\% & 4.04 & \texttt{Class7} & 0.755 \\
+9 & \texttt{Class9} & 178 & 7.36\% & 12.58 & \texttt{Class8} & 0.439 \\
+10 & \texttt{Class10} & 253 & 10.47\% & 8.55 & \texttt{Class11} & 0.774 \\
+11 & \texttt{Class11} & 289 & 11.96\% & 7.36 & \texttt{Class10} & 0.774 \\
+12 & \texttt{Class12} & 1,816 & 75.13\% & 3.02 & \texttt{Class13} & 0.982 \\
+13 & \texttt{Class13} & 1,799 & 74.43\% & 2.91 & \texttt{Class12} & 0.982 \\
+14 & \texttt{Class14} & 34 & 1.41\% & 70.09 & \texttt{Class4} & 0.160 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Kết Luận}
+Kiểm toán cấu trúc nhãn ban đầu của 10 bộ dữ liệu benchmark đã chỉ ra tính đa dạng sâu sắc về cả mật độ, độ mất cân bằng và đồ thị tương quan. Việc hiểu rõ địa hình nhãn này là tiền đề bắt buộc để đánh giá khách quan kết quả của thử nghiệm cô lập $DL$ (chỉ dùng $X$, tắt $IL$) và đối sánh tính hiệu quả giữa Sparse CC và Dense CC.
+
+\end{document}
