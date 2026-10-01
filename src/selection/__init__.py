@@ -25,6 +25,12 @@ from .stratified_peeling import (
     find_optimal_binary_threshold,
     order_dl_by_correlation,
 )
+from .cv_peeling import (
+    CVPeelingConfig,
+    CVPeelingResult,
+    CVStratifiedPeelingSelector,
+    evaluate_label_5fold_cv,
+)
 
 
 __all__ = [
@@ -47,4 +53,8 @@ __all__ = [
     "compute_label_correlation_matrix",
     "find_optimal_binary_threshold",
     "order_dl_by_correlation",
+    "CVPeelingConfig",
+    "CVPeelingResult",
+    "CVStratifiedPeelingSelector",
+    "evaluate_label_5fold_cv",
 ]

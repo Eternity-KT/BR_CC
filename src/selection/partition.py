@@ -19,6 +19,7 @@ PARTITION_MODES = (
     "fixed",
     "random_matched",
     "stratified_peeling",
+    "cv_stratified_peeling",
 )
 FINAL_ORDER_STRATEGIES = (
     "correlation",
@@ -34,6 +35,11 @@ _PARTITION_ALIASES = {
     "stratified": "stratified_peeling",
     "v5_1": "stratified_peeling",
     "v5.1": "stratified_peeling",
+    "cv_peeling": "cv_stratified_peeling",
+    "cv_stratified": "cv_stratified_peeling",
+    "v6": "cv_stratified_peeling",
+    "v6_peeling": "cv_stratified_peeling",
+    "v6_core": "cv_stratified_peeling",
 }
 
 _FINAL_ORDER_ALIASES = {
@@ -154,6 +160,7 @@ def provide_partition(
         "learned_no_correlation_order",
         "random_matched",
         "stratified_peeling",
+        "cv_stratified_peeling",
     ):
         learned = _validated_label_set(
             learned_independent_labels,
@@ -162,7 +169,12 @@ def provide_partition(
         )
         reference_count = len(learned)
 
-    if canonical_mode in ("learned", "learned_no_correlation_order", "stratified_peeling"):
+    if canonical_mode in (
+        "learned",
+        "learned_no_correlation_order",
+        "stratified_peeling",
+        "cv_stratified_peeling",
+    ):
         independent = learned
     elif canonical_mode == "all_il":
         independent = tuple(range(n_labels))

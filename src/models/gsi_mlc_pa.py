@@ -167,6 +167,8 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         aug_normalization="matching",
         decaying_threshold=False,
         threshold_decay_step=0.05,
+        cv_folds=5,
+        peeling_metric="selective_f1",
     ):
         self.cost = cost
         self.validation_size = validation_size
@@ -200,6 +202,8 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         self.aug_normalization = str(aug_normalization)
         self.decaying_threshold = bool(decaying_threshold)
         self.threshold_decay_step = float(threshold_decay_step)
+        self.cv_folds = int(cv_folds)
+        self.peeling_metric = str(peeling_metric)
 
     def _validate_parameters(self):
         if not 0.0 <= float(self.cost) <= 1.0:
@@ -215,6 +219,10 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             raise ValueError("stratified_threshold must lie in [0, 1].")
         if int(self.max_peeling_depth) < 1:
             raise ValueError("max_peeling_depth must be at least 1.")
+        if int(self.cv_folds) < 2:
+            raise ValueError("cv_folds must be at least 2.")
+        if self.peeling_metric not in ("selective_f1", "optimal_f1", "standard_f1"):
+            raise ValueError("peeling_metric must be 'selective_f1', 'optimal_f1', or 'standard_f1'.")
         if self.dl_order_direction not in ("ascending", "descending"):
             raise ValueError("dl_order_direction must be 'ascending' or 'descending'.")
         canonical_selection_objective(self.selection_objective)
@@ -721,6 +729,7 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
             "random_matched",
         )
         needs_stratified_peeling = self.partition_mode_ == "stratified_peeling"
+        needs_cv_stratified_peeling = self.partition_mode_ == "cv_stratified_peeling"
         learned_independent = None
         learned_dependent = None
         learned_score = None
@@ -728,7 +737,40 @@ class GSIMLCPartialAbstentionClassifier(BaseEstimator, ClassifierMixin):
         learned_evaluation_count = 0
         self.stratified_peeling_audit_ = None
 
-        if needs_stratified_peeling:
+        if needs_cv_stratified_peeling:
+            from ..selection.cv_peeling import (
+                CVPeelingConfig,
+                CVStratifiedPeelingSelector,
+            )
+
+            cv_peeling_cfg = CVPeelingConfig(
+                threshold=self.stratified_threshold,
+                n_folds=self.cv_folds,
+                max_depth=self.max_peeling_depth,
+                cost=self.cost,
+                metric=self.peeling_metric,
+                dl_order_direction=self.dl_order_direction,
+                aug_normalization=self.aug_normalization,
+                decaying_threshold=self.decaying_threshold,
+                threshold_decay_step=self.threshold_decay_step,
+                random_state=self.random_state,
+            )
+            cv_peeling_selector = CVStratifiedPeelingSelector(
+                config=cv_peeling_cfg,
+                base_estimator_factory=lambda: create_binary_estimator(
+                    self.base_learner, random_state=self.random_state
+                ),
+            )
+            cv_peeling_res = cv_peeling_selector.fit_partition(
+                X_array[selection_train],
+                Y_array[selection_train],
+            )
+            learned_independent = list(cv_peeling_res.all_independent_labels)
+            learned_dependent = list(cv_peeling_res.dependent_residual_labels)
+            self.stratified_peeling_audit_ = cv_peeling_res.as_dict()
+            self.stratified_execution_order_ = list(cv_peeling_res.final_execution_order)
+            learned_evaluation_count = cv_peeling_res.num_stages_executed
+        elif needs_stratified_peeling:
             from ..selection.stratified_peeling import (
                 StratifiedPeelingConfig,
                 StratifiedPeelingSelector,
