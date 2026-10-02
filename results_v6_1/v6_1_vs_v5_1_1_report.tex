@@ -388,59 +388,48 @@ Thực nghiệm được thực hiện trên 10 tập dữ liệu theo 5-fold CV
 \end{tabular}
 \end{table}
 
-\section{Lý Giải Khoa Học Bản Chất: Vì Sao v6.1 Có Selective F1 Thấp Hơn v5.1.1?}
+\section{Phân Tích Nguyên Nhân Kỹ Thuật: Cơ Chế Dẫn Đến Chênh Lệch Selective F1 Giữa v6.1 và v5.1.1}
 
-Sự sụt giảm điểm Selective Macro-$F_1$ của v6.1 so với v5.1.1 (từ $0.5541$ xuống $0.4872$) trên bề mặt có thể tạo cảm giác rằng v6.1 kém hiệu quả hơn. Tuy nhiên, phân tích sâu về cơ chế thống kê và hàm quyết định từ chối khẳng định điều ngược lại: \textbf{v6.1 là mô hình ưu việt hơn, và sự suy giảm Selective F1 chỉ là hệ quả thuần túy của quy luật đánh đổi Coverage--Precision (Trade-off)}.
+Sự chênh lệch giữa Selective Macro-$F_1$ của v6.1 ($0.4872$) và v5.1.1 ($0.5541$) được giải thích thông qua ba cơ chế kỹ thuật và thống kê độc lập dưới đây:
 
-\subsection{1. Bản chất cơ chế từ chối Bayes và hiện tượng né mẫu khó (Cherry-picking)}
-Trong lý thuyết ra quyết định có từ chối tại chi phí $c = 0.30$:
+\subsection{1. Sự dịch chuyển không gian mẫu đánh giá (Evaluation Sample Space Shift)}
+Metric Selective Macro-$F_1$ được định nghĩa và tính toán trên tập các vị trí (mẫu, nhãn) được chấp nhận dự đoán:
 \begin{equation}
-\hat{y}_k = \begin{cases} 
-1 & \text{nếu } p_k \ge 1 - c = 0.70 \\ 
-0 & \text{nếu } p_k \le c = 0.30 \\ 
--1 \ (\bot) & \text{nếu } 0.30 < p_k < 0.70 \quad (\text{Vùng từ chối bất định})
-\end{cases}
+\mathcal{D} = \{ (i, k) \mid \hat{y}_{ik} \ne \bot \}, \qquad \text{Coverage} = \frac{|\mathcal{D}|}{N \cdot K}
 \end{equation}
-
 \begin{itemize}
-    \item \textbf{Tại sao v5.1.1 có Selective F1 cao? (Hiện tượng né mẫu khó):}
-    Do chỉ sử dụng một chuỗi CC đơn lẻ, mô hình v5.1.1 sinh ra các xác suất rất bất định ở các nhãn phụ thuộc khó. Khoảng $34.61\%$ số lượng nhãn rơi thẳng vào vùng bất định $(0.30, 0.70)$ và bị v5.1.1 từ chối dự đoán.
-    \begin{itemize}
-        \item Tại tập \texttt{yeast}: v5.1.1 từ chối tới \textbf{55.88\%} số lượng nhãn (Coverage chỉ $44.12\%$).
-        \item Tại tập \texttt{scene}: v5.1.1 từ chối tới \textbf{46.64\%} số lượng nhãn (Coverage chỉ $53.36\%$).
-    \end{itemize}
-    Vì đã "né tránh" toàn bộ các mẫu khó nhất và chỉ giữ lại những mẫu cực kỳ dễ đoán (xác suất vượt xa 0.70 ngay cả trên mô hình yếu), điểm Selective F1 của v5.1.1 được tính trên một tập con có độ chính xác rất cao. Tuy nhiên, một hệ thống từ chối tới hơn một nửa số nhãn có giá trị ứng dụng thực tiễn rất hạn chế.
-
-    \item \textbf{Tại sao v6.1 có Selective F1 thấp hơn? (Hiện tượng gánh mẫu khó):}
-    Khi lấy trung bình xác suất qua $M = 10$ chuỗi ngẫu nhiên trong ECC ($\bar{p}_k = \frac{1}{10}\sum p_k^{(m)}$), phương sai dự đoán bị dập tắt mạnh mẽ. Phân phối xác suất trở nên tự tin hơn, dạt về hai phía $< 0.30$ hoặc $> 0.70$. Kết quả là v6.1 \textbf{chấp nhận dự đoán thêm tới $+16.31\%$ tổng số nhãn trên toàn bộ 10 tập dữ liệu}:
-    \begin{itemize}
-        \item Tại tập \texttt{scene}: Độ phủ tăng vọt từ $53.36\%$ lên \textbf{88.82\%} (tăng thêm $+35.46\%$ nhãn).
-        \item Tại tập \texttt{yeast}: Độ phủ tăng vọt từ $44.12\%$ lên \textbf{81.28\%} (tăng thêm $+37.16\%$ nhãn).
-    \end{itemize}
-    Việc phải nhận dự đoán thêm hơn một phần ba số lượng mẫu khó nhất mà v5.1.1 đã từ chối tất yếu làm cho điểm Selective F1 trung bình của v6.1 bị kéo giảm. Đây là quy luật kinh điển: \textit{Độ phủ càng cao, độ chính xác chọn lọc càng bị pha loãng}.
+    \item Do cơ chế từ chối của hai mô hình kích hoạt ở mức độ khác nhau, tập mẫu được đánh giá của v6.1 ($\mathcal{D}_{\text{v6.1}}$) lớn hơn đáng kể so với v5.1.1 ($\mathcal{D}_{\text{v5.1.1}}$). Độ phủ trung bình của v6.1 đạt $81.70\%$, trong khi v5.1.1 chỉ đạt $65.39\%$ (chênh lệch $+16.31\%$ tổng số vị trí nhãn, đặc biệt ở \texttt{scene} tăng $+35.46\%$ và \texttt{yeast} tăng $+37.16\%$).
+    \item Về mặt xác suất, tập phần bù $\mathcal{D}_{\text{v6.1}} \setminus \mathcal{D}_{\text{v5.1.1}}$ tập trung các mẫu có độ bất định cao hơn (xác suất nằm gần ranh giới quyết định). Vì tỷ lệ phân loại sai trên tập mẫu bất định này cao hơn so với tập mẫu dễ, việc mở rộng không gian đánh giá để kết nạp thêm $16.31\%$ số lượng mẫu tự động làm giảm giá trị Macro-$F_1$ trung bình.
+    \item Ngược lại, v5.1.1 từ chối tới $34.61\%$ tổng số nhãn (riêng \texttt{yeast} từ chối $55.88\%$). Điểm Selective F1 của v5.1.1 cao hơn vì chỉ được tính toán trên $65.39\%$ các mẫu có độ tin cậy cao nhất.
 \end{itemize}
 
-\subsection{2. Bằng chứng quyết định: Full Macro-\texorpdfstring{$F_1$}{F1} trên 100\% mẫu dữ liệu}
-Để đánh giá công bằng tuyệt đối: \textit{"Kiến trúc nào có năng lực mô hình hóa tương quan nhãn mạnh hơn?"}, thước đo chuẩn mực nhất là \textbf{Full Macro-$F_1$} trên toàn bộ 100\% mẫu kiểm tra, nơi không có mô hình nào được quyền từ chối mẫu khó.
-
-Bảng~\ref{tab:full_f1_direct} mang lại câu trả lời rõ ràng:
+\subsection{2. Hiệu ứng giảm phương sai và độ lệch hiệu chuẩn (Miscalibration) của Ensemble ECC}
+Trong mô hình ECC, xác suất dự đoán tầng $DL$ là trung bình xác suất qua $M = 10$ chuỗi ngẫu nhiên: $\bar{p}_k = \frac{1}{M} \sum_{m=1}^M p_k^{(m)}$.
 \begin{itemize}
-    \item \textbf{v6.1 thắng hoặc hòa trước v5.1.1 trên 9/10 tập dữ liệu}:
-    \begin{itemize}
-        \item \textbf{Thắng vượt trội:} \texttt{emotions} ($+6.90\%$), \texttt{music} ($+4.86\%$), \texttt{humanpseaac} ($+26.29\%$), \texttt{plantpseaac} ($+10.91\%$).
-        \item \textbf{Cạnh tranh ngang ngửa (Competitive):} \texttt{scene} ($+1.87\%$), \texttt{chd49} ($+2.52\%$), \texttt{genbase} ($+1.09\%$), \texttt{viruspseaac} ($+1.71\%$), \texttt{yeast} ($+1.79\%$).
-        \item \textbf{Chỉ thua duy nhất 1 tập:} \texttt{gpositivepseaac} ($-3.89\%$).
-    \end{itemize}
-    \item Điểm Full Macro-$F_1$ trung bình toàn cục của v6.1 đạt \textbf{0.4783}, cao hơn đáng kể so với mức \textbf{0.4641} của v5.1.1 ($+3.05\%$).
-    \item Đồng thời, Subset Accuracy của v6.1 cũng cao hơn ($0.3914$ vs $0.3849$) và Hamming Loss thấp hơn ($0.1530$ vs $0.1542$).
+    \item Phép lấy trung bình qua ensemble làm giảm phương sai ước lượng, khiến phân phối của $\bar{p}_k$ có xu hướng tập trung hơn và dạt ra xa khoảng trung tâm $(0.30, 0.70)$.
+    \item Tuy nhiên, việc giảm phương sai không đồng nghĩa với việc cải thiện độ hiệu chuẩn xác suất (calibration). Trong các chuỗi CC, sai số từ các nhãn đi trước bị đưa vào làm đặc trưng đầu vào cho các mắt xích sau. Nếu các chuỗi thành viên cùng gặp phải sai số hệ thống trên các mẫu khó, xác suất trung bình $\bar{p}_k$ vẫn có thể bị lệch (miscalibrated).
+    \item Hậu quả là một số mẫu phân loại sai vẫn đạt giá trị $\bar{p}_k \ge 0.70$ hoặc $\bar{p}_k \le 0.30$, vượt qua ngưỡng từ chối $c = 0.30$. Các trường hợp này trở thành lỗi False Positive hoặc False Negative trong tập $\mathcal{D}$, làm suy giảm điểm Selective F1 của v6.1.
 \end{itemize}
 
-\noindent \textbf{Kết luận then chốt:} Bộ phân loại v6.1 có năng lực học máy và biểu diễn tương quan nhãn mạnh hơn hẳn v5.1.1. Việc Selective F1 của v6.1 thấp hơn hoàn toàn không phản ánh mô hình yếu đi, mà phản ánh mô hình dũng cảm dự đoán nhiều hơn (độ phủ $81.70\%$ so với $65.39\%$).
+\subsection{3. Tính không tương thích của ngưỡng từ chối cố định (\texorpdfstring{$c = 0.30$}{c = 0.30}) với phân phối xác suất Ensemble}
+Hàm quyết định từ chối Bayes sử dụng chi phí cố định $c = 0.30$, tương ứng với vùng từ chối không đổi $p_k \in (0.30, 0.70)$:
+\begin{itemize}
+    \item Đối với chuỗi CC đơn lẻ trong v5.1.1, phân phối xác suất biên phân tán rộng, dẫn đến tỷ lệ mẫu rơi vào khoảng $(0.30, 0.70)$ rất cao ($34.61\%$). Ngưỡng $c = 0.30$ hoạt động như một bộ lọc khắt khe loại bỏ hầu hết các ca nghi ngờ.
+    \item Đối với mô hình ensemble v6.1, do phân phối xác suất sau khi lấy trung bình đã bị co cụm, vùng từ chối $(0.30, 0.70)$ trở nên quá hẹp so với mật độ xác suất của ensemble. Điều này khiến cơ chế từ chối tại ngưỡng $c = 0.30$ không còn duy trì được mức độ thanh lọc lỗi tương đương như trên mô hình đơn lẻ.
+\end{itemize}
+
+\subsection{4. Đối chiếu khách quan với Full Macro-\texorpdfstring{$F_1$}{F1} (Năng lực không từ chối)}
+Khi tước bỏ hoàn toàn yếu tố từ chối để đánh giá trên 100\% dữ liệu kiểm tra:
+\begin{itemize}
+    \item v6.1 đạt Full Macro-$F_1$ trung bình \textbf{0.4783}, cao hơn \textbf{0.4641} của v5.1.1 ($+3.05\%$), đồng thời thắng hoặc hòa trên 9/10 tập dữ liệu (Bảng~\ref{tab:full_f1_direct}).
+    \item Kết quả này phản ánh rằng: Xét trên bài toán phân loại đa nhãn tiêu chuẩn (Standard MLC), kiến trúc ECC kết hợp Singleton Rule của v6.1 mang lại sự cải thiện về độ chính xác dự đoán tổng thể so với chuỗi đơn lẻ của v5.1.1.
+    \item Tuy nhiên, khi chuyển sang bài toán phân loại có từ chối (Selective Classification với ngưỡng cố định $c = 0.30$), cơ chế từ chối của v5.1.1 tương thích tốt hơn với ngưỡng $c$ trong việc duy trì độ chính xác chọn lọc, trong khi v6.1 cần đi kèm cơ chế hiệu chuẩn xác suất (probability calibration) hoặc điều chỉnh ngưỡng chi phí $c$ linh hoạt theo phân phối của ensemble.
+\end{itemize}
 
 \section{Kết Luận}
 \begin{enumerate}
-    \item \textbf{v6.1 giải quyết thành công các nút thắt của v5.1.1:} Việc đưa Tập hợp chuỗi ngẫu nhiên (ECC) và quy tắc Singleton Rule vào tầng $DL$ đã triệt tiêu hiện tượng lan truyền sai số và sự suy sụp khi $DL$ chỉ còn 1 nhãn, giúp Full Macro-$F_1$ tăng trưởng trên $9/10$ tập dữ liệu.
-    \item \textbf{Bản chất của điểm Selective F1:} Khoảng cách Selective F1 giữa v5.1.1 và v6.1 hoàn toàn nằm ở cơ chế đánh đổi Coverage--Precision. Trong các bài toán thực tế đòi hỏi độ phủ dự đoán cao, v6.1 là sự lựa chọn ưu việt hơn hẳn nhờ độ tin cậy và khả năng dự đoán bao quát.
+    \item \textbf{Về năng lực phân loại tổng thể:} Kiến trúc v6.1 (ECC $M=10$ và Singleton Rule) cải thiện Full Macro-$F_1$ trên 9/10 tập dữ liệu so với v5.1.1, giảm thiểu hiện tượng lan truyền sai số của chuỗi đơn lẻ trên các tập dữ liệu có số chiều lớn.
+    \item \textbf{Về hiệu năng chọn lọc:} Sự suy giảm điểm Selective F1 của v6.1 xuất phát từ việc độ phủ tăng mạnh ($81.70\%$ so với $65.39\%$), kết nạp thêm các mẫu có độ bất định cao vào tập đánh giá, cùng với hiện tượng miscalibration của ensemble khi áp dụng ngưỡng từ chối cố định $c = 0.30$.
 \end{enumerate}
 
 \end{document}
