@@ -37,7 +37,7 @@ Mã nguồn: \url{https://github.com/Eternity-KT/BR_CC} (Nhánh: \texttt{v6})}
 \maketitle
 
 \begin{abstract}
-Báo cáo này thực hiện đối sánh trực diện và toàn diện giữa hai phiên bản kiến trúc phân loại đa nhãn có từ chối: \textbf{GSI-MLC-PA v5.1.1} (sử dụng chuỗi phân loại thưa đơn lẻ Sparse CC cho tầng nhãn phụ thuộc $DL$) và \textbf{GSI-MLC-PA v6.1} (sử dụng Tập hợp chuỗi ngẫu nhiên Ensemble of Classifier Chains -- ECC với $M=10$ chuỗi và quy tắc Singleton Rule). Thực nghiệm được tiến hành trên 10 bộ dữ liệu chuẩn quốc tế theo quy thức kiểm định chéo 5-fold (5-fold Cross-Validation) với bộ học cơ sở Logistic Regression tại chi phí từ chối $c = 0.30$. Kết quả đối chuẩn chỉ ra hai phát hiện bản chất: (1) \textbf{Về năng lực học máy thuần túy trên toàn bộ dữ liệu (Full Macro-$F_1$): v6.1 vượt trội hoặc hòa trước v5.1.1 trên 9/10 tập dữ liệu}, điểm trung bình đạt \textbf{0.4783} so với \textbf{0.4641} (tăng trưởng $+3.05\%$, trong đó các tập protein phức tạp như \texttt{humanpseaac} tăng vọt tới $+26.29\%$ và \texttt{plantpseaac} tăng $+10.91\%$); (2) \textbf{Về độ chính xác chọn lọc (Selective Macro-$F_1$): v6.1 ghi nhận điểm số thấp hơn v5.1.1}. Báo cáo chứng minh một cách chặt chẽ và dễ hiểu rằng sự chênh lệch này là hệ quả tất yếu của \textbf{Quy luật đánh đổi Độ phủ -- Độ chính xác (Coverage--Precision Trade-off)}: v5.1.1 đạt Selective F1 cao vì từ chối tới $34.61\%$ nhãn khó (Coverage chỉ đạt $65.39\%$, né tránh các ca bất định), trong khi v6.1 nhờ ensemble tự tin hơn nên chấp nhận dự đoán thêm tới $+16.31\%$ tổng số nhãn (Coverage tăng vọt lên $81.70\%$), gánh vác các mẫu khó dẫn tới pha loãng điểm chọn lọc.
+Báo cáo này thực hiện đối sánh thực nghiệm giữa hai phiên bản kiến trúc phân loại đa nhãn có từ chối: \textbf{GSI-MLC-PA v5.1.1} (sử dụng chuỗi phân loại thưa đơn lẻ Sparse CC cho tầng nhãn phụ thuộc $DL$) và \textbf{GSI-MLC-PA v6.1} (sử dụng Tập hợp chuỗi ngẫu nhiên Ensemble of Classifier Chains -- ECC với $M=10$ chuỗi và quy tắc Singleton Rule). Thực nghiệm được tiến hành trên 10 bộ dữ liệu chuẩn quốc tế theo quy thức kiểm định chéo 5-fold (5-fold Cross-Validation) với bộ học cơ sở Logistic Regression tại chi phí từ chối $c = 0.30$. Kết quả đối chuẩn chỉ ra: (1) \textbf{Về độ đo Full Macro-$F_1$ (đánh giá trên 100\% mẫu dữ liệu): v6.1 đạt kết quả cao hơn hoặc tương đương v5.1.1 trên 9/10 tập dữ liệu}, điểm trung bình đạt \textbf{0.4783} so với \textbf{0.4641} ($+3.05\%$, trong đó \texttt{humanpseaac} tăng $+26.29\%$ và \texttt{plantpseaac} tăng $+10.91\%$); (2) \textbf{Về độ chính xác chọn lọc (Selective Macro-$F_1$): v6.1 ghi nhận kết quả thấp hơn v5.1.1} (trung bình $0.4872$ so với $0.5541$). Báo cáo phân tích các cơ chế kỹ thuật dẫn đến sự khác biệt này, tập trung vào sự dịch chuyển không gian mẫu khi độ phủ của v6.1 tăng lên $81.70\%$ so với $65.39\%$ của v5.1.1 (kết nạp thêm các mẫu có tỷ lệ lỗi cao hơn vào tập đánh giá), cũng như đặc tính hiệu chuẩn xác suất của mô hình ensemble khi áp dụng ngưỡng từ chối Bayes cố định.
 \end{abstract}
 
 \vspace{0.8em}
@@ -52,11 +52,11 @@ Trong kiến trúc GSI-MLC-PA v5.1.1:
     \item Không gian nhãn được phân tách thành hai nhóm: Tầng nhãn độc lập ($IL$) và Tầng nhãn phụ thuộc ($DL$).
     \item Tại tầng $DL$, v5.1.1 sử dụng một mô hình Classifier Chain (CC) đơn lẻ được sắp xếp theo tổng tương quan Phi ($\Phi$) tăng dần và áp dụng ngưỡng lọc thưa $\theta = 0.75$.
 \end{itemize}
-Mặc dù v5.1.1 giúp giảm bớt liên kết dư thừa, mô hình chuỗi đơn lẻ gặp phải ba hạn chế cố hữu:
+Mặc dù v5.1.1 giúp giảm bớt liên kết dư thừa, mô hình chuỗi đơn lẻ có một số điểm cần lưu ý:
 \begin{enumerate}
-    \item \textbf{Tính nhạy cảm cực cao với trật tự chuỗi:} Trật tự nhãn trong chuỗi được xác định từ tương quan biên $P(Y_j, Y_k)$, vốn không phản ánh đầy đủ tương quan điều kiện khi đã có thuộc tính $X$. Một sai sót tại các mắt xích đầu sẽ lan truyền (error propagation) và phá vỡ độ chính xác của các nhãn phía sau.
-    \item \textbf{Hiện tượng thoái hóa nhãn đơn lẻ (Singleton Failure):} Khi quá trình bóc tách để lại tập $DL$ chỉ có đúng 1 nhãn (ví dụ nhãn hiếm cuối cùng của \texttt{genbase}), chuỗi CC độ dài 1 không còn bất kỳ nút cha nào để khai thác tương quan, gây sụp đổ hiệu năng dự đoán cục bộ.
-    \item \textbf{Hành vi né tránh mẫu khó (Abstention Cherry-picking):} Chuỗi đơn lẻ sinh ra các xác suất rất bất định đối với các nhãn phức tạp. Dưới quy tắc từ chối Bayes với chi phí $c = 0.30$, v5.1.1 từ chối tới $34.61\%$ số lượng nhãn. Việc loại bỏ các mẫu khó đẩy điểm Selective F1 lên cao nhưng làm suy giảm nghiêm trọng độ phủ thực tế.
+    \item \textbf{Độ nhạy cảm đối với trật tự sắp xếp chuỗi:} Trật tự nhãn trong chuỗi được xác định từ tương quan biên $P(Y_j, Y_k)$, vốn không phản ánh đầy đủ tương quan điều kiện khi đã có thuộc tính $X$. Sai số tại các mắt xích đầu có thể lan truyền (error propagation) và làm giảm độ chính xác của các mắt xích phía sau.
+    \item \textbf{Xử lý nhãn đơn lẻ (Singleton):} Khi quá trình bóc tách để lại tập $DL$ chỉ có đúng 1 nhãn (ví dụ nhãn hiếm cuối cùng của \texttt{genbase}), chuỗi CC độ dài 1 không còn nút cha nào để khai thác tương quan, dẫn đến suy giảm hiệu năng dự đoán của nhãn này.
+    \item \textbf{Tỷ lệ từ chối cao đối với các nhãn có độ bất định lớn:} Chuỗi đơn lẻ sinh ra các xác suất phân tán đối với các nhãn khó. Dưới quy tắc từ chối Bayes với chi phí $c = 0.30$, v5.1.1 từ chối $34.61\%$ số lượng nhãn. Việc loại bỏ các mẫu bất định này giúp Selective F1 đạt giá trị cao nhưng đồng thời làm giảm độ phủ dự đoán của mô hình.
 \end{enumerate}
 
 \subsection{Giải pháp kiến trúc của v6.1}
@@ -286,7 +286,7 @@ Bảng~\ref{tab:dl_comparison} đối chiếu chi tiết cơ chế mô hình hó
 \addlinespace
 \textbf{Lọc cạnh phụ thuộc} & Cắt tỉa cạnh có $|\phi| < \theta = 0.75$ & Nối toàn phần bên trong từng chuỗi CC \\
 \addlinespace
-\textbf{Xử lý nhãn đơn lẻ ($|DL|=1$)} & Huấn luyện chuỗi đơn lẻ độ dài 1 (sụp đổ) & Thăng hạng sang tầng $IL$ (Singleton Rule) \\
+\textbf{Xử lý nhãn đơn lẻ ($|DL|=1$)} & Huấn luyện chuỗi đơn lẻ độ dài 1 (hiệu năng thấp) & Thăng hạng sang tầng $IL$ (Singleton Rule) \\
 \addlinespace
 \textbf{Đặc trưng tăng cường} & $X_{\text{aug}} = [X, \text{Normalize}(P_{IL})]$ & $X_{\text{aug}} = [X, \text{Normalize}(P_{IL}^{\text{OOF}})]$ \\
 \addlinespace
@@ -320,12 +320,12 @@ Thực nghiệm được thực hiện trên 10 tập dữ liệu theo 5-fold CV
 \texttt{music} & 0.6166 & \textbf{0.6466} & \textbf{+4.86\%} & \textbf{WIN} \\
 \texttt{gpositivepseaac} & \textbf{0.5372} & 0.5163 & -3.89\% & LOSS \\
 \texttt{genbase} & 0.6782 & \textbf{0.6856} & +1.09\% & \textbf{COMPETITIVE} \\
-\texttt{humanpseaac} & 0.1124 & \textbf{0.1419} & \textbf{+26.29\%} & \textbf{WIN ÁP ĐẢO} \\
-\texttt{plantpseaac} & 0.1410 & \textbf{0.1564} & \textbf{+10.91\%} & \textbf{WIN ÁP ĐẢO} \\
+\texttt{humanpseaac} & 0.1124 & \textbf{0.1419} & \textbf{+26.29\%} & \textbf{WIN} \\
+\texttt{plantpseaac} & 0.1410 & \textbf{0.1564} & \textbf{+10.91\%} & \textbf{WIN} \\
 \texttt{viruspseaac} & 0.3772 & \textbf{0.3836} & +1.71\% & \textbf{COMPETITIVE} \\
 \texttt{yeast} & 0.3711 & \textbf{0.3777} & +1.79\% & \textbf{COMPETITIVE} \\
 \midrule
-\textbf{Trung bình} & \textbf{0.4641} & \textbf{0.4783} & \textbf{+3.05\%} & \textbf{v6.1 THẮNG / HÒA 9/10 TẬP} \\
+\textbf{Trung bình} & \textbf{0.4641} & \textbf{0.4783} & \textbf{+3.05\%} & \textbf{WIN (9/10 tập Thắng/Hòa)} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -421,7 +421,7 @@ Hàm quyết định từ chối Bayes sử dụng chi phí cố định $c = 0.
 \subsection{4. Đối chiếu khách quan với Full Macro-\texorpdfstring{$F_1$}{F1} (Năng lực không từ chối)}
 Khi tước bỏ hoàn toàn yếu tố từ chối để đánh giá trên 100\% dữ liệu kiểm tra:
 \begin{itemize}
-    \item v6.1 đạt Full Macro-$F_1$ trung bình \textbf{0.4783}, cao hơn \textbf{0.4641} của v5.1.1 ($+3.05\%$), đồng thời thắng hoặc hòa trên 9/10 tập dữ liệu (Bảng~\ref{tab:full_f1_direct}).
+    \item v6.1 đạt Full Macro-$F_1$ trung bình \textbf{0.4783}, cao hơn \textbf{0.4641} của v5.1.1 ($+3.05\%$), đồng thời đạt kết quả cao hơn hoặc tương đương trên 9/10 tập dữ liệu (Bảng~\ref{tab:full_f1_direct}).
     \item Kết quả này phản ánh rằng: Xét trên bài toán phân loại đa nhãn tiêu chuẩn (Standard MLC), kiến trúc ECC kết hợp Singleton Rule của v6.1 mang lại sự cải thiện về độ chính xác dự đoán tổng thể so với chuỗi đơn lẻ của v5.1.1.
     \item Tuy nhiên, khi chuyển sang bài toán phân loại có từ chối (Selective Classification với ngưỡng cố định $c = 0.30$), cơ chế từ chối của v5.1.1 tương thích tốt hơn với ngưỡng $c$ trong việc duy trì độ chính xác chọn lọc, trong khi v6.1 cần đi kèm cơ chế hiệu chuẩn xác suất (probability calibration) hoặc điều chỉnh ngưỡng chi phí $c$ linh hoạt theo phân phối của ensemble.
 \end{itemize}
