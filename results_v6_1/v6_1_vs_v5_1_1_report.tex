@@ -66,6 +66,7 @@ Mặc dù v5.1.1 giúp giảm bớt liên kết dư thừa, mô hình chuỗi đ
     \item \textbf{Quy tắc thúc đẩy nhãn đơn lẻ (Singleton Rule):} Khi quá trình bóc tách ghi nhận $|DL| = 1$, nhãn duy nhất còn lại lập tức được thăng hạng sang tầng $IL$ để huấn luyện bằng Binary Relevance độc lập, loại bỏ hoàn toàn hiện tượng thoái hóa chuỗi độ dài 1.
 \end{itemize}
 
+\clearpage
 \section{Sơ Đồ Pipeline Luồng Dữ Liệu Chi Tiết}
 
 Hình~\ref{fig:pipeline_v61} mô tả chi tiết toàn bộ luồng xử lý của hệ thống GSI-MLC-PA v6.1 từ khâu chuẩn hóa, bóc tách phân tầng, tăng cường đặc trưng, ensemble chuỗi $DL$ đến tầng ra quyết định từ chối Bayes.
@@ -73,58 +74,134 @@ Hình~\ref{fig:pipeline_v61} mô tả chi tiết toàn bộ luồng xử lý c�
 \begin{figure}[H]
 \centering
 \begin{tikzpicture}[
-    node distance=1.1cm and 0.8cm,
-    block/.style={rectangle, draw=blue!70!black, fill=blue!5, rounded corners=4pt, align=center, minimum height=0.9cm, font=\small\bfseries},
-    proc/.style={rectangle, draw=gray!80, fill=white, rounded corners=3pt, align=center, minimum height=0.8cm, font=\small},
-    decision/.style={diamond, draw=red!70!black, fill=red!5, aspect=2, align=center, font=\small\bfseries, inner sep=2pt},
-    arrow/.style={-{Stealth[scale=1.0]}, thick, draw=gray!80!black}
+    >=Stealth,
+    mainblock/.style={
+        rectangle, 
+        draw=black, 
+        fill=gray!12, 
+        line width=0.8pt, 
+        rounded corners=3pt, 
+        align=center, 
+        font=\small
+    },
+    procblock/.style={
+        rectangle, 
+        draw=black, 
+        fill=white, 
+        line width=0.8pt, 
+        rounded corners=3pt, 
+        align=center, 
+        font=\small
+    },
+    decision/.style={
+        diamond, 
+        draw=black, 
+        fill=gray!6, 
+        line width=0.8pt, 
+        aspect=2.6, 
+        align=center, 
+        font=\small\bfseries, 
+        inner sep=3pt
+    },
+    line/.style={
+        draw=black, 
+        line width=0.8pt, 
+        ->
+    },
+    dashline/.style={
+        draw=black, 
+        line width=0.8pt, 
+        dashed, 
+        ->
+    }
 ]
 
-% Nodes
-\node (input) [block, fill=green!10, draw=green!60!black] {Đầu vào Huấn Luyện: $X \in \mathbb{R}^{N \times d}, \ Y \in \{0, 1\}^{N \times K}$};
-\node (scaler) [proc, below=0.6cm of input] {Chuẩn hóa: \texttt{MaxAbsScaler} (Khớp độc lập trên từng Train Fold)};
-\node (peeling) [block, fill=orange!10, draw=orange!70!black, below=0.6cm of scaler] {Stratified CV Peeling Selector ($\tau = 0.75$, Cost $c = 0.30$, 5-Fold OOF)};
+% 1. Input Node
+\node (input) [mainblock, text width=13.5cm] {
+    \textbf{Đầu Vào Huấn Luyện}: Tập dữ liệu $\mathcal{D} = \{(x_i, y_i)\}_{i=1}^N$ với đặc trưng $x_i \in \mathbb{R}^d$ và nhãn $y_i \in \{0, 1\}^K$
+};
 
-\node (singleton) [decision, below=0.6cm of peeling] {Kiểm tra Singleton Rule:\\ $|DL_{\text{candidate}}| == 1$?};
+% 2. Scaler Node
+\node (scaler) [procblock, below=0.5cm of input, text width=12cm] {
+    \textbf{Tiền Xử Lý Dữ Liệu}: Chuẩn hóa đặc trưng bằng \texttt{MaxAbsScaler}\\
+    \textit{(Khớp độc lập trên từng Train fold nhằm triệt tiêu hoàn toàn rò rỉ thông tin)}
+};
 
-\node (split) [coordinate, below=0.8cm of singleton] {};
-\node (il_box) [block, fill=cyan!10, draw=cyan!70!black, left=1.8cm of split] {Tầng Độc Lập ($IL$, $K_{IL}$ nhãn)\\ (Bao gồm nhãn thăng hạng từ Singleton)};
-\node (dl_box) [block, fill=purple!10, draw=purple!70!black, right=1.8cm of split] {Tầng Phụ Thuộc ($DL$, $K_{DL}$ nhãn)};
+% 3. Peeling Node
+\node (peeling) [procblock, below=0.5cm of scaler, text width=13.5cm] {
+    \textbf{Bộ Phân Tách Nhãn Stratified Peeling Selector} ($\tau = 0.75$, Chi phí $c = 0.30$, 5-Fold OOF)\\
+    Ước lượng năng lực phân loại độc lập và phân chia sơ bộ thành 2 tập: $IL_{\text{cand}}$ và $DL_{\text{cand}}$
+};
 
-\node (br_model) [proc, below=0.6cm of il_box] {Huấn luyện $K_{IL}$ bộ phân loại BR độc lập\\ Dự đoán xác suất Out-Of-Fold $P_{IL}^{\text{OOF}}$};
+% 4. Singleton Decision Node
+\node (singleton) [decision, below=0.6cm of peeling] {
+    Kiểm tra Quy tắc Singleton Rule:\\ $|DL_{\text{cand}}| = 1$?
+};
 
-\node (bridge) [proc, fill=yellow!15, draw=orange!80, text width=5.2cm, below=0.6cm of split] {Tăng cường đặc trưng cho $DL$:\\ $X_{\text{aug}} = [X, \text{Normalize}(P_{IL}^{\text{OOF}})]$};
+% 5. Parallel Columns: IL and DL
+\node (il_box) [mainblock, text width=5.6cm, anchor=north] at ($(singleton.south) + (-4.6cm, -0.8cm)$) {
+    \textbf{TẦNG ĐỘC LẬP ($IL$, $K_{IL}$ nhãn)}\\[0.3em]
+    $\bullet$ Nếu $|DL_{\text{cand}}| = 1$: Thăng hạng nhãn duy nhất còn lại vào tập $IL$\\
+    $\bullet$ Huấn luyện $K_{IL}$ bộ phân loại BR độc lập\\
+    $\bullet$ Dự đoán xác suất OOF: $P_{IL}^{\text{OOF}} \in [0, 1]^{N \times K_{IL}}$\\
+    $\bullet$ Dự đoán xác suất tập kiểm tra: $P_{IL} \in [0, 1]^{N_{\text{test}} \times K_{IL}}$
+};
 
-\node (ecc_model) [proc, below=1.8cm of dl_box, text width=4.8cm] {Ensemble of Classifier Chains (ECC):\\ $M = 10$ chuỗi ngẫu nhiên $\pi^{(1)}, \dots, \pi^{(10)}$\\ Huấn luyện chuỗi trên $(X_{\text{aug}}, Y_{DL})$};
+\node (dl_box) [mainblock, text width=5.6cm, anchor=north] at ($(singleton.south) + (4.6cm, -0.8cm)$) {
+    \textbf{TẦNG PHỤ THUỘC ($DL$, $K_{DL}$ nhãn)}\\[0.3em]
+    $\bullet$ Kích hoạt khi $|DL_{\text{cand}}| \ge 2$\\
+    $\bullet$ Tăng cường đặc trưng: $X_{\text{aug}} = [X, \text{Normalize}(P_{IL}^{\text{OOF}})]$\\
+    $\bullet$ Huấn luyện Ensemble of CC ($M = 10$ chuỗi ngẫu nhiên)\\
+    $\bullet$ Dự đoán xác suất mềm kiểm tra trung bình:\\
+    $\bar{P}_{DL} = \frac{1}{10}\sum_{m=1}^{10} P_{DL}^{(m)} \in [0, 1]^{N_{\text{test}} \times K_{DL}}$
+};
 
-\node (merge_prob) [block, below=1.2cm of bridge, text width=6.5cm] {Tập hợp xác suất kiểm tra toàn cục:\\ $P_{\text{final}} = [P_{IL}, \bar{P}_{DL}] \in [0, 1]^K$};
+% Midpoint between bottom of branches
+\path (il_box.south) -- (dl_box.south) coordinate[midway] (branch_bottom);
 
-\node (abstention) [decision, below=0.8cm of merge_prob] {Hàm Ra Quyết Định Bayes ($c = 0.30$)};
+% 6. Merge Node
+\node (merge) [procblock, below=0.8cm of branch_bottom, text width=13.5cm] {
+    \textbf{Tập Hợp Ma Trận Xác Suất Toàn Cục (Probability Aggregation)}\\
+    Ghép xác suất kiểm tra trên toàn bộ $K$ nhãn: $P_{\text{final}} = [P_{IL}, \bar{P}_{DL}] \in [0, 1]^{N_{\text{test}} \times K}$
+};
 
-\node (output) [block, fill=green!15, draw=green!70!black, below=0.9cm of abstention, text width=7.5cm] {Dự đoán có từ chối: $\hat{y}_k \in \{0, 1, -1 (\bot)\}$\\ $1$ nếu $p_k \ge 1-c$; \ $0$ nếu $p_k \le c$; \ $\bot$ nếu $c < p_k < 1-c$};
+% 7. Bayes Abstention Decision Node
+\node (abstention) [decision, below=0.6cm of merge] {
+    Hàm Ra Quyết Định Bayes Có Từ Chối ($c = 0.30$)\\
+    \normalfont Vùng từ chối bất định: $c < p_k < 1 - c \iff 0.30 < p_k < 0.70$
+};
+
+% 8. Output Node
+\node (output) [mainblock, below=0.6cm of abstention, text width=13.5cm] {
+    \textbf{Kết Quả Dự Đoán Chọn Lọc Đa Nhãn Cuối Cùng}\\[0.2em]
+    $\hat{y}_{ik} = \begin{cases} 
+    1, & \text{nếu } p_{ik} \ge 0.70 \\ 
+    0, & \text{nếu } p_{ik} \le 0.30 \\ 
+    \bot \ (\text{Từ chối}), & \text{nếu } 0.30 < p_{ik} < 0.70 
+    \end{cases} \quad \implies \text{Độ phủ thực nghiệm trung bình đạt } 81.70\%$
+};
 
 % Connections
-\draw [arrow] (input) -- (scaler);
-\draw [arrow] (scaler) -- (peeling);
-\draw [arrow] (peeling) -- (singleton);
-\draw [arrow] (singleton) -| node[above, font=\scriptsize, near start] {Đúng: Thăng hạng} (il_box);
-\draw [arrow] (singleton) -- node[right, font=\scriptsize] {Sai: Giữ phân hoạch} (split);
-\draw [arrow] (split) -| (il_box);
-\draw [arrow] (split) -| (dl_box);
+\draw [line] (input) -- (scaler);
+\draw [line] (scaler) -- (peeling);
+\draw [line] (peeling) -- (singleton);
 
-\draw [arrow] (il_box) -- (br_model);
-\draw [arrow] (br_model) |- (bridge);
-\draw [arrow] (dl_box) -- (ecc_model);
-\draw [arrow] (bridge) -| (ecc_model);
+% From singleton to branches
+\draw [line] (singleton.west) -| node[above, font=\scriptsize\bfseries, pos=0.35] {Đúng ($|DL|=1$): Thăng hạng} (il_box.north);
+\draw [line] (singleton.east) -| node[above, font=\scriptsize\bfseries, pos=0.35] {Sai ($|DL| \ge 2$): Giữ phân hoạch} (dl_box.north);
 
-\draw [arrow] (br_model) |- (merge_prob);
-\draw [arrow] (ecc_model) |- (merge_prob);
+% Horizontal connection from IL to DL (Bridge / Augmentation)
+\draw [dashline] (il_box.east) -- node[above, font=\scriptsize\bfseries] {Cầu nối ma trận đặc trưng $P_{IL}^{\text{OOF}}$} node[below, font=\scriptsize] {(Chuẩn hóa Min-Max)} (dl_box.west);
 
-\draw [arrow] (merge_prob) -- (abstention);
-\draw [arrow] (abstention) -- (output);
+% From branches to merge
+\draw [line] (il_box.south) -- (il_box.south |- merge.north);
+\draw [line] (dl_box.south) -- (dl_box.south |- merge.north);
+
+\draw [line] (merge) -- (abstention);
+\draw [line] (abstention) -- (output);
 
 \end{tikzpicture}
-\caption{\textbf{Sơ đồ kiến trúc xử lý của hệ thống GSI-MLC-PA v6.1}: Cơ chế bóc tách phân tầng, quy tắc Singleton Rule, cầu nối tăng cường đặc trưng $X_{\text{aug}}$ và Ensemble ECC trên nhóm nhãn $DL$.}
+\caption{\textbf{Sơ đồ luồng xử lý dữ liệu của kiến trúc GSI-MLC-PA v6.1 (Định dạng Đơn Sắc Chuẩn Học Thuật)}: Phân tầng Stratified Peeling, quy tắc Singleton Rule, cầu nối tăng cường đặc trưng $X_{\text{aug}}$ và mô hình Ensemble Classifier Chains (ECC, $M=10$) trên tầng $DL$.}
 \label{fig:pipeline_v61}
 \end{figure}
 
@@ -132,9 +209,10 @@ Hình~\ref{fig:pipeline_v61} mô tả chi tiết toàn bộ luồng xử lý c�
 
 Thuật toán~\ref{alg:v61_training} trình bày quy trình huấn luyện của v6.1, và Thuật toán~\ref{alg:v61_inference} trình bày quy trình suy diễn có từ chối theo lý thuyết quyết định Bayes.
 
-\begin{table}[H]
+\begin{table}[!htbp]
 \centering
 \small
+\renewcommand{\arraystretch}{0.92}
 \caption{\textbf{Huấn Luyện GSI-MLC-PA v6.1 (Stratified Peeling + Singleton Rule + ECC trên DL)}}\label{alg:v61_training}
 \begin{tabular}{p{0.95\textwidth}}
 \toprule
@@ -176,7 +254,7 @@ Thuật toán~\ref{alg:v61_training} trình bày quy trình huấn luyện của
 \end{tabular}
 \end{table}
 
-\begin{table}[H]
+\begin{table}[!htbp]
 \centering
 \small
 \caption{\textbf{Suy Diễn \& Ra Quyết Định Từ Chối Bayes trong GSI-MLC-PA v6.1}}\label{alg:v61_inference}
