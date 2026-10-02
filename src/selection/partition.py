@@ -40,6 +40,8 @@ _PARTITION_ALIASES = {
     "v6": "cv_stratified_peeling",
     "v6_peeling": "cv_stratified_peeling",
     "v6_core": "cv_stratified_peeling",
+    "v6_1": "cv_stratified_peeling",
+    "v6.1": "cv_stratified_peeling",
 }
 
 _FINAL_ORDER_ALIASES = {

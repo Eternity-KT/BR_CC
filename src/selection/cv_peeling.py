@@ -200,6 +200,7 @@ class CVPeelingConfig:
         aug_normalization: Strategy to normalize augmented soft probability features:
                            "matching" (default), "centered", "standard", "logit", "none".
         min_labels_residual: Minimum number of remaining DL labels before stopping peeling (default 1).
+        promote_singleton_dl: Whether to promote remaining singleton DL (len(DL)==1) into IL (default False).
         random_state: Seed for fold shuffling and base estimators.
     """
     threshold: float = 0.75
@@ -213,6 +214,7 @@ class CVPeelingConfig:
     dl_order_direction: str = "ascending"
     aug_normalization: str = "matching"
     min_labels_residual: int = 1
+    promote_singleton_dl: bool = False
     random_state: int = 42
 
     def __post_init__(self):
@@ -246,6 +248,7 @@ class CVPeelingConfig:
             "dl_order_direction": self.dl_order_direction,
             "aug_normalization": self.aug_normalization,
             "min_labels_residual": int(self.min_labels_residual),
+            "promote_singleton_dl": bool(self.promote_singleton_dl),
             "random_state": int(self.random_state),
         }
 
@@ -262,6 +265,7 @@ class CVPeelingResult:
     stopping_reason: str
     num_stages_executed: int
     selection_time_seconds: float
+    oof_probabilities: Dict[int, Any] = field(default_factory=dict)
 
     @property
     def n_il_stage_1(self) -> int:
@@ -494,7 +498,19 @@ class CVStratifiedPeelingSelector:
             )
             current_X = np.hstack([X, aug_norm])
 
-        # Step 2: Post-peeling ordering
+        # Step 2: Singleton DL promotion check (meeting_summary.md rule: len(DL) == 1 => IL)
+        if getattr(self.config, "promote_singleton_dl", False) and len(candidate_dl) == 1:
+            singleton_label = candidate_dl[0]
+            independent_layers.append([singleton_label])
+            accumulated_il.append(singleton_label)
+            if singleton_label in stage_oof_probs:
+                all_oof_probs[singleton_label] = stage_oof_probs[singleton_label]
+            if singleton_label in stage_diagnostics_per_label:
+                all_label_diagnostics[singleton_label] = stage_diagnostics_per_label[singleton_label]
+            candidate_dl = []
+            stopping_reason = "singleton_dl_promoted_to_il"
+
+        # Step 3: Post-peeling ordering
         ordered_il = [l for layer in independent_layers for l in layer]
 
         # Step 3: Order residual DL labels by correlation (ascending by default)
@@ -541,4 +557,5 @@ class CVStratifiedPeelingSelector:
             stopping_reason=stopping_reason,
             num_stages_executed=len(stage_diagnostics),
             selection_time_seconds=total_time,
+            oof_probabilities=dict(all_oof_probs),
         )
