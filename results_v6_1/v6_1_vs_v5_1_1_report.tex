@@ -303,63 +303,96 @@ Bảng~\ref{tab:dl_comparison} đối chiếu chi tiết cơ chế mô hình hó
 
 Thực nghiệm được thực hiện trên 10 tập dữ liệu theo 5-fold CV với bộ học Logistic Regression tại chi phí từ chối $c = 0.30$. Quy ước: Chênh lệch dưới 3\% được xếp vào nhóm \textbf{COMPETITIVE}, từ 3\% trở lên là \textbf{WIN} hoặc \textbf{LOSS}.
 
-\subsection{Bảng 1: Full Macro-\texorpdfstring{$F_1$}{F1} (Năng lực phân loại toàn diện trên 100\% mẫu dữ liệu)}
+\subsection{Bảng 1: Đối chuẩn Full Macro-\texorpdfstring{$F_1$}{F1} toàn diện: BR, CC, MLC-PA, v5.1.1 và v6.1}
+Bảng~\ref{tab:full_f1_multimodel} trình bày năng lực phân loại trên 100\% mẫu dữ liệu kiểm tra (không từ chối) của các mô hình cơ sở và hai kiến trúc đề xuất. Đối với MLC-PA (Nguyen \& Hüllermeier, 2021), do mô hình này sử dụng Binary Relevance làm bộ học phân loại cơ sở, điểm Full Macro-$F_1$ trước khi áp dụng cơ chế từ chối là đồng nhất với BR.
 
 \begin{table}[H]
 \centering
 \small
-\caption{\textbf{Bảng đối chuẩn trực diện Full Macro-$F_1$: v6.1 vs. v5.1.1} (Đo lường năng lực học máy thuần túy).}
-\label{tab:full_f1_direct}
-\begin{tabular}{lcccc}
+\setlength{\tabcolsep}{6pt}
+\caption{\textbf{So sánh Full Macro-$F_1$ trên toàn bộ 10 tập dữ liệu} (Đo lường năng lực học máy trên 100\% mẫu).}
+\label{tab:full_f1_multimodel}
+\begin{tabular}{lccccc}
 \toprule
-\textbf{Tập Dữ Liệu} & \textbf{v5.1.1} & \textbf{v6.1} & \textbf{Chênh Lệch (\%) vs. v5.1.1} & \textbf{Đánh Giá (Ngưỡng 3\%)} \\
+\textbf{Tập Dữ Liệu} & \textbf{BR} & \textbf{CC} & \textbf{MLC-PA (2021)} & \textbf{v5.1.1} & \textbf{v6.1} \\
 \midrule
-\texttt{emotions} & 0.6000 & \textbf{0.6414} & \textbf{+6.90\%} & \textbf{WIN} \\
-\texttt{scene} & 0.6995 & \textbf{0.7126} & +1.87\% & \textbf{COMPETITIVE} \\
-\texttt{chd49} & 0.5078 & \textbf{0.5206} & +2.52\% & \textbf{COMPETITIVE} \\
-\texttt{music} & 0.6166 & \textbf{0.6466} & \textbf{+4.86\%} & \textbf{WIN} \\
-\texttt{gpositivepseaac} & \textbf{0.5372} & 0.5163 & -3.89\% & LOSS \\
-\texttt{genbase} & 0.6782 & \textbf{0.6856} & +1.09\% & \textbf{COMPETITIVE} \\
-\texttt{humanpseaac} & 0.1124 & \textbf{0.1419} & \textbf{+26.29\%} & \textbf{WIN} \\
-\texttt{plantpseaac} & 0.1410 & \textbf{0.1564} & \textbf{+10.91\%} & \textbf{WIN} \\
-\texttt{viruspseaac} & 0.3772 & \textbf{0.3836} & +1.71\% & \textbf{COMPETITIVE} \\
-\texttt{yeast} & 0.3711 & \textbf{0.3777} & +1.79\% & \textbf{COMPETITIVE} \\
+\texttt{emotions} & 0.5972 & 0.5932 & 0.5972 & 0.6000 & \textbf{0.6414} \\
+\texttt{scene} & 0.6994 & \textbf{0.7234} & 0.6994 & 0.6995 & 0.7126 \\
+\texttt{chd49} & 0.5103 & 0.5073 & 0.5103 & 0.5078 & \textbf{0.5206} \\
+\texttt{music} & 0.6067 & 0.6031 & 0.6067 & 0.6166 & \textbf{0.6466} \\
+\texttt{gpositivepseaac} & 0.5535 & \textbf{0.5791} & 0.5535 & 0.5372 & 0.5163 \\
+\texttt{genbase} & 0.6782 & \textbf{0.6930} & 0.6782 & 0.6782 & 0.6856 \\
+\texttt{humanpseaac} & 0.1124 & 0.1397 & 0.1124 & 0.1124 & \textbf{0.1419} \\
+\texttt{plantpseaac} & 0.1410 & \textbf{0.1715} & 0.1410 & 0.1410 & 0.1564 \\
+\texttt{viruspseaac} & 0.3692 & \textbf{0.3836} & 0.3692 & 0.3772 & \textbf{0.3836} \\
+\texttt{yeast} & 0.3748 & \textbf{0.4017} & 0.3748 & 0.3711 & 0.3777 \\
 \midrule
-\textbf{Trung bình} & \textbf{0.4641} & \textbf{0.4783} & \textbf{+3.05\%} & \textbf{WIN (9/10 tập Thắng/Hòa)} \\
+\textbf{Trung bình} & 0.4643 & \textbf{0.4796} & 0.4643 & 0.4641 & 0.4783 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\subsection{Bảng 2: Selective Macro-\texorpdfstring{$F_1$}{F1} và Độ Phủ (Coverage) khi từ chối dự đoán (\texorpdfstring{$c = 0.30$}{c = 0.30})}
+\subsection{Bảng 2: Đối chuẩn Selective Macro-\texorpdfstring{$F_1$}{F1} và Coverage: BR, CC, MLC-PA, v5.1.1 và v6.1}
+Bảng~\ref{tab:selective_coverage_multimodel} đối chiếu hiệu năng phân loại có từ chối tại chi phí $c = 0.30$. Do BR và CC là các mô hình chuẩn không hỗ trợ cơ chế từ chối, độ phủ của chúng luôn đạt $100\%$ và điểm Selective $F_1$ bằng Full $F_1$.
 
 \begin{table}[H]
 \centering
 \small
-\caption{\textbf{Bảng đối chuẩn trực diện Selective Macro-$F_1$ và Coverage: v6.1 vs. v5.1.1} ($c = 0.30$).}
-\label{tab:selective_coverage_direct}
+\caption{\textbf{So sánh Selective Macro-$F_1$ và Coverage ($c = 0.30$)} giữa các mô hình (Base: Logistic).}
+\label{tab:selective_coverage_multimodel}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Tập Dữ Liệu} & \textbf{BR ($F_1$ / Cov)} & \textbf{CC ($F_1$ / Cov)} & \textbf{MLC-PA ($F_1$ / Cov)} & \textbf{v5.1.1 ($F_1$ / Cov)} & \textbf{v6.1 ($F_1$ / Cov)} \\
+\midrule
+\texttt{emotions} & 0.5972 / 100\% & 0.5932 / 100\% & \textbf{0.7084} / 92.0\% & 0.6454 / 61.9\% & 0.6946 / 67.1\% \\
+\texttt{scene} & 0.6994 / 100\% & 0.7234 / 100\% & 0.7957 / 85.0\% & \textbf{0.8467} / 53.4\% & 0.7685 / 88.8\% \\
+\texttt{chd49} & 0.5103 / 100\% & 0.5073 / 100\% & \textbf{0.5582} / 99.0\% & 0.5282 / 65.2\% & 0.5256 / 63.6\% \\
+\texttt{music} & 0.6067 / 100\% & 0.6031 / 100\% & 0.7010 / 89.0\% & \textbf{0.7289} / 66.3\% & 0.6897 / 67.9\% \\
+\texttt{gpositivepseaac} & 0.5535 / 100\% & 0.5791 / 100\% & 0.6152 / 88.0\% & \textbf{0.6396} / 70.0\% & 0.5537 / 86.1\% \\
+\texttt{genbase} & 0.6782 / 100\% & 0.6930 / 100\% & 0.6513 / 93.0\% & \textbf{0.6989} / 99.8\% & 0.6334 / 99.8\% \\
+\texttt{humanpseaac} & 0.1124 / 100\% & 0.1397 / 100\% & 0.2333 / 97.0\% & \textbf{0.2396} / 62.8\% & 0.1235 / 89.5\% \\
+\texttt{plantpseaac} & 0.1410 / 100\% & 0.1715 / 100\% & 0.2614 / 97.0\% & \textbf{0.2870} / 66.5\% & 0.1241 / 90.0\% \\
+\texttt{viruspseaac} & 0.3692 / 100\% & 0.3836 / 100\% & 0.4684 / 95.0\% & \textbf{0.4929} / 63.9\% & 0.3769 / 83.0\% \\
+\texttt{yeast} & 0.3748 / 100\% & 0.4017 / 100\% & 0.4758 / 99.0\% & \textbf{0.4332} / 44.1\% & 0.3818 / 81.3\% \\
+\midrule
+\textbf{Trung bình} & 0.4643 / 100\% & 0.4796 / 100\% & 0.5469 / 93.4\% & \textbf{0.5541} / 65.4\% & 0.4872 / 81.7\% \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\subsection{Bảng 3: Đối chuẩn trực diện chi tiết: v6.1 vs. v5.1.1}
+Bảng~\ref{tab:direct_comparison_v61_v511} tổng hợp chênh lệch trực tiếp giữa v6.1 và v5.1.1 trên hai chỉ số chính: Full Macro-$F_1$ và Selective Macro-$F_1$.
+
+\begin{table}[H]
+\centering
+\small
+\caption{\textbf{Chênh lệch đối đầu trực diện giữa v6.1 và v5.1.1 trên 10 tập dữ liệu}.}
+\label{tab:direct_comparison_v61_v511}
 \begin{tabular}{lcccccc}
 \toprule
-\multirow{2}{*}{\textbf{Tập Dữ Liệu}} & \multicolumn{3}{c}{\textbf{Selective Macro-$F_1$}} & \multicolumn{3}{c}{\textbf{Độ Phủ (Coverage \%)}} \\
+\multirow{2}{*}{\textbf{Tập Dữ Liệu}} & \multicolumn{3}{c}{\textbf{Full Macro-$F_1$}} & \multicolumn{3}{c}{\textbf{Selective Macro-$F_1$}} \\
 \cmidrule(lr){2-4} \cmidrule(lr){5-7}
- & \textbf{v5.1.1} & \textbf{v6.1} & \textbf{Chênh Lệch (\%)} & \textbf{v5.1.1} & \textbf{v6.1} & \textbf{Chênh Lệch Tuyệt Đối} \\
+ & \textbf{v5.1.1} & \textbf{v6.1} & \textbf{Chênh Lệch (\%)} & \textbf{v5.1.1} & \textbf{v6.1} & \textbf{Chênh Lệch (\%)} \\
 \midrule
-\texttt{emotions} & 0.6454 & \textbf{0.6946} & \textbf{+7.61\%} & 61.87\% & \textbf{67.14\%} & +5.27\% \\
-\texttt{scene} & \textbf{0.8467} & 0.7685 & -9.24\% & 53.36\% & \textbf{88.82\%} & \textbf{+35.46\%} \\
-\texttt{chd49} & \textbf{0.5282} & 0.5256 & -0.49\% & \textbf{65.19\%} & 63.59\% & -1.60\% \\
-\texttt{music} & \textbf{0.7289} & 0.6897 & -5.38\% & 66.27\% & \textbf{67.89\%} & +1.62\% \\
-\texttt{gpositivepseaac} & \textbf{0.6396} & 0.5537 & -13.43\% & 70.03\% & \textbf{86.08\%} & \textbf{+16.05\%} \\
-\texttt{genbase} & \textbf{0.6989} & 0.6334 & -9.37\% & \textbf{99.84\%} & 99.76\% & -0.08\% \\
-\texttt{humanpseaac} & \textbf{0.2396} & 0.1235 & -48.43\% & 62.78\% & \textbf{89.51\%} & \textbf{+26.73\%} \\
-\texttt{plantpseaac} & \textbf{0.2870} & 0.1241 & -56.77\% & 66.52\% & \textbf{89.96\%} & \textbf{+23.44\%} \\
-\texttt{viruspseaac} & \textbf{0.4929} & 0.3769 & -23.54\% & 63.93\% & \textbf{83.00\%} & \textbf{+19.07\%} \\
-\texttt{yeast} & \textbf{0.4332} & 0.3818 & -11.86\% & 44.12\% & \textbf{81.28\%} & \textbf{+37.16\%} \\
+\texttt{emotions} & 0.6000 & \textbf{0.6414} & +6.90\% (WIN) & 0.6454 & \textbf{0.6946} & +7.61\% (WIN) \\
+\texttt{scene} & 0.6995 & \textbf{0.7126} & +1.87\% (COMP.) & \textbf{0.8467} & 0.7685 & -9.24\% (LOSS) \\
+\texttt{chd49} & 0.5078 & \textbf{0.5206} & +2.52\% (COMP.) & \textbf{0.5282} & 0.5256 & -0.49\% (COMP.) \\
+\texttt{music} & 0.6166 & \textbf{0.6466} & +4.86\% (WIN) & \textbf{0.7289} & 0.6897 & -5.38\% (LOSS) \\
+\texttt{gpositivepseaac} & \textbf{0.5372} & 0.5163 & -3.89\% (LOSS) & \textbf{0.6396} & 0.5537 & -13.43\% (LOSS) \\
+\texttt{genbase} & 0.6782 & \textbf{0.6856} & +1.09\% (COMP.) & \textbf{0.6989} & 0.6334 & -9.37\% (LOSS) \\
+\texttt{humanpseaac} & 0.1124 & \textbf{0.1419} & +26.29\% (WIN) & \textbf{0.2396} & 0.1235 & -48.43\% (LOSS) \\
+\texttt{plantpseaac} & 0.1410 & \textbf{0.1564} & +10.91\% (WIN) & \textbf{0.2870} & 0.1241 & -56.77\% (LOSS) \\
+\texttt{viruspseaac} & 0.3772 & \textbf{0.3836} & +1.71\% (COMP.) & \textbf{0.4929} & 0.3769 & -23.54\% (LOSS) \\
+\texttt{yeast} & 0.3711 & \textbf{0.3777} & +1.79\% (COMP.) & \textbf{0.4332} & 0.3818 & -11.86\% (LOSS) \\
 \midrule
-\textbf{Trung bình} & \textbf{0.5541} & \textbf{0.4872} & \textbf{-12.07\%} & \textbf{65.39\%} & \textbf{81.70\%} & \textbf{+16.31\%} \\
+\textbf{Trung bình} & 0.4641 & \textbf{0.4783} & \textbf{+3.05\% (WIN)} & \textbf{0.5541} & 0.4872 & \textbf{-12.07\% (LOSS)} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\subsection{Bảng 3: Các Chỉ Số Phụ Trợ (Subset Accuracy, Hamming Loss và Thời Gian)}
+\subsection{Bảng 4: Các Chỉ Số Phụ Trợ (Subset Accuracy, Hamming Loss và Thời Gian)}
 
 \begin{table}[H]
 \centering
@@ -421,7 +454,7 @@ Hàm quyết định từ chối Bayes sử dụng chi phí cố định $c = 0.
 \subsection{4. Đối chiếu khách quan với Full Macro-\texorpdfstring{$F_1$}{F1} (Năng lực không từ chối)}
 Khi tước bỏ hoàn toàn yếu tố từ chối để đánh giá trên 100\% dữ liệu kiểm tra:
 \begin{itemize}
-    \item v6.1 đạt Full Macro-$F_1$ trung bình \textbf{0.4783}, cao hơn \textbf{0.4641} của v5.1.1 ($+3.05\%$), đồng thời đạt kết quả cao hơn hoặc tương đương trên 9/10 tập dữ liệu (Bảng~\ref{tab:full_f1_direct}).
+    \item v6.1 đạt Full Macro-$F_1$ trung bình \textbf{0.4783}, cao hơn \textbf{0.4641} của v5.1.1 ($+3.05\%$), đồng thời đạt kết quả cao hơn hoặc tương đương trên 9/10 tập dữ liệu (Bảng~\ref{tab:full_f1_multimodel} và Bảng~\ref{tab:direct_comparison_v61_v511}).
     \item Kết quả này phản ánh rằng: Xét trên bài toán phân loại đa nhãn tiêu chuẩn (Standard MLC), kiến trúc ECC kết hợp Singleton Rule của v6.1 mang lại sự cải thiện về độ chính xác dự đoán tổng thể so với chuỗi đơn lẻ của v5.1.1.
     \item Tuy nhiên, khi chuyển sang bài toán phân loại có từ chối (Selective Classification với ngưỡng cố định $c = 0.30$), cơ chế từ chối của v5.1.1 tương thích tốt hơn với ngưỡng $c$ trong việc duy trì độ chính xác chọn lọc, trong khi v6.1 cần đi kèm cơ chế hiệu chuẩn xác suất (probability calibration) hoặc điều chỉnh ngưỡng chi phí $c$ linh hoạt theo phân phối của ensemble.
 \end{itemize}
