@@ -1,33 +1,35 @@
-# TÀI LIỆU ĐẶC TẢ KỸ THUẬT PHIÊN BẢN v6.2: GSI-MLC-PA VỚI TƯƠNG QUAN SAI SỐ DỰ ĐOÁN BR (BR RESIDUAL / ERROR CORRELATION) CHO TẬP DL
+# TÀI LIỆU ĐẶC TẢ KỸ THUẬT PHIÊN BẢN v6.2: GSI-MLC-PA VỚI TƯƠNG QUAN SAI SỐ DỰ ĐOÁN BR (BR RESIDUAL ERROR CONDITIONAL DEPENDENCY) CHO TẬP DL
 
-**Tài liệu tham chiếu:** `meeting_summary.md` (Mục **core**, Hướng 2 cho tập DL)  
-**Nhánh Git:** `v6` (giữ nguyên nhánh v6, thực hiện nguyên tắc cô lập cấu phần)  
+**Tài liệu tham chiếu:** `meeting_summary.md` (Mục **core** & **option**)  
+**Nhánh Git:** `v6` (giữ nguyên nhánh v6, tuân thủ nghiêm ngặt nguyên tắc cô lập cấu phần)  
 **Tên phiên bản:** `v6.2`  
-**Ngày lập đặc tả:** 02/10/2026  
-**Trạng thái:** Kế hoạch kiến trúc & Đặc tả kỹ thuật (Chờ phê duyệt để thực thi sau khi hoàn thành v6.1)
+**Ngày lập đặc tả:** 04/10/2026  
+**Trạng thái:** Đặc tả kỹ thuật chính thức & Kế hoạch chạy thử nghiệm (Ready for Implementation)
 
 ---
 
 ## 1. Bối Cảnh và Mục Tiêu Kỹ Thuật (Motivation & Objectives)
 
-### 1.1. Vấn Đề Của Tương Quan Biên Nhãn (Marginal Label Correlation)
-Trong học máy đa nhãn truyền thống và các phiên bản CC tiền nhiệm (kể cả v5.1 và v6 Core), việc sắp xếp thứ tự chuỗi Classifier Chain dựa trên ma trận hệ số tương quan Phi ($\Phi$). Hệ số $\Phi$ được tính trực tiếp từ ma trận nhãn mặt đất $Y$:
-$$\Phi(Y_j, Y_k) = \frac{P(Y_j=1, Y_k=1) - P(Y_j=1)P(Y_k=1)}{\sqrt{P(Y_j=1)(1-P(Y_j=1))P(Y_k=1)(1-P(Y_k=1))}}$$
-Đây là **tương quan biên vô điều kiện (Marginal Correlation)**. Trong nhiều trường hợp, hai nhãn $Y_j$ và $Y_k$ có tương quan biên cao chỉ vì chúng cùng phụ thuộc vào một thuộc tính đầu vào chung $X$ (ví dụ: trong bài toán phân loại ảnh cảnh quan `scene`, nhãn "cây" và "núi" thường cùng xuất hiện khi ảnh có đặc trưng màu xanh lá và kết cấu gồ ghề). Khi mô hình phân loại nhị phân đã học được đặc trưng $X$, sự phụ thuộc có điều kiện $P(Y_j, Y_k \mid X)$ có thể hoàn toàn biến mất ($Y_j \perp Y_k \mid X$).
+### 1.1. Hạn Chế Của Các Phiên Bản Tiền Nhiệm
+- **v5.1 & v6 Core (Single Classifier Chain):** Tập nhãn phụ thuộc $DL$ được giải quyết bằng một chuỗi CC đơn lẻ sắp xếp theo tương quan nhãn biên vô điều kiện Phi ($\Phi$). Mô hình này ép buộc tất cả các nhãn sau phải nhận tất cả các nhãn trước làm đặc trưng bổ trợ, bất kể chúng có thực sự phụ thuộc hay không (*Spurious Correlations*), dẫn đến tích lũy sai số và sụt giảm F1 nghiêm trọng trên các tập dữ liệu mất cân bằng cao.
+- **v6.1 (Ensemble Classifier Chains - ECC):** Dùng tập hợp $M=10$ chuỗi CC ngẫu nhiên và lấy trung bình xác suất để giảm phương sai. Dù cải thiện độ ổn định, ECC có chi phí tính toán cao gấp $M$ lần và vẫn mang tính mù mờ (heuristic), chưa mô hình hóa tường minh đồ thị phụ thuộc giữa các nhãn trong $DL$.
 
-Việc sử dụng tương quan biên $\Phi$ để ép buộc chuỗi CC có thể dẫn đến **liên kết giả (Spurious Dependency)**, đưa nhiễu vào mô hình và gây ra hiện tượng *Negative Inductive Transfer*.
-
-### 1.2. Giải Pháp Hướng 2 từ `meeting_summary.md` (v6.2)
-Biên bản cuộc họp chỉ đạo:
-> *"Hướng 2 cho tập DL: Tính tương quan giữa $|y_1 - y_1^*|$ với $|y_n - y_n^*|$ với $y_n^*$ là dự đoán của mô hình BR. Show bảng chi tiết quá trình tính tương quan này trong báo cáo - Thực hiện sau khi hoàn thành hướng 1, gọi là v6.2"*  
-> *"Khi thực hiện hướng 2 thì không tách nhánh mới mà cô lập kết quả chạy cũng như những thành phần khác của nó để không ảnh hưởng đến hướng 1"*
-
-#### Mục tiêu cụ thể của v6.2:
-1. **Định lượng tương quan sai số dự đoán (BR Prediction Error Correlation):** Đo lường trực tiếp mức độ tương quan giữa các vector lỗi phân loại $e_j = |y_j - y_j^*|$ của mô hình Binary Relevance trên từng cặp nhãn thuộc tập $DL$.
-2. **Khai thác cấu trúc phụ thuộc có điều kiện thực sự:** Nếu hai nhãn có sai số tương quan cao, điều đó chứng minh bộ phân loại độc lập đồng thời thất bại trên cả 2 nhãn, khẳng định sự tồn tại của mối quan hệ phụ thuộc mà $X$ chưa giải quyết được, cần chuỗi CC can thiệp.
-3. **Sắp xếp thứ tự tối ưu cho CC trong tập $DL$:** Sắp xếp chuỗi CC dựa trên ma trận tương quan sai số (Residual Error Correlation Ordering).
-4. **Báo cáo kiểm toán minh bạch:** Xuất bảng ma trận tương quan sai số chi tiết của các nhãn trong tập $DL$ trên 10 tập dữ liệu benchmark.
-5. **Nguyên tắc cô lập tuyệt đối:** Toàn bộ mã nguồn, cấu hình và thư mục lưu trữ kết quả của v6.2 được tách biệt hoàn toàn (`results_v6_2/`), bảo đảm không làm biến đổi hành vi của v6.1 hay v6 Core.
+### 1.2. Đột Phá Kiến Trúc Của v6.2 Từ `meeting_summary.md`
+Theo biên bản chỉ đạo mới nhất tại `meeting_summary.md`:
+1. **Phân tách nhãn độc lập đa tầng (Layered Independent Label Discovery - $IL$):**
+   - Vòng lặp `Do { ... } while(1)` kiểm tra từng nhãn $l \in DL$ bằng mô hình BR trên không gian đặc trưng tích lũy $FS = [X, P^{\text{OOF}}_{IL}]$.
+   - Nếu $F_1(f_l, l) \ge \tau$ (ngưỡng threshold, mặc định 0.75), nhãn $l$ được thăng hạng vào tầng độc lập hiện tại $IL[i]$.
+   - **Quy tắc biên Singleton DL:** Khi $|DL| == 1$, nhãn duy nhất còn lại được huấn luyện ngay trên $FS$, đưa thẳng vào $IL$, và kết thúc tìm kiếm nhãn độc lập ($DL = \emptyset$).
+2. **Xử lý tập $DL$ bằng BR phụ thuộc điều kiện theo tương quan sai số (Residual Error Conditional Coupling):**
+   - Khi kết thúc pha bóc tách mà vẫn còn $|DL| \ge 2$:
+     - Với mỗi cặp nhãn $l, p \in DL$ ($p \neq l$), tính tương quan sai số dự đoán:
+       $$\text{Corr}(l, p) = \text{PCC}\Big( \big(l - f(l)\big), \big(p - f(p)\big) \Big)$$
+       trong đó $f(l), f(p)$ là các bộ phân loại BR cơ sở đã học từ không gian $FS$.
+     - Nếu $\text{Corr}(l, p) \ge \tau_{\text{corr}}$, bổ sung nhãn $p$ vào tập phụ thuộc cục bộ $DL\_temp[l]$.
+     - Cập nhật không gian đặc trưng riêng biệt cho từng nhãn: $FS[l] = FS \cup DL\_temp[l]$.
+     - Huấn luyện hàm phân lớp nhị phân BR chuyên biệt cho $l$ trên $FS[l]$.
+3. **Cơ chế từ chối tối ưu Bayes (Bayes Optimal Partial Abstention):**
+   - Áp dụng cơ chế từ chối với chi phí $c$ (ngưỡng từ chối $c = 0.40$) trực tiếp tại các hàm BR cho từng lớp.
 
 ---
 
@@ -35,223 +37,327 @@ Biên bản cuộc họp chỉ đạo:
 
 ```mermaid
 flowchart TD
-    subgraph BR_ERRORS ["Pha 1: Trích Xuất Vector Sai Số Dự Đoán Của BR"]
-        A["Mô hình BR trên nhãn j"] --> B["Dự đoán OOF y_j*"]
-        C["Nhãn thực tế y_j"] & B --> D["Vector sai số tuyệt đối: e_j = |y_j - y_j*|"]
-        E["Mô hình BR trên nhãn k"] --> F["Dự đoán OOF y_k*"]
-        G["Nhãn thực tế y_k"] & F --> H["Vector sai số tuyệt đối: e_k = |y_k - y_k*|"]
+    subgraph PHASE_1 ["Pha 1: Bóc Tách Đa Tầng Tìm IL (Do-While Layered Peeling)"]
+        A["Dữ liệu gốc (X, Y)"] --> B["Khởi tạo: FS = X, DL = Tất cả nhãn, i = 1"]
+        B --> C{"Kiểm tra: |DL| == 1?"}
+        C -- Đúng --> D["Huấn luyện BR cho nhãn duy nhất trên FS<br/>IL[i] = IL[i] U DL, DL = rỗng<br/>Break kết thúc Pha 1"]
+        C -- Sai --> E["Với mỗi nhãn l trong DL:<br/>Huấn luyện f_l trên FS, tính F1(f_l, l)"]
+        E --> F{"F1 >= tau?"}
+        F -- Đúng --> G["IL[i] = IL[i] U {l}<br/>DL = DL \ {l}"]
+        F -- Sai --> H["Giữ lại trong DL"]
+        G & H --> I{"|IL[i]| > 0?"}
+        I -- Đúng --> J["FS = FS U IL[i]<br/>i = i + 1, lặp lại Pha 1"]
+        J --> C
+        I -- Sai --> K["Break thoát khỏi vòng lặp Pha 1"]
     end
 
-    subgraph CORR_CALC ["Pha 2: Tính Ma Trận Tương Quan Sai Số R_error"]
-        D & H --> I{"Lựa chọn định dạng y*"}
-        I -- Nhị phân (0/1) --> J["Vector nhị phân e_j thuộc {0, 1} -> Tính Phi-Coefficient của sai số Phi(e_j, e_k)"]
-        I -- Xác suất liên tục --> K["Vector sai số L1 e_j thuộc [0, 1] -> Tính Pearson Correlation r(e_j, e_k)"]
-        J & K --> L["Ma trận tương quan sai số đối xứng R_error (K_DL x K_DL)"]
+    subgraph PHASE_2 ["Pha 2: Xử Lý Tập DL Bằng Tương Quan Sai Số (Residual Error Coupling)"]
+        K --> L{"|DL| > 0?"}
+        L -- Sai --> M["Toàn bộ nhãn thuộc IL -> Mô hình BR hoàn chỉnh"]
+        L -- Đúng --> N["Với mỗi nhãn l trong DL: FS[l] = FS, DL_temp[l] = rỗng"]
+        N --> O["Với mỗi p khác l trong DL:<br/>Tính Corr(l, p) = PCC(l - f(l), p - f(p))"]
+        O --> P{"Corr(l, p) >= tau_corr?"}
+        P -- Đúng --> Q["DL_temp[l] = DL_temp[l] U {p}"]
+        P -- Sai --> R["Bỏ qua p"]
+        Q & R --> S["FS[l] = FS U DL_temp[l]<br/>Huấn luyện mô hình BR g_l trên FS[l]"]
     end
 
-    subgraph CC_ORDERING ["Pha 3: Sắp Xếp Chuỗi & Huấn Luyện CC Cô Lập"]
-        L --> M["Tính tổng tương quan sai số: S_error(j) = sum_{k != j} R_error(j, k)"]
-        M --> N["Sắp xếp nhãn DL theo chiều tăng dần (Ascending Error Order)"]
-        N --> O["Huấn luyện Classifier Chain (CC) cho tập DL"]
-        O --> P["Lưu kết quả độc lập tại results_v6_2/"]
+    subgraph PHASE_3 ["Pha 3: Suy Diễn & Cơ Chế Từ Chối (Bayes-Optimal Inference)"]
+        S & M --> T["Mẫu kiểm tra X_test"]
+        T --> U["Dự đoán xác suất P_IL(X_test) qua các tầng"]
+        U --> V["Xác định FS_test = [X_test, P_IL]"]
+        V --> W["Dự đoán xác suất sơ bộ f_p(FS_test) cho p thuộc DL"]
+        W --> X["Dự đoán xác suất cuối g_l([FS_test, P_DL_temp]) cho l thuộc DL"]
+        U & X --> Y["Ma trận xác suất kết hợp P_all"]
+        Y --> Z["Quy tắc quyết định tối ưu Bayes với chi phí c = 0.30<br/>{0, 1, -1 (Từ chối)}"]
     end
 ```
 
----
+### 2.1. Bản Chất Toán Học Của Tương Quan Sai Số (Residual Error Correlation)
+Cho vector nhãn thực tế $y_l \in \{0, 1\}^N$ và dự đoán xác suất ngoài mẫu (OOF) của mô hình BR cơ sở trên không gian $FS$:
+$$\hat{p}_l = f_l(FS) \in [0, 1]^N$$
+Vector sai số phần dư (Residual Vector) của nhãn $l$:
+$$e_l = y_l - \hat{p}_l \in [-1, 1]^N \quad \text{hoặc} \quad e_l^{\text{abs}} = |y_l - \hat{p}_l| \in [0, 1]^N$$
+Hệ số tương quan Pearson giữa hai vector sai số $e_l$ và $e_p$:
+$$\text{Corr}(l, p) = \frac{\sum_{k=1}^N (e_{l, k} - \bar{e}_l)(e_{p, k} - \bar{e}_p)}{\sqrt{\sum_{k=1}^N (e_{l, k} - \bar{e}_l)^2} \sqrt{\sum_{k=1}^N (e_{p, k} - \bar{e}_p)^2}}$$
 
-### 2.1. Định Nghĩa Toán Học Về Sai Số Dự Đoán Của Mô Hình BR
-
-Cho tập dữ liệu huấn luyện $\mathcal{D} = \{(x_i, y_i)\}_{i=1}^N$ với $x_i \in \mathbb{R}^d$ và nhãn nhị phân $y_i \in \{0, 1\}^K$.  
-Mô hình Binary Relevance (BR) huấn luyện $K$ bộ phân loại nhị phân độc lập $h_1, \dots, h_K$. Để tránh hiện tượng quá khớp in-sample, dự đoán $y_{i, j}^*$ được trích xuất bằng quy trình **Out-Of-Fold (OOF)** 5-Fold Cross-Validation.
-
-Với mỗi nhãn $j \in DL$, vector sai số dự đoán trên $N$ mẫu được xác định:
-$$e_j = \left[ |y_{1, j} - y_{1, j}^*|, |y_{2, j} - y_{2, j}^*|, \dots, |y_{N, j} - y_{N, j}^*| \right]^\top \in \mathbb{R}^N$$
-
-#### Hai Biến Thể Của Vector Sai Số $e_j$:
-1. **Biến thể A: Sai số phân loại nhị phân (Binary Classification Error - $e_j^{\text{bin}}$):**
-   - $y_{i, j}^* = \hat{y}_{i, j} \in \{0, 1\}$ (dự đoán nhị phân sau ngưỡng $0.5$ hoặc theo luật Bayes).
-   - $e_{i, j}^{\text{bin}} = \mathbb{I}(y_{i, j} \neq \hat{y}_{i, j}) \in \{0, 1\}$.
-   - $e_{i, j}^{\text{bin}} = 1$ khi mô hình BR phân loại sai trên mẫu $i$, và $0$ khi đoán đúng.
-   - **Thước đo tương quan:** Sử dụng hệ số tương quan Phi giữa hai biến nhị phân:
-     $$\mathbf{R}_{\text{error}}^{\Phi}(j, k) = \frac{N_{11} N_{00} - N_{10} N_{01}}{\sqrt{(N_{11}+N_{10})(N_{11}+N_{01})(N_{00}+N_{10})(N_{00}+N_{01})}}$$
-     trong đó $N_{ab} = \sum_{i=1}^N \mathbb{I}(e_{i, j}^{\text{bin}} = a \land e_{i, k}^{\text{bin}} = b)$.
-
-2. **Biến thể B: Sai số phần dư xác suất liên tục (Continuous Soft Residual - $e_j^{\text{soft}}$):**
-   - $y_{i, j}^* = \hat{p}_{i, j} \in [0, 1]$ (xác suất dự đoán OOF của mô hình BR).
-   - $e_{i, j}^{\text{soft}} = |y_{i, j} - \hat{p}_{i, j}| \in [0, 1]$.
-   - $e_{i, j}^{\text{soft}}$ phản ánh mức độ bất định hoặc độ lệch biên của phán đoán (L1 Loss Residual).
-   - **Thước đo tương quan:** Sử dụng hệ số tương quan Pearson giữa hai vector thực:
-     $$\mathbf{R}_{\text{error}}^{\text{Pearson}}(j, k) = \frac{\sum_{i=1}^N (e_{i, j} - \bar{e}_j)(e_{i, k} - \bar{e}_k)}{\sqrt{\sum_{i=1}^N (e_{i, j} - \bar{e}_j)^2} \sqrt{\sum_{i=1}^N (e_{i, k} - \bar{e}_k)^2}}$$
+**Ý nghĩa xác suất:**
+- Nếu $\text{Corr}(l, p) \approx 0$, sai số của bộ phân loại nhãn $l$ và $p$ độc lập tuyến tính sau khi đã biết không gian thuộc tính $FS$. Điều này chỉ ra $y_l \perp y_p \mid FS$. Việc thêm $p$ vào đặc trưng của $l$ chỉ mang lại nhiễu.
+- Nếu $\text{Corr}(l, p) \ge \tau_{\text{corr}}$, tồn tại mối phụ thuộc điều kiện thực sự mà $FS$ chưa giải thích được. Do đó, việc ghép $p$ vào $FS[l]$ giúp bộ phân loại $g_l$ nắn chỉnh sai số dựa trên trạng thái của $p$.
 
 ---
 
-### 2.2. Chiến Lược Sắp Xếp Chuỗi Classifier Chains Dựa Trên Tương Quan Sai Số
-
-Với ma trận tương quan sai số đối xứng $\mathbf{R}_{\text{error}} \in [0, 1]^{K_{DL} \times K_{DL}}$, với mỗi nhãn $j \in DL$, điểm số phụ thuộc sai số tổng hợp được tính:
-$$S_{\text{error}}(j) = \sum_{k \in DL, k \neq j} |\mathbf{R}_{\text{error}}(j, k)|$$
-
-#### Nguyên lý sắp xếp tăng dần (Ascending Error Correlation Order):
-$$\pi_{DL} = \operatorname{Argsort}_{\text{ascending}}\left( S_{\text{error}}(j) \right)$$
-- **Cơ sở khoa học:**
-  - Nhãn có $S_{\text{error}}$ nhỏ nhất là nhãn mà các sai sót của mô hình BR độc lập ít bị ràng buộc hoặc ít lây lan sang các nhãn khác. Dự đoán của nhãn này mang tính độc lập tương đối cao trong nội bộ $DL$, do đó cần được đưa lên đầu chuỗi CC để cung cấp thông tin dự đoán ổn định.
-  - Các nhãn có $S_{\text{error}}$ lớn là các nhãn có sai số phụ thuộc chằng chịt, dễ bị ảnh hưởng bởi lỗi của các nhãn khác. Chúng cần được đặt ở cuối chuỗi CC để có cơ hội nhận toàn bộ các nhãn đi trước làm đặc trưng bổ trợ nhằm nắn chỉnh sai số.
-
----
-
-## 3. Thuật Toán Chi Tiết và Mã Giả (Detailed Pseudocode)
+## 3. Thuật Toán Chi Tiết và Mã Giả (Detailed Algorithm Pseudocode)
 
 ```text
 ========================================================================================================
-Thuật toán: GSI-MLC-PA v6.2 (5-Fold Peeling + Singleton DL + BR Error Correlation Ordering CC)
+Thuật toán: GSI-MLC-PA v6.2 (Layered CV Peeling + Residual Correlation Conditional BR)
 ========================================================================================================
 ĐẦU VÀO:
-  - X: Ma trận đặc trưng (N, d)
-  - Y: Ma trận nhãn nhị phân (N, K)
-  - BaseLearnerFactory: Hàm tạo mô hình nhị phân (Logistic, SVM, hoặc MLP)
-  - tau: Ngưỡng Selective-F1 thăng hạng IL (mặc định = 0.75)
-  - c: Chi phí từ chối (mặc định = 0.30)
-  - n_folds: Số fold CV (mặc định = 5)
-  - error_type: Loại sai số ("binary" cho |y - y_hat| hoặc "soft" cho |y - p_hat|)
-  - order_direction: "ascending" (mặc định) hoặc "descending"
+  - X: Ma trận đặc trưng huấn luyện kích thước (N, d)
+  - Y: Ma trận nhãn nhị phân kích thước (N, K)
+  - BaseLearnerFactory: Hàm khởi tạo mô hình phân loại nhị phân (Logistic, SVM Calibrated, MLP)
+  - tau_f1: Ngưỡng Selective-F1 thăng hạng tầng độc lập (mặc định = 0.75)
+  - tau_corr: Ngưỡng tương quan sai số PCC để liên kết nhãn phụ thuộc (mặc định = 0.25)
+  - c: Chi phí từ chối cho luật Bayes (mặc định = 0.30)
+  - n_folds: Số fold CV bóc tách OOF (mặc định = 5)
+  - max_depth: Độ sâu tối đa các tầng IL (mặc định = 3)
 
 ĐẦU RA:
-  - Model_v6_2: Mô hình CC có thứ tự chuỗi điều khiển bởi tương quan sai số BR
-  - Error_Corr_Matrix: Ma trận tương quan sai số giữa các cặp nhãn trong DL
-  - Execution_Order: Thứ tự chuỗi thực thi hoàn chỉnh
+  - Model_v6_2: Mô hình phân loại đa nhãn hoàn chỉnh
+  - IL_layers: Danh sách các tầng nhãn độc lập [IL_1, IL_2, ...]
+  - DL_residual: Danh sách các nhãn phụ thuộc còn lại
+  - Residual_Corr_Matrix: Ma trận tương quan sai số giữa các cặp nhãn trong DL
+  - Dependency_Graph: Ánh xạ phụ thuộc l -> DL_temp[l] cho từng nhãn DL
 
 CÁC BƯỚC THỰC HIỆN:
-  1: // BƯỚC 1: BÓC TÁCH PHÂN TẦNG 5-FOLD PEELING
-  2: {IL_layers, Candidate_DL, P_OOF_all} ← Run_5Fold_Peeling(X, Y, tau, c, n_folds)
-  3:
-  4: // BƯỚC 2: QUY TẮC BIÊN SINGLETON DL
-  5: IF length(Candidate_DL) == 1 THEN:
-  6:     singleton_label ← Candidate_DL[0]
-  7:     IL_layers.append([singleton_label])
-  8:     Candidate_DL ← []  // DL rỗng
-  9: END IF
- 10:
- 11: All_IL ← Flatten(IL_layers)
- 12: Residual_DL ← Candidate_DL
- 13:
- 14: // BƯỚC 3: HUẤN LUYỆN BR TRÊN TẬP IL
- 15: BR_Model ← BinaryRelevanceClassifier(base_estimator=BaseLearnerFactory())
- 16: IF length(All_IL) > 0 THEN:
- 17:     BR_Model.fit(X, Y[:, All_IL])
- 18: END IF
- 19:
- 20: // BƯỚC 4: TÍNH VECTOR SAI SỐ VÀ MA TRẬN TƯƠNG QUAN SAI SỐ TRÊN TẬP DL
- 21: IF length(Residual_DL) >= 2 THEN:
- 22:     Error_Matrix ← zeros(N, length(Residual_DL))
- 23:     
- 24:     FOR idx, j IN enumerate(Residual_DL) DO:
- 25:         // Lấy xác suất dự đoán OOF của nhãn j từ BR
- 26:         p_oof_j ← P_OOF_all[j]
- 27:         IF error_type == "binary" THEN:
- 28:             y_hat_j ← (p_oof_j >= 0.5)
- 29:             Error_Matrix[:, idx] ← abs(Y[:, j] - y_hat_j)
- 30:         ELSE:
- 31:             Error_Matrix[:, idx] ← abs(Y[:, j] - p_oof_j)
- 32:         END IF
- 33:     END FOR
- 34:     
- 35:     // Tính ma trận tương quan giữa các cột sai số
- 36:     Error_Corr_Matrix ← Compute_Correlation_Matrix(Error_Matrix)
- 37:     
- 38:     // Sắp xếp thứ tự nhãn DL theo tổng tương quan sai số
- 39:     Scores_error ← zeros(length(Residual_DL))
- 40:     FOR idx = 0 TO length(Residual_DL) - 1 DO:
- 41:         Scores_error[idx] ← sum(abs(Error_Corr_Matrix[idx, :])) - 1.0 // Bỏ đường chéo chính
- 42:     END FOR
- 43:     
- 44:     IF order_direction == "ascending" THEN:
- 45:         Sorted_Indices ← Argsort_Ascending(Scores_error)
- 46:     ELSE:
- 47:         Sorted_Indices ← Argsort_Descending(Scores_error)
- 48:     END IF
- 49:     Ordered_DL ← [Residual_DL[i] FOR i IN Sorted_Indices]
- 50:     
- 51:     // BƯỚC 5: HUẤN LUYỆN CLASSIFIER CHAIN TRÊN TẬP DL VỚI DATA = [X, P_OOF_IL]
- 52:     P_IL_oof ← Lấy các cột thuộc All_IL từ P_OOF_all
- 53:     X_aug_train ← [X, Normalize(P_IL_oof, reference=X, strategy="matching")]
- 54:     
- 55:     CC_Model ← ClassifierChainClassifier(
- 56:         base_estimator=BaseLearnerFactory(),
- 57:         order=Ordered_DL
- 58:     )
- 59:     CC_Model.fit(X_aug_train, Y)
- 60: ELSE:
- 61:     Ordered_DL ← []
- 62:     CC_Model ← None
- 63: END IF
- 64:
- 65: Execution_Order ← All_IL + Ordered_DL
- 66: TRẢ VỀ Mô hình đóng băng {BR_Model, CC_Model, All_IL, Ordered_DL, Error_Corr_Matrix}
+
+// ----------------------------------------------------------------------------------------------------
+// PHA 1: BÓC TÁCH ĐA TẦNG TÌM CÁC NHÃN ĐỘC LẬP (IL)
+// ----------------------------------------------------------------------------------------------------
+1:  FS_features ← X
+2:  DL ← {0, 1, ..., K - 1}
+3:  IL_layers ← []
+4:  P_OOF_accumulated ← Ma trận rỗng (N, 0)
+5:  stage_idx ← 1
+6:  BR_IL_models ← {}  // Lưu các mô hình BR đã huấn luyện cho từng nhãn IL
+
+7:  DO:
+8:      IL_current ← []
+9:      
+10:     // Kiểm tra quy tắc biên Singleton DL
+11:     IF length(DL) == 1 THEN:
+12:         singleton_label ← DL[0]
+13:         model_single ← Train_BR(BaseLearnerFactory(), FS_features, Y[:, singleton_label])
+14:         BR_IL_models[singleton_label] ← model_single
+15:         IL_current.append(singleton_label)
+16:         DL ← []
+17:         IL_layers.append(IL_current)
+18:         BREAK
+19:     END IF
+20:     
+21:     // Đánh giá từng nhãn ứng viên trong DL bằng 5-Fold CV Out-Of-Fold
+22:     P_OOF_stage ← zeros(N, length(DL))
+23:     Candidate_scores ← {}
+24:     FOR EACH label l IN DL DO:
+25:         oof_probs_l, sel_f1_l ← Evaluate_5Fold_OOF(FS_features, Y[:, l], BaseLearnerFactory(), c)
+26:         P_OOF_stage[l] ← oof_probs_l
+27:         Candidate_scores[l] ← sel_f1_l
+28:         IF sel_f1_l >= tau_f1 THEN:
+29:             IL_current.append(l)
+30:         END IF
+31:     END FOR
+32:     
+33:     IF length(IL_current) > 0 THEN:
+34:         FOR EACH label l IN IL_current DO:
+35:             DL ← DL \ {l}
+36:             // Huấn luyện mô hình BR hoàn chỉnh trên toàn bộ tập FS_features hiện tại
+37:             BR_IL_models[l] ← Train_BR(BaseLearnerFactory(), FS_features, Y[:, l])
+38:         END FOR
+39:         IL_layers.append(IL_current)
+40:         
+41:         // Bổ sung các nhãn IL vừa tìm được vào không gian đặc trưng FS
+42:         P_promoted ← P_OOF_stage[:, IL_current]
+43:         FS_features ← [FS_features, Normalize_Augmented(P_promoted, reference=X)]
+44:         stage_idx ← stage_idx + 1
+45:         
+46:         IF stage_idx > max_depth OR length(DL) == 0 THEN:
+47:             BREAK
+48:         END IF
+49:     ELSE:
+50:         // Không còn nhãn nào đạt ngưỡng độc lập ở tầng này
+51:         BREAK
+52:     END IF
+53:  WHILE TRUE
+
+// ----------------------------------------------------------------------------------------------------
+// PHA 2: XỬ LÝ CÁC NHÃN TRONG TẬP PHỤ THUỘC DL
+// ----------------------------------------------------------------------------------------------------
+54:  BR_base_DL_models ← {}  // Hàm f(l) trên FS
+55:  BR_cond_DL_models ← {}  // Hàm g(l) trên FS[l]
+56:  DL_temp ← {}            // Bản đồ liên kết l -> [p1, p2, ...]
+57:  Corr_Matrix_DL ← zeros(length(DL), length(DL))
+
+58:  IF length(DL) > 0 THEN:
+59:      // Bước 2.1: Huấn luyện bộ phân loại BR cơ sở f_l trên không gian FS và lấy dự đoán OOF
+60:      P_OOF_DL ← zeros(N, length(DL))
+61:      FOR EACH label l IN DL DO:
+62:          model_f_l ← Train_BR(BaseLearnerFactory(), FS_features, Y[:, l])
+63:          BR_base_DL_models[l] ← model_f_l
+64:          oof_probs_l, _ ← Evaluate_5Fold_OOF(FS_features, Y[:, l], BaseLearnerFactory(), c)
+65:          P_OOF_DL[l] ← oof_probs_l
+66:      END FOR
+67:      
+68:      // Bước 2.2: Tính ma trận tương quan sai số dự đoán PCC(l - f(l), p - f(p))
+69:      FOR EACH label l IN DL DO:
+70:          e_l ← Y[:, l] - P_OOF_DL[l]
+71:          DL_temp[l] ← []
+72:          FOR EACH label p IN DL DO:
+73:              IF p == l THEN:
+74:                  Corr_Matrix_DL[l, p] ← 1.0
+75:                  CONTINUE
+76:              END IF
+77:              e_p ← Y[:, p] - P_OOF_DL[p]
+78:              corr_lp ← Absolute_Pearson_Correlation(e_l, e_p)
+79:              Corr_Matrix_DL[l, p] ← corr_lp
+80:              
+81:              IF corr_lp >= tau_corr THEN:
+82:                  DL_temp[l].append(p)
+83:              END IF
+84:          END FOR
+85:          
+86:          // Bước 2.3: Cập nhật không gian đặc trưng riêng FS[l] và huấn luyện BR g_l
+87:          IF length(DL_temp[l]) > 0 THEN:
+88:              P_coupled ← P_OOF_DL[:, DL_temp[l]]
+89:              FS_l_train ← [FS_features, Normalize_Augmented(P_coupled, reference=X)]
+90:          ELSE:
+91:              FS_l_train ← FS_features
+92:          END IF
+93:          BR_cond_DL_models[l] ← Train_BR(BaseLearnerFactory(), FS_l_train, Y[:, l])
+94:      END FOR
+95:  END IF
+
+// ----------------------------------------------------------------------------------------------------
+// PHA 3: SUY DIỄN VỚI CƠ CHẾ TỪ CHỐI TỐI ƯU BAYES (PARTIAL ABSTENTION)
+// ----------------------------------------------------------------------------------------------------
+96:  FUNCTION Predict_Proba(X_new):
+97:      P_final ← zeros(M, K)
+98:      FS_current_test ← X_new
+99:      
+100:     // Dự đoán lần lượt qua các tầng IL
+101:     FOR EACH layer IN IL_layers DO:
+102:         P_layer_test ← zeros(M, length(layer))
+103:         FOR idx, l IN enumerate(layer) DO:
+104:             P_layer_test[:, idx] ← BR_IL_models[l].predict_proba(FS_current_test)[:, 1]
+105:             P_final[:, l] ← P_layer_test[:, idx]
+106:         END FOR
+107:         FS_current_test ← [FS_current_test, Normalize_Augmented(P_layer_test, reference=X_new)]
+108:     END FOR
+109:     
+110:     // Dự đoán cho tập DL
+111:     IF length(DL) > 0 THEN:
+112:         // Dự đoán xác suất sơ bộ từ f_p
+113:         P_DL_base_test ← zeros(M, length(DL))
+114:         FOR EACH p IN DL DO:
+115:             P_DL_base_test[p] ← BR_base_DL_models[p].predict_proba(FS_current_test)[:, 1]
+116:         END FOR
+117:         
+118:         // Dự đoán xác suất tinh chỉnh từ g_l trên FS[l]_test
+119:         FOR EACH l IN DL DO:
+120:             IF length(DL_temp[l]) > 0 THEN:
+121:                 P_coupled_test ← P_DL_base_test[:, DL_temp[l]]
+122:                 FS_l_test ← [FS_current_test, Normalize_Augmented(P_coupled_test, reference=X_new)]
+123:                 P_final[:, l] ← BR_cond_DL_models[l].predict_proba(FS_l_test)[:, 1]
+124:             ELSE:
+125:                 P_final[:, l] ← P_DL_base_test[l]
+126:             END IF
+127:         END FOR
+128:     END IF
+129:     RETURN P_final
+130:  END FUNCTION
+
+131: FUNCTION Predict_Selective(X_new, cost c):
+132:     P ← Predict_Proba(X_new)
+133:     Y_pred ← zeros(M, K)
+134:     FOR sample i = 0 TO M - 1 DO:
+135:         FOR label j = 0 TO K - 1 DO:
+136:             p_val ← P[i, j]
+137:             IF p_val >= 1.0 - c THEN:
+138:                 Y_pred[i, j] ← 1
+139:             ELSE IF p_val <= c THEN:
+140:                 Y_pred[i, j] ← 0
+141:             ELSE:
+142:                 Y_pred[i, j] ← -1  // Từ chối (Abstain)
+143:             END IF
+144:         END FOR
+145:     END FOR
+146:     RETURN Y_pred
+147:  END FUNCTION
 ========================================================================================================
 ```
 
 ---
 
-## 4. Thiết Kế Cô Lập Hệ Thống (Isolation Architecture)
+## 4. Kế Hoạch Chạy Thử Nghiệm Phần Core (Execution Plan)
 
-Để tuân thủ tuyệt đối chỉ đạo: *"Khi thực hiện hướng 2 thì không tách nhánh mới mà cô lập kết quả chạy cũng như những thành phần khác của nó để không ảnh hưởng đến hướng 1"*:
+### 4.1. Mục Tiêu Thử Nghiệm
+1. **Kiểm chứng tính đúng đắn toán học của thuật toán Core:**
+   - Đảm bảo vòng lặp `Do...While(1)` phân tách nhãn hoạt động chính xác, không rò rỉ dữ liệu qua các tầng.
+   - Kiểm tra quy tắc biên Singleton DL: Khi $|DL| == 1$, nhãn duy nhất được đưa thẳng vào $IL$ và dừng thuật toán sạch sẽ (ngăn chặn sụp đổ $F_1 = 0$ trên `genbase`).
+   - Đảm bảo tính toán ma trận tương quan sai số $\text{Corr}(l, p) = \text{PCC}(l - f(l), p - f(p))$ đối xứng, an toàn trước phương sai 0 (zero variance).
+2. **Đo đạc và đánh giá hiệu năng đối sánh:**
+   - So sánh trực tiếp `GSI_v6_2` với:
+     - `BR` (Binary Relevance độc lập)
+     - `CC` (Classifier Chains)
+     - `ECC` (Ensemble Classifier Chains - v6.1)
+     - `GSI_v6` (5-Fold Peeling + Single CC)
+3. **Phân tích độ thưa của đồ thị phụ thuộc điều kiện:**
+   - Khảo sát số lượng nhãn được ghép vào $DL\_temp[l]$ theo các ngưỡng tương quan $\tau_{\text{corr}} \in \{0.20, 0.25, 0.30, 0.40\}$.
+
+### 4.2. Bộ Dữ Liệu Benchmark và Phân Kỳ Thử Nghiệm
+Hệ thống sẽ chạy trên toàn bộ 10 tập dữ liệu đa nhãn chuẩn thuộc nhiều lĩnh vực:
+- **Audio / Media:** `emotions` (6 nhãn), `music` (6 nhãn)
+- **Hình ảnh:** `scene` (6 nhãn)
+- **Y sinh / Hóa sinh:** `chd49` (49 nhãn), `genbase` (27 nhãn), `yeast` (14 nhãn)
+- **Protein PseAAC:** `gpositivepseaac` (4 nhãn), `humanpseaac` (14 nhãn), `plantpseaac` (12 nhãn), `viruspseaac` (6 nhãn)
+
+#### Lộ Trình Triển Khai Thử Nghiệm:
+- **Giai đoạn 1 (Smoke Test & Unit Validation):**
+  - Chạy kiểm thử tự động trên dữ liệu synthetic và tập dữ liệu nhỏ (`emotions`, `scene`, `genbase`).
+  - Xác thực 100% test cases của bộ kiểm thử cô lập `tests/test_v6_2_core.py`.
+- **Giai đoạn 2 (Benchmark Full 10 Datasets trên Base Learner Logistic Regression):**
+  - Chạy kịch bản `scripts/run_v6_2_experiment.py` với cấu hình chuẩn ($\tau_{\text{f1}} = 0.75$, $\tau_{\text{corr}} = 0.25$, $c = 0.30$, 5-Fold CV).
+  - Thu thập ma trận tương quan sai số chi tiết và bảng số liệu phân tầng.
+- **Giai đoạn 3 (Mở rộng Base Learner SVM Calibrated & MLP):**
+  - Đánh giá khả năng khái quát hóa của `GSI_v6_2` qua các họ mô hình cơ sở phi tuyến và biên lớn.
+- **Giai đoạn 4 (Phân Tích Nghiên Cứu Mở Rộng - Option Study):**
+  - Thử nghiệm cơ chế giảm ngưỡng $\tau_{\text{f1}}$ qua các tầng (`decaying_threshold`: 0.80 -> 0.75 -> 0.70).
+  - Tổng hợp bảng so sánh đối chuẩn quốc tế với các bài báo công bố BR, CC, ECC.
+
+---
+
+## 5. Thiết Kế Cô Lập Hệ Thống (Isolation Architecture)
+
+Để đảm bảo nguyên tắc: *"Khi thực hiện hướng 2 thì không tách nhánh mới mà cô lập kết quả chạy cũng như những thành phần khác của nó để không ảnh hưởng đến hướng 1"*:
 
 ```
 BR_CC/
 ├── src/
 │   ├── selection/
-│   │   ├── br_residual_correlation.py    <-- [CÔ LẬP] Module tính toán tương quan sai số v6.2
-│   │   └── cv_peeling.py                 <-- [CHUNG] Giữ nguyên cho v6.0 / v6.1 / v6.2
+│   │   ├── br_residual_correlation.py     <-- [CÔ LẬP] Module tính ma trận tương quan sai số PCC
+│   │   └── cv_peeling.py                  <-- [CHUNG] Giữ nguyên cho v6.0 / v6.1 / v6.2
 │   └── models/
-│       ├── ensemble_classifier_chain.py  <-- [CỦA v6.1] Giữ nguyên, không sửa đổi khi làm v6.2
-│       └── gsi_mlc_pa.py                 <-- [MỞ RỘNG CÔ LẬP] Hỗ trợ dl_method="error_corr_cc"
+│       ├── ensemble_classifier_chain.py   <-- [CỦA v6.1] Giữ nguyên
+│       ├── gsi_v6_1.py                    <-- [CỦA v6.1] Giữ nguyên
+│       └── gsi_v6_2.py                    <-- [CÔ LẬP MỚI] Lớp GSIMLCPAv6_2Classifier chuẩn Core
 ├── scripts/
-│   ├── run_v6_1_e2e_benchmark.py         <-- [SCRIPT v6.1] Độc lập
-│   └── run_v6_2_error_correlation.py     <-- [CÔ LẬP] Script benchmark chuyên biệt cho v6.2
+│   ├── run_v6_1_e2e_benchmark.py          <-- [v6.1] Giữ nguyên
+│   └── run_v6_2_experiment.py             <-- [CÔ LẬP MỚI] Script benchmark độc lập v6.2
 ├── tests/
-│   ├── test_v6_1_ecc.py                  <-- [TEST v6.1] Độc lập
-│   └── test_v6_2_residual_corr.py        <-- [CÔ LẬP] Bộ test chuyên biệt cho v6.2
-└── results_v6_2/                         <-- [CÔ LẬP HOÀN TOÀN] Thư mục chứa bảng và báo cáo v6.2
-    ├── error_correlation_matrices/       <-- Lưu ma trận tương quan sai số chi tiết của từng dataset
-    ├── tables_comparison_v6_2.csv
-    └── report_v6_2_residual_study.md
+│   ├── test_v6_1_ecc.py                   <-- [v6.1] Giữ nguyên
+│   └── test_v6_2_core.py                  <-- [CÔ LẬP MỚI] Bộ test độc lập v6.2
+└── results_v6_2/                          <-- [CÔ LẬP HOÀN TOÀN] Thư mục kết quả độc lập
+    ├── residual_correlation_matrices/     <-- Bảng chi tiết ma trận PCC(l - f(l), p - f(p))
+    ├── table_v6_2_benchmark.csv           <-- Bảng đối sánh metric 10 datasets
+    ├── table_il_peeling_breakdown.md      <-- Bảng phân tách nhãn IL qua các tầng
+    └── v6_2_core_report.md                <-- Báo cáo khoa học tổng hợp
 ```
 
-### Các Biện Pháp Bảo Đảm Tính Cô Lập:
-1. **Cô lập không gian tên cấu hình (Config Namespace Isolation):**
-   Mô hình toàn cục sử dụng cờ phân nhánh rõ ràng:
-   - `dl_method="ecc"`: Kích hoạt thuật toán v6.1 (Ensemble CC).
-   - `dl_method="error_corr_cc"`: Kích hoạt thuật toán v6.2 (BR Error Correlation CC).
-   - Mặc định của hệ thống giữ nguyên theo cấu hình của v6.1.
-2. **Cô lập dữ liệu đầu ra (Output Directory Isolation):**
-   Toàn bộ bảng số liệu, file JSON checkpoints, và ma trận tương quan sai số của v6.2 được ghi trực tiếp vào `results_v6_2/`, tuyệt đối không ghi đè vào `results_v6/` hay `results_v6_1/`.
-3. **Cô lập kịch bản thực thi:**
-   Kịch bản chạy v6.2 có cờ độc lập, có thể chạy song song hoặc chạy sau mà không làm thay đổi các file mã nguồn dùng chung.
-
 ---
 
-## 5. Bảng Chi Tiết Ma Trận Tương Quan Sai Số Trong Báo Cáo Kỹ Thuật
+## 6. Định Dạng Báo Cáo Kiểm Toán Ma Trận Tương Quan Sai Số
 
-Theo yêu cầu của `meeting_summary.md`, báo cáo của v6.2 sẽ có bảng chi tiết quá trình tính tương quan sai số dự đoán BR cho các tập dữ liệu có tập $DL \ge 2$:
+Theo yêu cầu trực tiếp từ `meeting_summary.md`, báo cáo kỹ thuật sẽ xuất bảng kiểm toán ma trận tương quan sai số chi tiết cho từng tập dữ liệu có $|DL| \ge 2$:
 
-### 5.1. Định dạng bảng xuất ra (Mẫu minh họa trên tập `scene`):
+### 6.1. Bảng Chi Tiết Liên Kết Phụ Thuộc Cục Bộ (Minh họa trên tập `scene`):
+| Nhãn $l \in DL$ | Tên nhãn | Tỷ lệ lỗi BR ($\bar{e}_l$) | Nhãn có tương quan sai số cao nhất | $\max_{p \neq l} \text{Corr}(l, p)$ | Tập liên kết $DL\_temp[l]$ ($\tau_{\text{corr}} \ge 0.25$) | Kích thước $FS[l]$ |
+|:---|:---|:---:|:---|:---:|:---|:---:|
+| Nhãn 4 | Sunset | 0.082 | Nhãn 5 (Mountain) | 0.3421 | {Nhãn 5} | $d + |IL| + 1$ |
+| Nhãn 5 | Mountain | 0.114 | Nhãn 4 (Sunset) | 0.3421 | {Nhãn 4} | $d + |IL| + 1$ |
 
-| Nhãn $j \in DL$ | Tên / Chỉ số nhãn | Tỷ lệ lỗi BR ($\bar{e}_j$) | Nhãn có tương quan sai số cao nhất | $\max_{k \neq j} \mathbf{R}_{\text{error}}(j, k)$ | Tổng tương quan sai số $S_{\text{error}}(j)$ | Thứ tự chuỗi CC v6.2 |
-|:---|:---|:---:|:---|:---:|:---:|:---:|
-| Nhãn 4 | Sunset | 0.082 | Nhãn 5 (Mountain) | 0.3421 | 0.5124 | **1 (Đầu chuỗi)** |
-| Nhãn 5 | Mountain | 0.114 | Nhãn 4 (Sunset) | 0.3421 | 0.5124 | **2 (Cuối chuỗi)** |
-
-### 5.2. Các chỉ số phân tích chuyên sâu:
-1. **So sánh $\mathbf{R}_{\text{error}}$ với $\Phi_{\text{label}}$:** Đánh giá mức độ sai lệch giữa ma trận tương quan nhãn biên thô và ma trận tương quan sai số thực tế.
-2. **Kiểm tra mức giảm phương sai tích lũy:** Đo lường sự thay đổi của Hamming Loss và Selective Macro-F1 khi sắp xếp theo tương quan sai số so với sắp xếp tự nhiên hoặc tương quan Phi.
-
----
-
-## 6. Kế Hoạch Triển Khai Chi Tiết v6.2 (Implementation Roadmap)
-
-| Giai đoạn | Nhiệm vụ kỹ thuật cụ thể | Sản phẩm đầu ra | Tiêu chí nghiệm thu |
-|:---|:---|:---|:---|
-| **Phase 1** | Xây dựng module `src/selection/br_residual_correlation.py` hỗ trợ tính ma trận tương quan sai số nhị phân và liên tục | Module `br_residual_correlation.py` | Kiểm thử ma trận đối xứng, đường chéo bằng 1.0, xử lý an toàn nhãn hằng số |
-| **Phase 2** | Thêm hàm sắp xếp thứ tự chuỗi `order_dl_by_residual_error()` | Hàm sắp xếp chuỗi | Đảm bảo tính tất định (deterministic tie-breaking) qua chỉ số nhãn |
-| **Phase 3** | Tích hợp nhánh cô lập `dl_method="error_corr_cc"` vào `GSIMLCPartialAbstentionClassifier` | Cập nhật `gsi_mlc_pa.py` | Kiểm thử không ảnh hưởng tới kết quả của chế độ `dl_method="ecc"` (v6.1) |
-| **Phase 4** | Xây dựng bộ test cô lập `tests/test_v6_2_residual_corr.py` | File test pytest độc lập | Vượt qua 100% test cases |
-| **Phase 5** | Xây dựng kịch bản benchmark `scripts/run_v6_2_error_correlation.py` | Script benchmark cô lập | Xuất bảng ma trận tương quan sai số và bảng so sánh trực tiếp vào `results_v6_2/` |
+### 6.2. Các Chỉ Số Đánh Giá Toàn Diện:
+- **Selective Macro-F1 & Selective Micro-F1:** Đánh giá chất lượng phân loại trên các mẫu được chấp nhận quyết định.
+- **Coverage (Tỷ lệ bao phủ):** Tỷ lệ quyết định không bị từ chối ($\text{Coverage} = \frac{N_{\text{decided}}}{N \times K}$).
+- **Full Macro-F1 & Full Micro-F1:** Đánh giá không từ chối (quy tắc ngưỡng 0.5 truyền thống).
+- **Hamming Loss & Zero-One Loss:** Đánh giá mức độ chính xác tổng thể trên toàn bộ không gian nhãn.
+- **Thời gian huấn luyện và suy diễn (Training/Inference Time):** Chứng minh tính vượt trội về chi phí tính toán so với ECC ($M=10$ chuỗi).

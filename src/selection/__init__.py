@@ -31,6 +31,12 @@ from .cv_peeling import (
     CVStratifiedPeelingSelector,
     evaluate_label_5fold_cv,
 )
+from .br_residual_correlation import (
+    build_residual_dependency_graph,
+    compute_br_residual_matrix,
+    compute_residual_pcc_matrix,
+    export_residual_correlation_audit_table,
+)
 
 
 __all__ = [
@@ -57,4 +63,9 @@ __all__ = [
     "CVPeelingResult",
     "CVStratifiedPeelingSelector",
     "evaluate_label_5fold_cv",
+    "compute_br_residual_matrix",
+    "compute_residual_pcc_matrix",
+    "build_residual_dependency_graph",
+    "export_residual_correlation_audit_table",
 ]
+
