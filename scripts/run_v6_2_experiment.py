@@ -50,6 +50,7 @@ from src.models.ensemble_classifier_chain import EnsembleClassifierChainClassifi
 from src.models.gsi_mlc_pa import GSIMLCPartialAbstentionClassifier
 from src.models.gsi_v6_1 import GSIMLCPAv6_1Classifier
 from src.models.gsi_v6_2 import GSIMLCPAv6_2Classifier
+from src.models.mlc_pa import MLCPartialAbstentionClassifier
 
 ALL_10_DATASETS = [
     "emotions",
@@ -76,7 +77,10 @@ def evaluate_model_fold(
     """Compute complete set of full and selective metrics for one model on test fold."""
     if hasattr(model, "predict_full"):
         full_preds = model.predict_full(X_test)
-        sel_preds = model.predict(X_test, cost=cost)
+        try:
+            sel_preds = model.predict(X_test, cost=cost)
+        except TypeError:
+            sel_preds = model.predict(X_test)
     elif hasattr(model, "predict"):
         full_preds = model.predict(X_test)
         sel_preds = full_preds
@@ -88,6 +92,7 @@ def evaluate_model_fold(
     if isinstance(
         model,
         (
+            MLCPartialAbstentionClassifier,
             GSIMLCPartialAbstentionClassifier,
             GSIMLCPAv6_1Classifier,
             GSIMLCPAv6_2Classifier,
@@ -208,6 +213,11 @@ def run_v6_2_benchmark(
                 "BR": lambda: create_multilabel_estimator(learner, random_state=random_state),
                 "CC": lambda: ClassifierChainClassifier(
                     base_estimator=create_binary_estimator(learner, random_state=random_state),
+                    random_state=random_state,
+                ),
+                "MLC_PA": lambda: MLCPartialAbstentionClassifier(
+                    base_estimator=learner,
+                    cost=cost,
                     random_state=random_state,
                 ),
                 "ECC": lambda: EnsembleClassifierChainClassifier(
@@ -376,7 +386,7 @@ def main():
     parser.add_argument("--threshold", type=float, default=0.75, help="Selective-F1 threshold")
     parser.add_argument("--corr-threshold", type=float, default=0.25, help="PCC residual error threshold")
     parser.add_argument("--cv", type=int, default=5, help="Outer CV folds")
-    parser.add_argument("--cost", type=float, default=0.40, help="Rejection cost c")
+    parser.add_argument("--cost", type=float, default=0.30, help="Rejection cost c")
     args = parser.parse_args()
 
     if args.datasets == ["all"]:
