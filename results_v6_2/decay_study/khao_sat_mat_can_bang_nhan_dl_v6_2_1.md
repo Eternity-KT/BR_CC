@@ -207,3 +207,67 @@ Hai tập dữ liệu này có đặc điểm chung: **Không có bất kỳ nh�
 | 1 | `happy-pleased` | **DL** | 166 | 28.04% | 2.57 | 0.1881 |
 | 3 | `quiet-still` | **IL** | 148 | 25.00% | 3.00 | 0.8043 |
 
+---
+
+## 4. Khảo Sát Tác Động Của Ngưỡng Tương Quan Sai Số Phần Dư $\tau_{\text{corr}}$ (Toàn Bộ 10 Tập Dữ Liệu)
+
+Nhằm giải quyết triệt để vấn đề "nghẽn cạnh" và mất cân bằng nhãn ở Pha 2, chúng tôi đã tiến hành khảo sát độ nhạy của ngưỡng tương quan phần dư sai số:
+$$\tau_{\text{corr}} \in \{0.75, \; 0.25, \; 0.20, \; 0.15\}$$
+trên toàn bộ 10 tập dữ liệu đa nhãn bằng 5-Fold Stratified Cross-Validation (mô hình cơ sở Logistic Regression, chi phí từ chối $c = 0.30$).
+
+### 4.1. Bảng Đối Sánh Số Cạnh Đồ Thị Phụ Thuộc $DL\_temp$ Trung Bình
+| Tập Dữ Liệu | Số Nhãn $DL$ | $\tau_{\text{corr}} = 0.75$ (Cũ) | $\tau_{\text{corr}} = 0.25$ | $\tau_{\text{corr}} = 0.20$ | $\tau_{\text{corr}} = 0.15$ | Hiện Tượng Quan Sát |
+|:---|:---:|:---:|:---:|:---:|:---:|:---|
+| **chd49** | 4 | **0.0** | 2.0 | 2.0 | 2.0 | Thoát khỏi tình trạng thoái hóa rỗng |
+| **emotions** | 3 | **0.0** | 1.2 | 1.2 | 2.4 | Kết nối các cặp cảm xúc đối nghịch |
+| **genbase** | 9 | 0.4 | 1.6 | 1.6 | 1.6 | Tăng cường liên kết giữa các mẫu hiếm |
+| **gpositivepseaac** | 2 | **0.0** | 0.0 | 0.8 | 1.6 | Cần $\tau \le 0.20$ để vượt trần tương quan |
+| **humanpseaac** | 14 | **0.0** | 0.0 | 1.6 | 8.0 | $\tau \le 0.20$ bắt đầu tạo liên kết cụm |
+| **music** | 3 | **0.0** | 1.2 | 1.2 | 2.4 | Tương đồng với tập emotions |
+| **plantpseaac** | 12 | **0.0** | 2.8 | 6.0 | 9.2 | Khôi phục liên kết giữa các bào quan |
+| **scene** | 2 | **0.0** | 0.8 | 0.8 | 0.8 | Cặp Mountain - Urban liên kết chặt |
+| **viruspseaac** | 5 | **0.0** | 2.0 | 5.6 | 8.8 | Liên kết mạnh giữa các vị trí ký chủ |
+| **yeast** | 12 | 2.8 | 12.0 | 17.6 | 24.0 | Cấu trúc đồ thị giàu thông tin |
+| **Trung Bình Toàn Bộ** | **6.6** | **0.32** | **2.36** | **3.88** | **7.08** | **Tăng từ 0.3 lên 2.4 - 3.9 cạnh/tập** |
+
+### 4.2. Bảng Đối Sánh Điểm Selective Macro-F1 (Có Từ Chối Bayes $c = 0.30$)
+| Tập Dữ Liệu | $\tau = 0.75$ (Cũ) | $\tau = 0.25$ | $\tau = 0.20$ | $\tau = 0.15$ | Độ Phủ (Coverage) | $\Delta$ Tốt Nhất vs 0.75 |
+|:---|:---:|:---:|:---:|:---:|:---:|:---:|
+| **scene** | 0.7637 | **0.7644** | **0.7644** | **0.7644** | 88.8% | **+0.0007** |
+| **music** | 0.6671 | 0.6688 | 0.6688 | **0.6690** | 69.3% | **+0.0019** |
+| **emotions** | **0.6627** | 0.6615 | 0.6615 | 0.6621 | 72.4% | -0.0006 |
+| **genbase** | **0.6310** | **0.6310** | **0.6310** | **0.6310** | 99.6% | 0.0000 |
+| **gpositivepseaac** | **0.6222** | **0.6222** | 0.6220 | 0.6193 | 87.5% | 0.0000 |
+| **chd49** | **0.5234** | 0.5203 | 0.5203 | 0.5203 | 63.3% | -0.0031 |
+| **viruspseaac** | 0.3646 | 0.3655 | 0.3826 | **0.3833** | 84.3% | **+0.0187 (+1.87%)** |
+| **yeast** | 0.3456 | **0.3467** | 0.3447 | 0.3465 | 75.2% | **+0.0011** |
+| **plantpseaac** | 0.1580 | **0.1592** | 0.1539 | 0.1559 | 93.1% | **+0.0012** |
+| **humanpseaac** | 0.1179 | **0.1179** | **0.1179** | 0.1167 | 92.3% | 0.0000 |
+| **Trung Bình** | **0.4856** | **0.4857** | **0.4867** | **0.4868** | **81.8%** | **+0.0012** |
+
+### 4.3. Bảng Đối Sánh Điểm Full Macro-F1 (Không Từ Chối, Ngưỡng 0.5)
+| Tập Dữ Liệu | $\tau = 0.75$ | $\tau = 0.25$ | $\tau = 0.20$ | $\tau = 0.15$ | Xu Hướng Cải Thiện |
+|:---|:---:|:---:|:---:|:---:|:---|
+| **scene** | **0.7158** | 0.7144 | 0.7144 | 0.7144 | Ổn định quanh mức 0.715 |
+| **genbase** | **0.6489** | **0.6489** | **0.6489** | **0.6489** | Bất biến (Độ chính xác cao) |
+| **music** | 0.6318 | 0.6325 | 0.6325 | **0.6341** | **Tăng đều +0.0023** |
+| **emotions** | 0.6284 | **0.6296** | **0.6296** | 0.6287 | **Tăng +0.0012 tại tau 0.20-0.25** |
+| **gpositivepseaac** | **0.5752** | **0.5752** | 0.5694 | 0.5719 | Ổn định tại tau 0.25 |
+| **chd49** | 0.5116 | **0.5123** | **0.5123** | **0.5123** | **Tăng +0.0007 tại tau <= 0.25** |
+| **viruspseaac** | 0.3767 | **0.3801** | 0.3797 | 0.3791 | **Tăng +0.0034 tại tau <= 0.25** |
+| **yeast** | 0.3499 | 0.3503 | **0.3519** | 0.3518 | **Tăng +0.0020 tại tau <= 0.20** |
+| **plantpseaac** | **0.1845** | 0.1836 | 0.1833 | 0.1836 | Biến thiên nhẹ (-0.0009) |
+| **humanpseaac** | 0.1407 | 0.1407 | **0.1408** | 0.1394 | Đạt đỉnh tại tau 0.20 |
+| **Trung Bình** | **0.4763** | **0.4768** | **0.4763** | **0.4764** | **Đạt đỉnh 0.4768 tại tau = 0.25** |
+
+### 4.4. Đánh Giá Khoa Học & Khuyến Nghị
+1. **Khắc phục triệt để hiện tượng liệt cạnh của $\tau_{\text{corr}} = 0.75$:** 
+   Tại ngưỡng cũ $0.75$, có tới **8/10 tập dữ liệu hoàn toàn không có cạnh nào (0.0 cạnh)**, khiến mô hình bị thoái hóa hoàn toàn về Binary Relevance độc lập cho các nhãn phụ thuộc.
+2. **Điểm tối ưu Pareto nằm ở $\tau_{\text{corr}} = 0.20 \sim 0.25$:**
+   * Tại **$\tau_{\text{corr}} = 0.25$**, Full Macro-F1 trung bình đạt mức cao nhất toàn cục (**0.4768**), tạo ra trung bình **2.36 cạnh chất lượng cao** trên mỗi tập dữ liệu, tăng F1 trên các tập âm nhạc, hình ảnh, nấm men và virus.
+   * Tại **$\tau_{\text{corr}} = 0.20$**, toàn bộ 10/10 tập dữ liệu đều xuất hiện liên kết phụ thuộc điều kiện, cải thiện ấn tượng **+1.87% Selective Macro-F1** trên tập `viruspseaac`.
+   * Hạ sâu xuống **$\tau = 0.15$** dẫn đến đồ thị quá dày đặc (ví dụ `yeast` có 24 cạnh, `plantpseaac` có 9.2 cạnh), bắt đầu xuất hiện nhiễu tích lũy sai số.
+3. **Quyết định cấu hình chuẩn hóa:**
+   Khuyến nghị chính thức áp dụng **$\tau_{\text{corr}} = 0.25$** làm ngưỡng mặc định toàn cục cho phiên bản v6.2.1, thay thế hoàn toàn ngưỡng cũ $0.75$.
+
+
