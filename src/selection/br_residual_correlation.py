@@ -223,3 +223,55 @@ def export_residual_correlation_audit_table(
         })
 
     return pd.DataFrame(rows)
+
+
+def one_step_normalized_mean_field(
+    P_base: np.ndarray,
+    corr_matrix: np.ndarray,
+    alpha: float = 0.25,
+    threshold: float = 0.25,
+    z_max: float = 0.5,
+    eps: float = 1e-6,
+) -> np.ndarray:
+    """Refine base predicted probabilities via one-step normalized mean-field belief propagation.
+
+    Parameters:
+        P_base: Base predicted probabilities of shape (n_samples, n_labels), values in [0.0, 1.0].
+        corr_matrix: Pairwise Pearson correlation coefficient matrix of shape (n_labels, n_labels).
+        alpha: Maximum coupling scaling factor (default: 0.25).
+        threshold: Correlation magnitude threshold for sparse coupling (default: 0.25).
+        z_max: Maximum logit adjustment shift (default: 0.5).
+        eps: Small numerical epsilon (default: 1e-6).
+
+    Returns:
+        Refined probability matrix of shape (n_samples, n_labels).
+    """
+    P_base = np.asarray(P_base, dtype=np.float64)
+    if P_base.ndim != 2:
+        raise ValueError(f"Expected 2D array, got shape {P_base.shape}")
+    n_samples, n_labels = P_base.shape
+    if n_labels <= 1 or corr_matrix is None or corr_matrix.shape != (n_labels, n_labels):
+        return P_base
+
+    W = np.copy(corr_matrix)
+    W[np.abs(W) < threshold] = 0.0
+    np.fill_diagonal(W, 0.0)
+
+    # Degree normalization with maximum denominator guard
+    row_sums = np.sum(np.abs(W), axis=1, keepdims=True)
+    norm_factor = np.maximum(1.0, row_sums)
+    W_norm = alpha * (W / norm_factor)
+
+    # Symmetric spin-centering in [-1.0, +1.0]
+    delta = 2.0 * P_base - 1.0
+
+    # 1-step interaction calculation
+    interaction = np.dot(delta, W_norm.T)
+    interaction = np.clip(interaction, -z_max, z_max)
+
+    # Apply shift to base logits
+    P_clipped = np.clip(P_base, eps, 1.0 - eps)
+    theta = np.log(P_clipped / (1.0 - P_clipped))
+
+    return 1.0 / (1.0 + np.exp(-(theta + interaction)))
+

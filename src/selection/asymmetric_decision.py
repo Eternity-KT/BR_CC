@@ -82,6 +82,8 @@ def apply_coverage_guard(
     tau_1: float,
     gamma_min: float = 0.70,
     max_iterations: int = 50,
+    precision_guard: bool = False,
+    min_tau_1: float = 0.50,
 ) -> Tuple[float, float, bool]:
     """
     Adjust [tau_0, tau_1] rejection band if empirical decision coverage < gamma_min.
@@ -92,6 +94,8 @@ def apply_coverage_guard(
         tau_1: Initial positive decision threshold.
         gamma_min: Minimum required coverage in [0, 1]. Default 0.70.
         max_iterations: Maximum contraction steps.
+        precision_guard: If True, do not allow tau_1 to shrink below min_tau_1 (prevents FP explosion).
+        min_tau_1: Minimum allowed positive threshold under precision guard.
 
     Returns:
         tau_0_adj: Adjusted tau_0.
@@ -109,13 +113,16 @@ def apply_coverage_guard(
     if current_cov >= gamma:
         return tau_0, tau_1, False
 
-    # Shrink rejection band iteratively towards the median of rejection zone
+    # Shrink rejection band iteratively
     t0, t1 = float(tau_0), float(tau_1)
     step = (t1 - t0) / (2.0 * max_iterations)
 
     for _ in range(max_iterations):
         t0 += step
-        t1 -= step
+        if not precision_guard or t1 > min_tau_1:
+            t1 -= step
+            if precision_guard and t1 < min_tau_1:
+                t1 = min_tau_1
         if t0 >= t1:
             mid = 0.5 * (tau_0 + tau_1)
             t0 = mid - 1e-4
@@ -134,6 +141,8 @@ def compute_adaptive_thresholds_table(
     cost: float = 0.30,
     gamma_min: float = 0.70,
     clip_bounds: Tuple[float, float] = (0.005, 0.995),
+    precision_guard: bool = False,
+    min_tau_1: float = 0.50,
 ) -> Dict[int, Dict[str, Any]]:
     """
     Compute prior-calibrated adaptive thresholds for all labels.
@@ -179,6 +188,8 @@ def compute_adaptive_thresholds_table(
                 tau_0=t0,
                 tau_1=t1,
                 gamma_min=gamma_min,
+                precision_guard=precision_guard,
+                min_tau_1=min_tau_1,
             )
             emp_cov = float(np.mean((p_j <= t0) | (p_j >= t1)))
 

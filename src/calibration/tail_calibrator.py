@@ -58,12 +58,19 @@ class TailCalibrator:
         p_clipped = np.clip(p, self.clip_eps, 1.0 - self.clip_eps)
         logits = np.log(p_clipped / (1.0 - p_clipped)).reshape(-1, 1)
 
-        # Compute imbalance weights
+        # Compute imbalance weights based on method
         n_pos = np.sum(labels == 1)
         n_neg = np.sum(labels == 0)
-        pos_weight = float(n_neg) / float(max(n_pos, 1))
-
-        sample_weight = np.where(labels == 1, pos_weight, 1.0).astype(np.float64)
+        
+        if self.method in ("standard_platt", "unweighted"):
+            sample_weight = None
+        elif self.method in ("sqrt_platt", "balanced_root"):
+            pos_weight = float(n_neg) / float(max(n_pos, 1))
+            sample_weight = np.where(labels == 1, np.sqrt(pos_weight), 1.0).astype(np.float64)
+        else:
+            # Default: weighted_platt (full linear class weight)
+            pos_weight = float(n_neg) / float(max(n_pos, 1))
+            sample_weight = np.where(labels == 1, pos_weight, 1.0).astype(np.float64)
 
         try:
             lr = LogisticRegression(

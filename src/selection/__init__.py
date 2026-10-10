@@ -36,6 +36,7 @@ from .br_residual_correlation import (
     compute_br_residual_matrix,
     compute_residual_pcc_matrix,
     export_residual_correlation_audit_table,
+    one_step_normalized_mean_field,
 )
 
 
@@ -67,5 +68,7 @@ __all__ = [
     "compute_residual_pcc_matrix",
     "build_residual_dependency_graph",
     "export_residual_correlation_audit_table",
+    "one_step_normalized_mean_field",
 ]
+
 
