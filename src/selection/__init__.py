@@ -38,6 +38,13 @@ from .br_residual_correlation import (
     export_residual_correlation_audit_table,
     one_step_normalized_mean_field,
 )
+from .tri_regime_decision import (
+    apply_dual_coverage_guard,
+    apply_tri_regime_abstention,
+    compute_label_balance_factor,
+    compute_tri_regime_adaptive_thresholds_table,
+    compute_tri_regime_raw_thresholds,
+)
 
 
 __all__ = [
@@ -69,6 +76,11 @@ __all__ = [
     "build_residual_dependency_graph",
     "export_residual_correlation_audit_table",
     "one_step_normalized_mean_field",
+    "compute_label_balance_factor",
+    "compute_tri_regime_raw_thresholds",
+    "apply_dual_coverage_guard",
+    "compute_tri_regime_adaptive_thresholds_table",
+    "apply_tri_regime_abstention",
 ]
 
 

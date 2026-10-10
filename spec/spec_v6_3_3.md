@@ -85,24 +85,24 @@ $$\beta_l = 1.0 - 2.0 \cdot |\pi_l - 0.50| \in [0, 1]$$
 - Khi $\pi_l = 0.50$ (hoàn toàn cân bằng): $\beta_l = 1.0$.
 - Khi $\pi_l \to 0.0$ hoặc $\pi_l \to 1.0$ (mất cân bằng tuyệt đối): $\beta_l \to 0.0$.
 
-Thiết lập ngưỡng chuyển đổi $\tau_{\text{balance}} = 0.40$ (tương ứng với dải tiên nghiệm $\pi_l \in [0.20, 0.80]$):
+Thiết lập ngưỡng chuyển đổi $\tau_{\text{balance}} = 0.75$ (tương ứng với dải tiên nghiệm cân bằng $\pi_l \in [0.375, 0.625]$):
 
-#### Chế độ 1: Lệch Âm Cực Đoan (Extreme Negative-Dominant Regime — $\pi_l < 0.20$, $\beta_l < 0.40$)
-- **Áp dụng cho:** Các nhãn protein hiếm của `humanpseaac`, `plantpseaac`, `genbase`, và nhãn $L_3$ của `chd49`.
-- **Cơ chế Hiệu chuẩn:** Áp dụng Balanced-Root Platt Scaling:
+#### Chế độ 1: Lệch Âm Cực Đoan (Extreme Negative-Dominant Regime — $\pi_l < 0.375$, $\beta_l < 0.75$)
+- **Áp dụng cho:** Các nhãn protein hiếm của `humanpseaac`, `plantpseaac`, `genbase`, `emotions`, `music`, và nhãn $L_3$ của `chd49`.
+- **Cơ chế Hiệu chuẩn:** Áp dụng Balanced-Root Platt Scaling (cho nhãn có $\pi_l < 0.20$):
   $$w_1 = \sqrt{\frac{N_0}{N_1}}, \quad w_0 = 1.0$$
 - **Ngưỡng Bayes LR Cơ sở:**
   $$\tau_{1,\text{LR}}(l) = \frac{(1 - c)\pi_l}{c(1 - \pi_l) + (1 - c)\pi_l}, \quad \tau_{0,\text{LR}}(l) = \frac{c\pi_l}{(1 - c)(1 - \pi_l) + c\pi_l}$$
 - **Ràng buộc Precision Guard:** $\tau_1(l) = \max(0.50, \tau_{1,\text{LR}}(l))$.
 
-#### Chế độ 2: Cân Bằng / Lệch Nhẹ (Symmetric Regime — $0.20 \le \pi_l \le 0.80$, $\beta_l \ge 0.40$)
-- **Áp dụng cho:** Phần lớn các nhãn của `chd49` ($L_0, L_1, L_2, L_4$), `yeast`, `scene`, `emotions`, `music`, và $L_3, L_4$ của `viruspseaac`.
+#### Chế độ 2: Cân Bằng (Symmetric Regime — $0.375 \le \pi_l \le 0.625$, $\beta_l \ge 0.75$)
+- **Áp dụng cho:** Các nhãn cân bằng tự nhiên như $L_4$ của `chd49` ($\pi \approx 0.48$), `yeast`, và $L_3, L_4$ của `viruspseaac`.
 - **Cơ chế Hiệu chuẩn:** **Tắt bỏ Tail-Calibrator** ($P_{\text{cal}} = P_{\text{raw}}$), giữ nguyên hình thái xác suất tự nhiên của bộ học cơ sở để không làm méo mó độ dốc gradient.
 - **Ngưỡng Quyết định:** Khôi phục chính xác quy tắc Chow đối xứng của v6.2.1:
   $$\tau_0(l) = c = 0.30, \quad \tau_1(l) = 1.0 - c = 0.70$$
 
-#### Chế độ 3: Lệch Dương Cực Đoan (Extreme Positive-Dominant Regime — $\pi_l > 0.80$, $\beta_l < 0.40$)
-- **Áp dụng cho:** Nhãn $L_5$ của `chd49` ($\pi = 0.76 \approx 0.80$) và các bài toán y sinh có nhãn phổ biến áp đảo.
+#### Chế độ 3: Lệch Dương Cực Đoan (Extreme Positive-Dominant Regime — $\pi_l > 0.625$, $\beta_l < 0.75$)
+- **Áp dụng cho:** Nhãn $L_0$ ($\pi = 0.609 \approx 0.625$) và $L_5$ ($\pi = 0.760$) của `chd49`.
 - **Cơ chế Hiệu chuẩn:** Balanced-Root Platt Scaling bù trừ lớp âm:
   $$w_0 = \sqrt{\frac{N_1}{N_0}}, \quad w_1 = 1.0$$
 - **Ngưỡng Bayes LR Đảo chiều:** Hoán vị vai trò $0 \leftrightarrow 1$:
@@ -340,7 +340,39 @@ Trong báo cáo thực nghiệm v6.3.3, bắt buộc thực hiện 3 nghiên c�
 
 ---
 
-## 5. Kiến Trúc Cô Lập Hệ Thống (System Isolation & File Structure)
+## 5. Hệ Thống 6 Nguyên Tắc An Toàn Bắt Buộc (Mandatory Safety & Integrity Invariants)
+
+Để bảo đảm tính liêm chính học thuật, ngăn ngừa hồi quy và giữ vững chuẩn mực kỹ thuật trong suốt quá trình triển khai phiên bản mới, mô hình v6.3.3 bắt buộc phải tuân thủ nghiêm ngặt 6 nguyên tắc an toàn sau:
+
+### Nguyên Tắc 1: Cô Lập Tuyệt Đối & Không Hồi Quy (Zero-Regression & Component Isolation)
+- **Bất biến:** Mọi phiên bản tiền nhiệm (`v6.1`, `v6.2`, `v6.2.1`, `v6.3`, `v6.3.1`, `v6.3.2`) phải được bảo toàn nguyên trạng, tuyệt đối không được sửa đổi logic cốt lõi của các lớp cũ nhằm phục vụ v6.3.3.
+- **Triển khai:** Mọi cấu phần của v6.3.3 phải nằm trong các tệp module mới riêng biệt (`tri_regime_decision.py`, `adaptive_calibrator.py`, `gsi_v6_3_3.py`). Toàn bộ 160 unit test hiện có phải tiếp tục vượt qua $100\%$.
+
+### Nguyên Tắc 2: Thuần Khiết Không Gian Đặc Trưng & Cách Ly Từ Chối (Feature Purity Invariance)
+- **Bất biến:** Không gian đặc trưng ngữ cảnh ($FS$) giữa các pha (Pha 1 Peeling, Pha 2 DL) chỉ được phép tiếp nhận **xác suất liên tục đã chuẩn hóa** ($P \in [0.0, 1.0]$).
+- **Cấm kỵ:** Tuyệt đối KHÔNG truyền nhãn nhị phân rời rạc $\{0, 1\}$ hay giá trị từ chối $-1$ vào không gian đặc trưng huấn luyện. Quyết định từ chối (Partial Abstention) chỉ được thực thi duy nhất một lần tại bước suy diễn đầu ra cuối cùng (Final Inference Stage).
+
+### Nguyên Tắc 3: Liêm Chính Đánh Giá Chéo & Chống Rò Rỉ Thông Tin (Strict In-Fold Integrity)
+- **Bất biến:** Tỷ lệ tiên nghiệm $\pi_l$, chỉ số cân bằng nhãn $\beta_l$, việc gán Chế độ (Regime Assignment), và các tham số hiệu chuẩn Platt bắt buộc phải được tính toán **thuần túy trên tập huấn luyện nội bộ của từng Fold** ($Y_{\text{train\_fold}}$).
+- **Cấm kỵ:** Tuyệt đối cấm ước lượng $\pi_l$ trên toàn bộ tập dữ liệu $Y$ trước khi chia Fold hoặc sử dụng thông tin từ tập kiểm định $Y_{\text{val}} / Y_{\text{test}}$, vì điều đó vi phạm quy tắc chống rò rỉ thông tin (Data Leakage).
+
+### Nguyên Tắc 4: Rào Chắn Độ Phủ & Bảo Vệ Độ Chính Xác (Coverage Guard & Dual Precision Guard)
+- **Bất biến:** 
+  - Mọi nhãn đều phải thỏa mãn sàn độ phủ tối thiểu $\gamma_{\min} = 0.70$ (ít nhất $70\%$ các mẫu phải được đưa ra quyết định nhị phân $0$ hoặc $1$).
+  - Với các nhãn thuộc Chế độ 1 ($\pi_l < 0.20$): Phải kích hoạt **Precision Guard** ($\tau_1 \ge 0.50$) để chặn đứng hiện tượng bùng nổ Dương tính Giả (False Positive Explosion).
+  - Với các nhãn thuộc Chế độ 3 ($\pi_l > 0.80$): Phải kích hoạt **Negative Precision Guard** ($\tau_0 \le 0.50$) để chặn đứng hiện tượng bùng nổ Âm tính Giả (False Negative Explosion).
+
+### Nguyên Tắc 5: Đồng Nhất Thang Đo Xác Suất Cho Pha Khớp Nối (Probabilistic Scale Alignment)
+- **Bất biến:** Trước khi nạp xác suất vào One-Step Normalized Mean-Field coupling ở Pha DL, ma trận xác suất nền OOF giữa các nhãn (dù thuộc Chế độ 1, 2 hay 3) phải ở cùng thang đo xác suất chuẩn. Biến spin $S_p = 2P_p - 1$ không được phép tạo ra độ lệch nhân tạo vào độ dịch chuyển logit $\Delta z_l$.
+- **Ràng buộc cứng:** Mọi độ dịch chuyển logit phải bị chặn cứng trong khoảng $[-z_{\max}, +z_{\max}]$ với $z_{\max} = 0.50$, và trọng số khớp nối phải tuân thủ chuẩn hóa bậc Degree Normalization $\max(1.0, \sum_q |W_{lq}|)$.
+
+### Nguyên Tắc 6: Chuẩn Mực Báo Cáo Khoa Học & Tính Tái Lập (Scientific Reporting Standard)
+- **Bất biến:** Tuyệt đối không dùng định dạng HTML thô cho báo cáo khoa học chính thức. Toàn bộ kết quả đối chuẩn phải được tổng hợp bằng **LaTeX (`.tex`)** chuẩn quốc tế IEEE/Springer và biên dịch tự động ra tệp **PDF** bằng `pdflatex`.
+- **Định lượng:** Báo cáo phải báo cáo đầy đủ trung bình 5-Fold kèm độ lệch chuẩn ($\pm \text{std}$) cho tất cả 6 độ đo chuẩn: Selective Macro-F1, Selective Micro-F1, Subset Accuracy, Hamming Loss, Selective Hamming Loss, và Coverage.
+
+---
+
+## 6. Kiến Trúc Cô Lập Hệ Thống (System Isolation & File Structure)
 
 Nhằm đảm bảo tính tái lập (Reproducibility) và không làm ảnh hưởng đến mã nguồn của các phiên bản trước (`v6.2`, `v6.3.1`, `v6.3.2`), toàn bộ cấu phần của v6.3.3 được đặt trong các tệp độc lập:
 
@@ -375,7 +407,7 @@ BR_CC/
 
 ---
 
-## 6. Quy Chuẩn Báo Cáo Khoa Học (Scientific Reporting Standard)
+## 7. Quy Chuẩn Báo Cáo Khoa Học (Scientific Reporting Standard)
 
 1. **Định dạng báo cáo:**
    - Toàn bộ kết quả thực nghiệm chính thức phải được tổng hợp bằng **LaTeX (`.tex`)** theo chuẩn bài báo hội nghị/tạp chí quốc tế chuyên ngành (IEEE Transactions on Knowledge and Data Engineering / Springer Machine Learning).
