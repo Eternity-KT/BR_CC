@@ -34,20 +34,20 @@ from src.models.gsi_v6_3_2 import GSIMLCPAv6_3_2Classifier
 from src.models.gsi_v6_3_3 import GSIMLCPAv6_3_3Classifier
 
 DEFAULT_DATASETS = [
-    "chd49",
-    "viruspseaac",
-    "plantpseaac",
-    "humanpseaac",
     "emotions",
     "scene",
     "yeast",
+    "plantpseaac",
+    "humanpseaac",
+    "chd49",
     "music",
     "gpositivepseaac",
     "genbase",
+    "viruspseaac",
 ]
 
 
-def evaluate_fold(y_test: np.ndarray, model: Any, X_test: np.ndarray, cost: float = 0.30) -> Dict[str, float]:
+def evaluate_fold(y_test: np.ndarray, model: Any, X_test: np.ndarray, cost: Any = None) -> Dict[str, float]:
     full_preds = model.predict_full(X_test)
     sel_preds = model.predict(X_test, cost=cost)
 
@@ -76,10 +76,10 @@ def evaluate_fold(y_test: np.ndarray, model: Any, X_test: np.ndarray, cost: floa
 
 def run_v6_3_3_benchmark(
     datasets: List[str] = DEFAULT_DATASETS,
-    tag: str = "v6_3_3_eval",
+    tag: str = "v6_3_3_all10ds",
     base_learner: str = "logistic",
     n_splits: int = 5,
-    cost: float = 0.30,
+    cost: Any = None,
     random_state: int = 42,
     output_dir: Path = WORKSPACE_ROOT / "results_v6_3",
 ):
@@ -93,7 +93,7 @@ def run_v6_3_3_benchmark(
     print("\n" + "=" * 95)
     print(f"BENCHMARK: GSI-MLC-PA v6.3.2 vs. v6.3.3 (Adaptive Tri-Regime) [{tag}]")
     print(f"Datasets: {datasets}")
-    print(f"Base Learner: {base_learner} | Folds: {n_splits} | Rejection Cost: {cost}")
+    print(f"Base Learner: {base_learner} | Folds: {n_splits}")
     print("=" * 95)
 
     for dataset_name in datasets:
@@ -118,8 +118,12 @@ def run_v6_3_3_benchmark(
                 base_learner=base_learner,
                 mf_alpha=0.25,
                 mf_z_max=0.5,
-                tau_balance=0.75,
+                tau_balance=0.85,
                 blend_kappa=20.0,
+                cost=0.30,
+                gamma_min=0.70,
+                tau_1_cap=0.55,
+                tau_0_floor=0.45,
                 random_state=seed,
             ),
         }
@@ -205,8 +209,8 @@ def run_v6_3_3_benchmark(
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--datasets", nargs="+", default=["chd49", "viruspseaac", "plantpseaac", "humanpseaac", "emotions"])
-    parser.add_argument("--tag", type=str, default="v6_3_3_eval")
+    parser.add_argument("--datasets", nargs="+", default=DEFAULT_DATASETS)
+    parser.add_argument("--tag", type=str, default="v6_3_3_all10ds")
     parser.add_argument("--base_learner", type=str, default="logistic")
     args = parser.parse_args()
 

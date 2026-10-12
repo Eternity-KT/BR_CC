@@ -71,8 +71,10 @@ class GSIMLCPAv6_3_3Classifier(GSIMLCPAv6_3_2Classifier):
         random_state: int = 42,
         mf_alpha: float = 0.25,
         mf_z_max: float = 0.5,
-        tau_balance: float = 0.75,
+        tau_balance: float = 0.85,
         blend_kappa: float = 20.0,
+        tau_1_cap: float = 0.55,
+        tau_0_floor: float = 0.45,
     ):
         super().__init__(
             base_learner=base_learner,
@@ -99,6 +101,8 @@ class GSIMLCPAv6_3_3Classifier(GSIMLCPAv6_3_2Classifier):
         )
         self.tau_balance = float(tau_balance)
         self.blend_kappa = float(blend_kappa)
+        self.tau_1_cap = float(tau_1_cap)
+        self.tau_0_floor = float(tau_0_floor)
 
     def fit(self, X, Y):
         """Fit GSI-MLC-PA v6.3.3 using CV peeling, OS-NMF coupling, and Tri-Regime calibration."""
@@ -286,6 +290,8 @@ class GSIMLCPAv6_3_3Classifier(GSIMLCPAv6_3_2Classifier):
                 blend_kappa=self.blend_kappa,
                 gamma_min=self.gamma_min,
                 precision_guard=self.precision_guard,
+                tau_1_cap=self.tau_1_cap,
+                tau_0_floor=self.tau_0_floor,
             )
         else:
             self.adaptive_thresholds_ = {

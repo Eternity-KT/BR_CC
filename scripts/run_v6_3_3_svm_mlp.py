@@ -43,7 +43,7 @@ TARGET_LEARNERS = [
     ("mlp", "MLP"),
 ]
 
-def evaluate_fold(y_test: np.ndarray, model: Any, X_test: np.ndarray, cost: float = 0.30) -> Dict[str, float]:
+def evaluate_fold(y_test: np.ndarray, model: Any, X_test: np.ndarray, cost: Any = None) -> Dict[str, float]:
     full_preds = model.predict_full(X_test)
     sel_preds = model.predict(X_test, cost=cost)
 
@@ -69,14 +69,14 @@ def evaluate_fold(y_test: np.ndarray, model: Any, X_test: np.ndarray, cost: floa
         "Subset_Accuracy": float(full_metrics["Subset Accuracy"]),
     }
 
-def main():
+def main(overwrite: bool = True):
     output_dir = WORKSPACE_ROOT / "results_v6_3"
     output_dir.mkdir(parents=True, exist_ok=True)
     detailed_csv = output_dir / "v6_3_3_svm_mlp_detailed_folds.csv"
 
     rows: List[Dict[str, Any]] = []
     completed_keys = set()
-    if detailed_csv.exists():
+    if not overwrite and detailed_csv.exists():
         try:
             df_old = pd.read_csv(detailed_csv)
             rows = df_old.to_dict(orient="records")
@@ -128,7 +128,7 @@ def main():
                 model.fit(X_train, y_train)
                 fit_time = time.time() - t0
 
-                metrics = evaluate_fold(y_test, model, X_test, cost=0.30)
+                metrics = evaluate_fold(y_test, model, X_test, cost=None)
                 record = {
                     "dataset": dataset_name,
                     "learner": display_learner,

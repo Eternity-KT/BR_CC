@@ -4,10 +4,14 @@ Adaptive Tri-Regime Decision & Smooth Boundary Blending for GSI-MLC-PA Version 6
 Reference:
     - spec/spec_v6_3_3.md
     - Chow (1970) Optimal Rejection Rule.
-    - Extended to Tri-Regime Inference:
-        * Regime 1 (Rare-Negative): pi_l < 0.20 -> Asymmetric Negative Verification (Bayes LR + Precision Guard).
-        * Regime 2 (Symmetric / Balanced): 0.20 <= pi_l <= 0.80 -> Symmetric Chow Rule [c, 1-c].
-        * Regime 3 (Rare-Positive): pi_l > 0.80 -> Inverted Asymmetric Positive Verification.
+    - Extended to Refined Tri-Regime Inference:
+        * Regime 1 (Rare-Negative): pi_l < 0.425 -> Asymmetric Negative Verification (Bayes LR + Precision Guard).
+        * Regime 2 (Symmetric / Balanced): 0.425 <= pi_l <= 0.575 -> Symmetric Chow Rule [c, 1-c].
+        * Regime 3 (Rare-Positive): pi_l > 0.575 -> Inverted Asymmetric Positive Verification.
+    - Dual F1-Oriented Threshold Clamping:
+        * pi_l <= 0.50 -> tau_1 <= tau_1_cap (0.55) to prevent positive recall collapse.
+        * pi_l > 0.50 -> tau_0 >= tau_0_floor (0.45) to prevent negative recall collapse.
+    - High-Coverage Pareto Rejection with gamma_min floor (0.78).
     - Continuous blending via sigmoid factor eliminates discontinuity cliffs.
 """
 
@@ -29,21 +33,25 @@ def compute_label_balance_factor(prior: float) -> float:
 def compute_tri_regime_raw_thresholds(
     prior: float,
     cost: float = 0.30,
-    tau_balance: float = 0.75,
+    tau_balance: float = 0.85,
     blend_kappa: float = 20.0,
     clip_bounds: Tuple[float, float] = (0.005, 0.995),
     min_separation: float = 0.02,
+    tau_1_cap: float = 0.55,
+    tau_0_floor: float = 0.45,
 ) -> Tuple[float, float, str, float]:
     """
-    Compute blended decision thresholds [tau_0, tau_1] and regime label.
+    Compute blended decision thresholds [tau_0, tau_1] and regime label with Dual F1 Clamping.
 
     Parameters:
         prior: Label positive prior probability pi in [0, 1].
-        cost: Base rejection cost c in (0, 0.5). Default 0.30.
-        tau_balance: Threshold on beta_l to separate balanced from extreme regime. Default 0.40.
+        cost: Base rejection cost c in (0, 0.5). Default 0.35.
+        tau_balance: Threshold on beta_l to separate balanced from extreme regime. Default 0.85.
         blend_kappa: Slope for smooth sigmoid transition. Default 20.0.
         clip_bounds: Bound tuple for numerical stability.
         min_separation: Minimum gap between tau_0 and tau_1.
+        tau_1_cap: Maximum positive threshold for minority positive labels (pi <= 0.50). Default 0.55.
+        tau_0_floor: Minimum negative threshold for minority negative labels (pi > 0.50). Default 0.45.
 
     Returns:
         tau_0: Blended negative decision threshold.
@@ -78,8 +86,10 @@ def compute_tri_regime_raw_thresholds(
         tau_0_asym = float(np.clip(tau_0_raw, min_t, 0.49))
         tau_1_asym = float(np.clip(tau_1_raw, 0.51, max_t))
 
-        # Precision guard: positive threshold never below 0.50
+        # Precision guard: positive threshold never below 0.50, capped at tau_1_cap
         tau_1_asym = max(0.50, tau_1_asym)
+        if tau_1_cap is not None:
+            tau_1_asym = min(tau_1_asym, tau_1_cap)
 
         if beta >= tau_balance:
             regime = "Symmetric"
@@ -102,8 +112,10 @@ def compute_tri_regime_raw_thresholds(
         tau_0_asym = 1.0 - float(np.clip(inv_tau_1_raw, 0.51, max_t))
         tau_1_asym = 1.0 - float(np.clip(inv_tau_0_raw, min_t, 0.49))
 
-        # Negative precision guard: negative threshold never above 0.50
+        # Negative precision guard: negative threshold never above 0.50, floored at tau_0_floor
         tau_0_asym = min(0.50, tau_0_asym)
+        if tau_0_floor is not None:
+            tau_0_asym = max(tau_0_asym, tau_0_floor)
 
         if beta >= tau_balance:
             regime = "Symmetric"
@@ -163,14 +175,14 @@ def apply_dual_coverage_guard(
     for _ in range(max_iterations):
         # Determine whether to contract t0 or t1 based on prior direction
         if prior <= 0.50:
-            # For rare positive, raise t0 safely towards 0.50
+            # Raise t0 safely towards 0.50, and contract t1 down towards min_tau_1
             t0 += step
             if not precision_guard or t1 > min_tau_1:
                 t1 -= step
                 if precision_guard and t1 < min_tau_1:
                     t1 = min_tau_1
         else:
-            # For rare negative (positive majority), lower t1 safely towards 0.50
+            # Lower t1 safely towards 0.50, and raise t0 up towards max_tau_0
             t1 -= step
             if not precision_guard or t0 < max_tau_0:
                 t0 += step
@@ -193,25 +205,29 @@ def apply_dual_coverage_guard(
 def compute_tri_regime_adaptive_thresholds_table(
     Y_train: np.ndarray,
     OOF_probs: Optional[np.ndarray] = None,
-    cost: float = 0.30,
-    tau_balance: float = 0.75,
+    cost: float = 0.35,
+    tau_balance: float = 0.85,
     blend_kappa: float = 20.0,
-    gamma_min: float = 0.70,
+    gamma_min: float = 0.78,
     clip_bounds: Tuple[float, float] = (0.005, 0.995),
     precision_guard: bool = True,
+    tau_1_cap: float = 0.55,
+    tau_0_floor: float = 0.45,
 ) -> Dict[int, Dict[str, Any]]:
     """
-    Compute full Adaptive Tri-Regime decision table across all K labels.
+    Compute full Adaptive Tri-Regime decision table across all K labels with Dual F1 Clamping.
 
     Parameters:
         Y_train: In-fold binary training targets (N, K).
         OOF_probs: Optional continuous Out-Of-Fold probabilities (N, K).
-        cost: Rejection cost c. Default 0.30.
-        tau_balance: Balance cutoff for beta. Default 0.40.
+        cost: Rejection cost c. Default 0.35.
+        tau_balance: Balance cutoff for beta. Default 0.85.
         blend_kappa: Sigmoid blend slope. Default 20.0.
-        gamma_min: Coverage guard floor. Default 0.70.
+        gamma_min: Coverage guard floor. Default 0.78.
         clip_bounds: Threshold bounding tuple.
         precision_guard: Whether to enforce directional precision floors.
+        tau_1_cap: Upper clamp on tau_1 for minority positive labels. Default 0.55.
+        tau_0_floor: Lower clamp on tau_0 for minority negative labels. Default 0.45.
 
     Returns:
         thresholds_dict: Mapping label_idx -> {
@@ -240,6 +256,8 @@ def compute_tri_regime_adaptive_thresholds_table(
             tau_balance=tau_balance,
             blend_kappa=blend_kappa,
             clip_bounds=clip_bounds,
+            tau_1_cap=tau_1_cap,
+            tau_0_floor=tau_0_floor,
         )
 
         guard_applied = False

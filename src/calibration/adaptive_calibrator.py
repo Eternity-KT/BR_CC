@@ -119,7 +119,7 @@ class MultiLabelAdaptiveCalibrator:
 
     def __init__(
         self,
-        tau_balance: float = 0.75,
+        tau_balance: float = 0.85,
         method: str = "sqrt_platt",
         clip_eps: float = 1e-5,
         random_state: int = 42,
