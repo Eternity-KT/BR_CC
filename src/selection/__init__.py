@@ -37,6 +37,7 @@ from .br_residual_correlation import (
     compute_residual_pcc_matrix,
     export_residual_correlation_audit_table,
 )
+from .single_stage_peeling import SingleStagePeelingSelector
 
 
 __all__ = [
@@ -67,5 +68,6 @@ __all__ = [
     "compute_residual_pcc_matrix",
     "build_residual_dependency_graph",
     "export_residual_correlation_audit_table",
+    "SingleStagePeelingSelector",
 ]
 

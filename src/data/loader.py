@@ -84,6 +84,8 @@ DATASET_CONFIG = {
     "chd49": {
         "format": "mat",
         "mat_path": "data/CHD_49/CHD_49.mat",
+        "fallback_arff_path": "data/CHD_49.arff",
+        "label_location": "start",
         "num_labels": 6,
         "label_names": ["L1", "L2", "L3", "L4", "L5", "L6"],
         "description": "Coronary heart disease inquiry diagnosis (6 labels, 555 samples)"
@@ -92,6 +94,8 @@ DATASET_CONFIG = {
         "format": "pseaac",
         "train_path": "data/GpositivePseAAC/Gram_positivePseAAC519-train.txt",
         "test_path": "data/GpositivePseAAC/Gram_positivePseAAC519-test.txt",
+        "fallback_arff_path": "data/GpositivePseAAC.arff",
+        "label_location": "end",
         "num_labels": 4,
         "num_features": 440,
         "label_names": ["Cell_membrane", "Cell_wall", "Cytoplasm", "Extracell"],
@@ -101,6 +105,8 @@ DATASET_CONFIG = {
         "format": "pseaac",
         "train_path": "data/HumanPseAAC/HumanPseAAC3106-train.txt",
         "test_path": "data/HumanPseAAC/HumanPseAAC3106-test.txt",
+        "fallback_arff_path": "data/HumanPseAAC.arff",
+        "label_location": "end",
         "num_labels": 14,
         "num_features": 440,
         "label_names": [
@@ -114,6 +120,8 @@ DATASET_CONFIG = {
         "format": "pseaac",
         "train_path": "data/PlantPseAAC/PlantPseAAC978-train.txt",
         "test_path": "data/PlantPseAAC/PlantPseAAC978-test.txt",
+        "fallback_arff_path": "data/PlantPseAAC.arff",
+        "label_location": "end",
         "num_labels": 12,
         "num_features": 440,
         "label_names": [
@@ -127,6 +135,8 @@ DATASET_CONFIG = {
         "format": "pseaac",
         "train_path": "data/VirusPseAAC/VirusPseAAC207-train.txt",
         "test_path": "data/VirusPseAAC/VirusPseAAC207-test.txt",
+        "fallback_arff_path": "data/VirusPseAAC.arff",
+        "label_location": "end",
         "num_labels": 6,
         "num_features": 440,
         "label_names": [
@@ -208,6 +218,9 @@ def _load_mat_dataset(config, base_dir="."):
     import scipy.io as sio
     mat_path = os.path.join(base_dir, config["mat_path"])
     if not os.path.exists(mat_path):
+        fallback = config.get("fallback_arff_path")
+        if fallback and os.path.exists(os.path.join(base_dir, fallback)):
+            return _load_arff_dataset(config, fallback, base_dir=base_dir)
         raise FileNotFoundError(f"MAT file not found: {mat_path}")
     mat = sio.loadmat(mat_path)
     X = np.asarray(mat["data"], dtype=np.float32)
@@ -222,13 +235,20 @@ def _load_pseaac_dataset(config, base_dir="."):
     """Load PseAAC format multi-label datasets with sparse text encoding."""
     train_path = os.path.join(base_dir, config["train_path"])
     test_path = os.path.join(base_dir, config["test_path"])
+    missing_paths = [
+        fpath for fpath in (train_path, test_path) if not os.path.exists(fpath)
+    ]
+    if missing_paths:
+        fallback = config.get("fallback_arff_path")
+        if fallback and os.path.exists(os.path.join(base_dir, fallback)):
+            return _load_arff_dataset(config, fallback, base_dir=base_dir)
+        raise FileNotFoundError(f"PseAAC file not found: {missing_paths[0]}")
+
     all_lines = []
     for fpath in [train_path, test_path]:
         if os.path.exists(fpath):
             with open(fpath, "r", encoding="utf-8", errors="ignore") as fp:
                 all_lines.extend(fp.readlines())
-        else:
-            raise FileNotFoundError(f"PseAAC file not found: {fpath}")
 
     num_features = config["num_features"]
     num_labels = config["num_labels"]
@@ -255,6 +275,35 @@ def _load_pseaac_dataset(config, base_dir="."):
 
     feature_cols = [f"f_{i+1}" for i in range(num_features)]
     label_cols = list(config.get("label_names") or [f"L{j+1}" for j in range(num_labels)])
+    return X, Y, feature_cols, label_cols
+
+
+def _load_arff_dataset(config, arff_path, base_dir="."):
+    """Load one ARFF dataset using an explicit path and label placement."""
+
+    resolved_arff_path = os.path.join(base_dir, arff_path)
+    if not os.path.exists(resolved_arff_path):
+        raise FileNotFoundError(f"ARFF file not found: {resolved_arff_path}")
+
+    with open(resolved_arff_path, "r", encoding="utf-8", errors="ignore") as f:
+        arff_data = arff.load(f)
+
+    attr_names = [a[0] for a in arff_data["attributes"]]
+    df = pd.DataFrame(arff_data["data"], columns=attr_names)
+    num_labels = int(config["num_labels"])
+    if config.get("label_location", "end") == "start":
+        label_cols = attr_names[:num_labels]
+    else:
+        label_cols = attr_names[-num_labels:]
+    feature_cols = [c for c in attr_names if c not in label_cols]
+
+    X = _process_features_dataframe(df[feature_cols])
+    Y = np.column_stack(
+        [_clean_binary_series(df[col]) for col in label_cols]
+    ).astype(np.int32)
+    configured_names = config.get("label_names")
+    if configured_names and len(configured_names) == len(label_cols):
+        label_cols = list(configured_names)
     return X, Y, feature_cols, label_cols
 
 

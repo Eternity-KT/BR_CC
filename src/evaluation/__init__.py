@@ -29,6 +29,11 @@ from .calibration_metrics import (
     CALIBRATION_METRIC_NAMES,
     compute_calibration_metrics,
 )
+from .layer_metrics import (
+    build_layer_rows,
+    compute_selective_subset_accuracy,
+    compute_v6_3_selective_metrics,
+)
 from .deployment import (
     OPERATING_POINT_RULES,
     compute_deployment_metrics,
@@ -39,6 +44,9 @@ from .deployment import (
 __all__ += [
     "CALIBRATION_METRIC_NAMES",
     "compute_calibration_metrics",
+    "build_layer_rows",
+    "compute_selective_subset_accuracy",
+    "compute_v6_3_selective_metrics",
     "OPERATING_POINT_RULES",
     "compute_deployment_metrics",
     "operating_point_record",
