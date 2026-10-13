@@ -232,24 +232,34 @@ Bảng 4 tổng hợp kết quả đánh giá 425 lượt nhãn theo 3 phân nh�
 | `genbase` (Gốc) | **DL** | 40 | 0.004 | [0.02, 0.50] | 83.7% | 0.3167 | 0.9999 | 0.6583 | 32.5% / 31.2% | 100.0% / 100.0% |
 | `genbase` (SAMG) | **DL** | 40 | 0.004 | [0.02, 0.17] | 82.7% | **0.7385** | 0.9998 | **0.8692** | **76.9%** / **71.8%** | 100.0% / 100.0% |
 | `genbase` | **IL** | 90 | 0.053 | [0.02, 0.51] | 98.7% | **0.9382** | 0.9997 | 0.9689 | 94.2% / 93.6% | 100.0% / 100.0% |
-| `gpositivepseaac` | **DL** | 5 | 0.035 | [0.13, 0.50] | 70.5% | 0.3048 | 0.9806 | 0.6427 | 40.0% / 25.0% | 97.2% / 98.9% |
+| `gpositivepseaac` (Gốc) | **DL** | 5 | 0.035 | [0.13, 0.50] | 70.5% | 0.3048 | 0.9806 | 0.6427 | 40.0% / 25.0% | 97.2% / 100.0% |
+| `gpositivepseaac` (SAMG) | **DL** | 5 | 0.035 | [0.13, 0.48] | 71.7% | **0.4159** | 0.9750 | **0.6955** | **66.7%** / **32.3%** | 96.1% / 100.0% |
 | `humanpseaac` | **DL** | 60 | 0.049 | [0.17, 0.50] | 72.4% | 0.1958 | 0.9739 | 0.5848 | 22.3% / 19.4% | 97.4% / 97.4% |
 | `plantpseaac` | **DL** | 55 | 0.071 | [0.18, 0.50] | 69.4% | 0.2409 | 0.9589 | 0.5999 | 33.6% / 21.3% | 95.3% / 96.5% |
 | `scene` | **DL** | 1 | 0.179 | [0.13, 0.50] | 71.5% | 0.7636 | 0.9254 | 0.8445 | 95.5% / 63.6% | 87.1% / 98.8% |
 | `scene` | **IL** | 24 | 0.170 | [0.09, 0.51] | 76.4% | 0.8220 | 0.9481 | 0.8850 | 95.5% / 72.6% | 91.2% / 98.9% |
-| `viruspseaac` | **DL** | 15 | 0.118 | [0.26, 0.50] | 72.3% | 0.2542 | 0.9283 | 0.5913 | 26.7% / 29.6% | 92.3% / 93.5% |
+| `viruspseaac` (Gốc) | **DL** | 15 | 0.118 | [0.26, 0.50] | 72.3% | 0.2542 | 0.9283 | 0.5913 | 26.7% / 29.6% | 92.3% / 93.3% |
+| `viruspseaac` (SAMG) | **DL** | 15 | 0.118 | [0.26, 0.49] | 72.9% | **0.3038** | 0.9272 | **0.6155** | **32.2%** / **34.1%** | 92.1% / 93.3% |
 | `viruspseaac` | **IL** | 5 | 0.039 | [0.02, 0.51] | 99.5% | **1.0000** | 1.0000 | 1.0000 | 100.0% / 100.0% | 100.0% / 100.0% |
 | `yeast` | **DL** | 30 | 0.115 | [0.25, 0.50] | 64.2% | 0.1736 | 0.9436 | 0.5586 | **13.8%** / 33.0% | 96.7% / 92.1% |
+| **Trung bình $DL$ (Gốc)** | **DL** | 211 | 0.060 | [0.19, 0.50] | 72.6% | 0.2321 | 0.9676 | 0.5998 | 26.5% / 24.8% | 96.7% / 96.9% |
+| **Trung bình $DL$ (SAMG)** | **DL** | 211 | 0.060 | [0.19, 0.44] | 72.8% | **0.3168** | 0.9663 | **0.6416** | **37.8%** / **31.4%** | 96.5% / 97.2% |
+
+*Ghi chú: Hai tập dữ liệu `emotions` và `music` không xuất hiện trong bảng do 100% các nhãn có tỷ lệ $\pi_l \ge 0.20$ (thuộc phân nhóm Cân bằng tại Bảng 7).*
 
 Các kết quả định lượng tại Bảng 5 xác lập các luận điểm kỹ thuật quan trọng:
-1. **Hiện tượng suy sụp độ nhạy lớp dương trên tập $DL$ trước khi áp dụng SAMG:** 
-Trên toàn bộ các nhãn thuộc $DL$ ở cấu hình gốc, điểm $F_1^{\text{pos}}$ dao động từ $0.0000$ (`chd49`) đến $0.3167$ (`genbase`), với độ nhạy dương $\text{Recall}_{\text{pos}}$ bình quân chỉ đạt $26.52\%$. Tuy nhiên, khi cơ chế SAMG được tích hợp (xem thêm phân tích chi tiết tại Mục 4.4), điểm $F_1^{\text{pos}}$ của `genbase` $DL$ đã tăng vọt lên **$0.7385$** trong kiểm định 5-fold CV (và đạt **$1.0000$** trên kiểm tra toàn cục), với độ nhạy dương phục hồi mạnh mẽ từ $32.5\%$ lên **$76.9\%$**. 
-Đặc biệt trên `chd49` $DL$ (5 lượt đánh giá fold), mô hình hoàn toàn không nhận diện được bất kỳ mẫu dương tính nào ($\text{Recall}_{\text{pos}} = 0.0\%$, $\text{Precision}_{\text{pos}} = 0.0\%$). Tương tự, trên `yeast` $DL$, độ nhạy dương chỉ đạt $13.8\%$, nghĩa là hệ thống bỏ sót tới $86.2\%$ số mẫu dương tính thật. Trên hai tập dữ liệu protein quy mô lớn `humanpseaac` (60 lượt đánh giá) và `plantpseaac` (55 lượt đánh giá), độ nhạy dương cũng lần lượt chỉ đạt $22.3\%$ và $33.6\%$.
+1. **Hiện tượng suy sụp độ nhạy lớp dương trên tập $DL$ ở cấu hình gốc và bước nhảy vọt qua SAMG:** 
+Trên toàn bộ các nhãn thuộc $DL$ ở cấu hình gốc, điểm $F_1^{\text{pos}}$ dao động từ $0.0000$ (`chd49`) đến $0.3167$ (`genbase`), với độ nhạy dương $\text{Recall}_{\text{pos}}$ bình quân toàn cục chỉ đạt $26.52\%$. Tuy nhiên, khi cơ chế SAMG được tích hợp:
+   * Trên `genbase` $DL$, điểm $F_1^{\text{pos}}$ tăng vọt từ $0.3167$ lên **$0.7385$** trong kiểm định 5-fold CV (đạt tuyệt đối **$1.0000$** trên in-sample toàn cục), độ nhạy dương phục hồi mạnh mẽ từ $32.5\%$ lên **$76.9\%$**.
+   * Trên `gpositivepseaac` $DL$, $F_1^{\text{pos}}$ tăng từ $0.3048$ lên **$0.4159$** (+11.1%), độ nhạy dương tăng từ $40.0\%$ lên **$66.7\%$**.
+   * Trên `viruspseaac` $DL$, $F_1^{\text{pos}}$ tăng từ $0.2542$ lên **$0.3038$**, độ nhạy dương tăng từ $26.7\%$ lên **$32.2\%$**.
+   * Tính chung trên toàn bộ 211 lượt nhãn $DL$ hiếm dương, SAMG nâng điểm $F_1^{\text{pos}}$ trung bình từ $0.2321$ lên **$0.3168$** (+8.47%) và phục hồi độ nhạy dương bình quân từ $26.5\%$ lên **$37.8\%$**.
+Đặc biệt trên các tập có đặc trưng mờ nhạt như `chd49` $DL$ (5 lượt fold, $\text{Recall}_{\text{pos}} = 0.0\%$), `yeast` $DL$ ($13.8\%$), `humanpseaac` ($22.3\%$) và `plantpseaac` ($33.6\%$), SAMG chủ động khóa ngưỡng cố định để tránh nguy cơ bùng nổ dương tính giả.
 2. **Ảo ảnh thống kê của chỉ số $F_1^{\text{neg}}$:** 
 Mặc dù $F_1^{\text{pos}}$ rất thấp hoặc bằng 0, giá trị $F_1^{\text{neg}}$ trên các tập này vẫn duy trì ở mức rất cao: $0.9850$ (`chd49`), $0.9739$ (`humanpseaac`), $0.9589$ (`plantpseaac`), và $0.9999$ (`genbase`). Hiện tượng này hoàn toàn phù hợp với phương trình giải tích lý thuyết: khi tỷ lệ tiên nghiệm $\pi < 0.05$, số lượng mẫu âm tính chiếm trên $95\%$ tổng thể. Ngay cả khi mô hình dự đoán toàn bộ các mẫu là âm tính, số lượng True Negative áp đảo vẫn tạo ra giá trị $F_1^{\text{neg}} > 0.95$.
 3. **Sự phân hóa vượt bậc của tập $IL$ trên các nhãn hiếm có đặc trưng mạnh:** 
 Ngược lại hoàn toàn với $DL$, các nhãn hiếm dương được kết nạp vào $IL$ đạt hiệu năng rất cao: `genbase` $IL$ (90 lượt đánh giá, $\pi=0.053$) đạt $F_1^{\text{pos}} = 0.9382$ với độ nhạy dương $94.2\%$; `viruspseaac` $IL$ (5 lượt đánh giá, nhãn $L_0$, $\pi=0.039$) đạt điểm số lý tưởng $F_1^{\text{pos}} = 1.0000$ và độ phủ $99.5\%$. Điều này chứng minh rằng thuật toán Layered CV Peeling đã bóc tách chính xác các nhãn có vector đặc trưng amino acid phân tách tuyệt đối vào $IL$, trong khi đẩy toàn bộ các nhãn có không gian đặc trưng mờ nhạt vào $DL$.
-4. **Vai trò định lượng của Binary Macro-$F_1$:** Khi đánh giá đối ngẫu qua $\text{Binary Macro-}F_1$, tập $DL$ đạt giá trị trung bình $0.5998$ (thay vì $0.2321$ của $F_1^{\text{pos}}$). Chỉ số này phản ánh khách quan rằng mô hình vẫn đang hoạt động với vai trò một bộ xác thực lớp âm (Negative Verifier) hiệu quả cao, bảo toàn được độ chính xác lớp âm ở mức $96.7\%$.
+4. **Vai trò định lượng của Binary Macro-$F_1$:** Khi đánh giá đối ngẫu qua $\text{Binary Macro-}F_1$, tập $DL$ đạt giá trị trung bình $0.5998$ ở cấu hình gốc và tăng lên **$0.6416$** sau khi áp dụng SAMG. Chỉ số này phản ánh khách quan rằng mô hình vừa bảo vệ hiệu quả vai trò xác thực lớp âm (Negative Verifier với độ chính xác âm $96.5\%$), vừa giải phóng năng lực phát hiện mẫu dương của hệ thống.
 
 ---
 
