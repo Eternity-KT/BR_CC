@@ -177,3 +177,40 @@ def test_gsi_v6_3_3_classifier_end_to_end():
     full_preds = clf.predict_full(X)
     assert full_preds.shape == (N, K)
     assert set(np.unique(full_preds)).issubset({0, 1})
+
+
+def test_separation_aware_margin_guard_extreme_imbalance():
+    """Verify Separation-Aware Margin Guard properly adapts tau_1 for rare positive labels."""
+    np.random.seed(42)
+    N, d = 100, 2
+    X = np.zeros((N, d), dtype=np.float32)
+    X[2:, 0] = -1.0
+    X[:2, 0] = 0.8
+    y_rare = np.zeros(N, dtype=int)
+    y_rare[:2] = 1
+
+    # Balanced label
+    y_bal = (np.arange(N) % 2).astype(int)
+    Y = np.column_stack([y_rare, y_bal])
+
+    clf = GSIMLCPAv6_3_3Classifier(
+        base_learner="logistic",
+        cv_folds=3,
+        separation_aware=True,
+        random_state=42,
+    )
+    clf.fit(X, Y)
+
+    th_rare = clf.adaptive_thresholds_[0]
+    # Check that tau_1 is adjusted below 0.50 due to clean separation margin
+    assert th_rare["tau_1"] < 0.50
+    assert th_rare["tau_0"] < th_rare["tau_1"]
+
+    # Predict with separation-aware threshold
+    preds = clf.predict(X)
+    # The 2 positive samples must be detected as 1
+    assert preds[0, 0] == 1
+    assert preds[1, 0] == 1
+    # Majority negatives should be detected as 0
+    assert np.mean(preds[2:, 0] == 0) > 0.90
+

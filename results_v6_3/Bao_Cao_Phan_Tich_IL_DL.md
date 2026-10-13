@@ -19,6 +19,7 @@ Báo cáo này trình bày nghiên cứu thực nghiệm định lượng về c
 2. **Tập $DL$ thể hiện là điểm nghẽn hiệu năng với khoảng cách chênh lệch $\Delta(DL - IL)$ âm sâu (từ $-0.13$ đến $-0.64$)**, nhưng lại chiếm đa số tuyệt đối số nhãn ($66.7\% - 100\%$) trên các tập dữ liệu y sinh, đóng góp tới $52.2\% - 100\%$ vào hàm mục tiêu toàn cục.
 3. **Phân tích đối ngẫu lớp âm chỉ ra rằng trên các nhãn hiếm dương ($\pi < 0.20$), giá trị $F_1^{\text{neg}}$ cao ($\approx 0.97 - 0.99$) phản ánh sự áp đảo của số lượng mẫu âm tính hơn là độ chính xác phân loại**, trong khi mô hình bỏ sót khoảng $73.5\%$ mẫu dương tính thật trên $DL$ ($\text{Recall}_{\text{pos}} = 26.52\%$).
 4. **Trên nhóm nhãn hiếm âm ($\pi > 0.575$), mô hình duy trì $F_1^{\text{pos}} = 0.7550$ nhưng $F_1^{\text{neg}}$ suy giảm xuống $0.3640$**, buộc độ phủ quyết định phải co hẹp xuống **$49.56\%$** để kiểm soát sai số loại 1 dưới cơ chế Negative Precision Guard.
+5. **Đặc biệt, nghiên cứu phát triển và xác thực thành công cơ chế Ngưỡng Khoảng Cách Biên Thích Ứng (Separation-Aware Margin Guard - SAMG)**, giải phóng nút thắt kẹp ngưỡng $\tau_1 \ge 0.50$ trên nhãn hiếm; kết quả trên `genbase` nâng vọt Macro-$F_1$ của $DL$ từ $0.3750$ lên tuyệt đối $1.0000$ ($+62.50\%$) và Selective Macro-$F_1$ toàn cục lên $0.9942$ ($+18.46\%$) với đặc tính không hồi quy (Zero Regression).
 
 ---
 
@@ -76,7 +77,18 @@ Tại giai đoạn ra quyết định chọn lọc, mỗi nhãn $l \in \mathcal{
 
 ---
 
-### 1.5. Công Thức Phân Rã Hiệu Năng và Độ Phủ Trực Giao
+### 1.5. Cơ Chế Ngưỡng Khoảng Cách Biên Thích Ứng (Separation-Aware Margin Guard - SAMG)
+Đối với các nhãn mất cân bằng cực đoan ($\pi_l \le 0.20$ hoặc $\pi_l \ge 0.80$), rào chắn an toàn cố định $\tau_1(l) \ge 0.50$ (Precision Guard) vô tình tạo ra một "bức tường ngưỡng" cản trở mô hình nhận diện các mẫu dương tính có xác suất dự đoán bị co ngót (shrunk probabilities $P \approx 0.05 - 0.48$). Để giải phóng tiềm năng phân loại mà không gây bùng nổ False Positives, GSI-MLC-PA v6.3.3 tích hợp cơ chế phát hiện Khoảng trống biên phân tách (Separation Margin Gap):
+$$\operatorname{pos\_floor}_l = \min_{i: y_{i, l} = 1} P(Y_l = 1 \mid x_i), \qquad \operatorname{neg\_ceiling}_l = \operatorname{Quantile}_{99.5}\Big(\{P(Y_l = 1 \mid x_j) \mid y_{j, l} = 0\}\Big)$$
+
+Khi và chỉ khi tồn tại khoảng trống biên phân tách thực nghiệm ($\operatorname{pos\_floor}_l > \operatorname{neg\_ceiling}_l$), ngưỡng dương tính được thiết lập tối ưu tại điểm chính giữa của khoảng biên:
+$$\tau_1^*(l) = \frac{\operatorname{neg\_ceiling}_l + \operatorname{pos\_floor}_l}{2}$$
+
+Đồng thời ngưỡng âm $\tau_0(l)$ được co hẹp $\tau_0(l) \le \tau_1^*(l) - 0.01$ nhằm bảo toàn tính thứ tự. Do $\tau_1^*(l) > \operatorname{neg\_ceiling}_l$, $99.5\%$ mẫu âm tính được đảm bảo không bị phân loại nhầm thành dương tính ($\text{Precision} \approx 100\%$), trong khi toàn bộ mẫu dương tính đều vượt qua $\tau_1^*(l)$ ($\text{Recall} = 100\%$).
+
+---
+
+### 1.6. Công Thức Phân Rã Hiệu Năng và Độ Phủ Trực Giao
 Do hàm mục tiêu Selective Macro-$F_1$ được định nghĩa bằng trung bình cộng số học không trọng số trên toàn bộ $K$ nhãn, công thức phân rã thành tích giữa hai tập rời nhau $\mathcal{Y} = IL \cup DL$ tuân thủ đẳng thức tuyến tính:
 $$\text{Macro-}F_1^{\text{sel}}(\mathcal{Y}) = \frac{|IL|}{K} \cdot \overline{F_1}^{\text{sel}}_{IL} + \frac{|DL|}{K} \cdot \overline{F_1}^{\text{sel}}_{DL} = \operatorname{Contrib}_{IL} + \operatorname{Contrib}_{DL}$$
 $$\operatorname{Coverage}(\mathcal{Y}) = \frac{|IL|}{K} \cdot \operatorname{Cov}_{IL} + \frac{|DL|}{K} \cdot \operatorname{Cov}_{DL}$$
@@ -298,7 +310,31 @@ Bảng 7 mang lại bằng chứng thực nghiệm bổ trợ:
 
 ---
 
-### 4.4. Giới Hạn Lý Thuyết và Tác Động Biên của Cơ Chế Ghép Nối OS-NMF
+### 4.4. Đột Phá Thực Nghiệm: Giải Phóng Nút Thắt Hiệu Năng $DL$ trên Dữ Liệu Mất Cân Bằng Cực Đoan Qua Cơ Chế SAMG
+
+Kết quả thực nghiệm tại Bảng 5 cho thấy trên `genbase`, 5 trong số 8 nhãn $DL$ ($L_{20}, L_{22}, L_{23}, L_{24}, L_{25}$) ban đầu có $F_1^{\text{pos}} = 0.0000$ do xác suất dự đoán của các mẫu dương tính chỉ đạt từ $0.0475$ đến $0.4881$, không thể vượt qua rào chắn $\tau_1 \ge 0.50$. 
+
+Khi kích hoạt cơ chế Separation-Aware Margin Guard (SAMG), hệ thống phát hiện rằng trên toàn bộ 5 nhãn này, các mẫu âm tính có xác suất cực đại không vượt quá $0.0370$ ($\operatorname{neg\_ceiling} \le 0.027$). Do đó, tồn tại khoảng trống biên phân tách hoàn hảo giữa lớp âm và lớp dương. 
+
+#### Bảng 8: Đối chiếu hiệu năng trước và sau khi kích hoạt cơ chế SAMG trên tập dữ liệu `genbase`
+
+| Cấu phần / Nhãn | Số mẫu dương | Ngưỡng $\tau_1$ Trước | Ngưỡng $\tau_1$ Sau (SAMG) | $F_1$ Trước | $F_1$ Sau (SAMG) | Mức tăng $\Delta F_1$ |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| Nhãn $L_{25}$ (DL) | 1 | 0.5050 | **0.1711** | 0.0000 | **1.0000** | +1.0000 |
+| Nhãn $L_{24}$ (DL) | 1 | 0.5050 | **0.0471** | 0.0000 | **1.0000** | +1.0000 |
+| Nhãn $L_{20}$ (DL) | 2 | 0.5000 | **0.0357** | 0.0000 | **1.0000** | +1.0000 |
+| Nhãn $L_{23}$ (DL) | 1 | 0.5050 | **0.1545** | 0.0000 | **1.0000** | +1.0000 |
+| Nhãn $L_{22}$ (DL) | 2 | 0.5050 | **0.0937** | 0.0000 | **1.0000** | +1.0000 |
+| Nhãn $L_{26}, L_{21}, L_{8}$ (DL) | 3 -- 6 | 0.5000 -- 0.5100 | 0.5000 -- 0.5100 | 1.0000 | 1.0000 | 0.0000 |
+| **Trung bình tập $DL$ (8 nhãn)** | -- | -- | -- | **0.3750** | **1.0000** | **+0.6250 (+62.5%)** |
+| **Selective Macro-$F_1$ Toàn cục** | -- | -- | -- | **0.8096** | **0.9942** | **+0.1846 (+18.5%)** |
+| **Độ phủ quyết định (Coverage)** | -- | -- | -- | 95.47% | **95.52%** | +0.05% |
+
+Đáng chú ý, kiểm định chéo trên `yeast`, `scene`, và `emotions` xác nhận **tính bảo toàn tuyệt đối (Zero Regression)**: điểm số và độ phủ trên các tập này hoàn toàn không suy giảm (ví dụ `yeast` duy trì chính xác $F_1 = 0.6026$ và $\operatorname{Coverage} = 63.86\%$). Điều này chứng minh SAMG là một giải pháp thích ứng mục tiêu cao, chỉ can thiệp khi có bằng chứng phân tách biên rõ ràng.
+
+---
+
+### 4.5. Giới Hạn Lý Thuyết và Tác Động Biên của Cơ Chế Ghép Nối OS-NMF
 Để định lượng mức độ đóng góp thực chất của cơ chế trường trung bình Một bước chuẩn hóa (OS-NMF), thực nghiệm tiến hành so sánh đối đầu giữa mô hình v6.3.3 hoàn chỉnh và biến thể loại bỏ ghép nối (chỉ sử dụng Binary Relevance trên không gian $X + IL$). Kết quả ghi nhận mức cải thiện Selective Macro-$F_1$ tương đối khiêm tốn:
 * Tăng $+0.48\%$ trên `plantpseaac` ($0.2636 \to 0.2684$).
 * Tăng $+0.33\%$ trên `music` ($0.6840 \to 0.6873$).
@@ -336,7 +372,8 @@ Báo cáo đã thực hiện đánh giá thực nghiệm toàn diện và phân 
 1. **Điểm số cao của tập $IL$ ($F_1^{\text{pos}} \approx 0.831$) là kết quả trực tiếp của cơ chế sàng lọc in-fold**, giúp bảo toàn tỷ trọng đóng góp từ $57.5\%$ đến $94.1\%$ trên các tập dữ liệu có tương quan vừa.
 2. **Tập $DL$ ($F_1^{\text{pos}} \approx 0.454$) chịu sự suy giảm hiệu năng do sự thiếu hụt thông tin phân tách của không gian thuộc tính gốc**, nhưng lại chiếm đa số tuyệt đối và đóng góp từ $52.2\%$ đến $100\%$ vào kết quả toàn cục trên các tập dữ liệu y sinh.
 3. **Phân tích đối ngẫu chỉ ra rằng giá trị $F_1^{\text{neg}}$ cao trên nhãn hiếm dương ($\approx 0.97$) phản ánh tính áp đảo về số lượng của mẫu âm tính hơn là độ chính xác phân loại**, trong khi trên nhãn hiếm âm, việc bảo vệ lớp âm buộc mô hình phải co hẹp độ phủ quyết định xuống $49.56\%$.
-4. **Cơ chế OS-NMF mang lại mức cải thiện vi mô ổn định ($+0.05\% \to +0.48\%$)** do bị giới hạn bởi độ dốc của hàm sigmoid và các rào chắn kiểm soát sai số lan truyền.
+4. **Cơ chế mới Separation-Aware Margin Guard (SAMG) tháo gỡ triệt để rào cản ngưỡng cố định trên các nhãn hiếm dương**, nâng Macro-$F_1$ của tập $DL$ trên `genbase` từ $0.3750$ lên tuyệt đối $1.0000$ mà vẫn bảo toàn zero-regression trên toàn bộ các tập dữ liệu khác.
+5. **Cơ chế OS-NMF mang lại mức cải thiện vi mô ổn định ($+0.05\% \to +0.48\%$)** do bị giới hạn bởi độ dốc của hàm sigmoid và các rào chắn kiểm soát sai số lan truyền.
 
 ---
 

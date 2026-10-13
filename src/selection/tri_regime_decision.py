@@ -213,9 +213,14 @@ def compute_tri_regime_adaptive_thresholds_table(
     precision_guard: bool = True,
     tau_1_cap: float = 0.55,
     tau_0_floor: float = 0.45,
+    in_sample_probs: Optional[np.ndarray] = None,
+    separation_aware: bool = True,
+    sep_rare_threshold: float = 0.20,
+    sep_percentile: float = 99.5,
 ) -> Dict[int, Dict[str, Any]]:
     """
-    Compute full Adaptive Tri-Regime decision table across all K labels with Dual F1 Clamping.
+    Compute full Adaptive Tri-Regime decision table across all K labels with Dual F1 Clamping
+    and Separation-Aware Margin Guard for extreme imbalance.
 
     Parameters:
         Y_train: In-fold binary training targets (N, K).
@@ -228,6 +233,10 @@ def compute_tri_regime_adaptive_thresholds_table(
         precision_guard: Whether to enforce directional precision floors.
         tau_1_cap: Upper clamp on tau_1 for minority positive labels. Default 0.55.
         tau_0_floor: Lower clamp on tau_0 for minority negative labels. Default 0.45.
+        in_sample_probs: Optional in-sample probabilities for margin gap discovery.
+        separation_aware: Whether to detect clean separation margins for rare labels.
+        sep_rare_threshold: Imbalance threshold (pi <= threshold) to activate margin guard.
+        sep_percentile: Upper percentile on negative instances to define margin floor.
 
     Returns:
         thresholds_dict: Mapping label_idx -> {
@@ -244,6 +253,7 @@ def compute_tri_regime_adaptive_thresholds_table(
     Y = np.asarray(Y_train, dtype=np.int32)
     n_samples, n_labels = Y.shape
     table: Dict[int, Dict[str, Any]] = {}
+    min_t, max_t = clip_bounds
 
     for j in range(n_labels):
         col_y = Y[:, j]
@@ -274,6 +284,46 @@ def compute_tri_regime_adaptive_thresholds_table(
                 precision_guard=precision_guard,
             )
             emp_cov = float(np.mean((p_j <= t0) | (p_j >= t1)))
+
+        # Separation-Aware Margin Guard for Extreme Imbalance (Regime 1 & Regime 3)
+        if separation_aware:
+            prob_source = in_sample_probs if in_sample_probs is not None else OOF_probs
+            if prob_source is not None and prob_source.shape[1] > j:
+                p_col = prob_source[:, j]
+                pos_mask = (col_y == 1)
+                neg_mask = (col_y == 0)
+                n_pos = int(np.sum(pos_mask))
+                n_neg = int(np.sum(neg_mask))
+
+                if prior_j <= sep_rare_threshold and n_pos > 0 and n_neg > 0:
+                    # Regime 1: Rare-Positive (0 is majority, 1 is rare minority)
+                    p_neg = p_col[neg_mask]
+                    p_pos = p_col[pos_mask]
+                    neg_ceiling = float(np.percentile(p_neg, sep_percentile))
+                    pos_floor = float(np.min(p_pos))
+
+                    if pos_floor > neg_ceiling:
+                        # Clean separation margin exists! Place tau_1 in the margin gap
+                        margin_t1 = float(0.5 * (neg_ceiling + pos_floor))
+                        if margin_t1 < t1:
+                            t1 = margin_t1
+                            if t0 >= t1:
+                                t0 = max(min_t, t1 - 0.01)
+
+                elif prior_j >= (1.0 - sep_rare_threshold) and n_pos > 0 and n_neg > 0:
+                    # Regime 3: Rare-Negative (1 is majority, 0 is rare minority)
+                    p_neg = p_col[neg_mask]
+                    p_pos = p_col[pos_mask]
+                    pos_floor = float(np.percentile(p_pos, 100.0 - sep_percentile))
+                    neg_ceiling = float(np.max(p_neg))
+
+                    if neg_ceiling < pos_floor:
+                        # Clean separation margin exists! Place tau_0 in the margin gap
+                        margin_t0 = float(0.5 * (neg_ceiling + pos_floor))
+                        if margin_t0 > t0:
+                            t0 = margin_t0
+                            if t1 <= t0:
+                                t1 = min(max_t, t0 + 0.01)
 
         table[j] = {
             "tau_0": float(t0),

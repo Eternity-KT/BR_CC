@@ -75,6 +75,7 @@ class GSIMLCPAv6_3_3Classifier(GSIMLCPAv6_3_2Classifier):
         blend_kappa: float = 20.0,
         tau_1_cap: float = 0.55,
         tau_0_floor: float = 0.45,
+        separation_aware: bool = True,
     ):
         super().__init__(
             base_learner=base_learner,
@@ -103,6 +104,7 @@ class GSIMLCPAv6_3_3Classifier(GSIMLCPAv6_3_2Classifier):
         self.blend_kappa = float(blend_kappa)
         self.tau_1_cap = float(tau_1_cap)
         self.tau_0_floor = float(tau_0_floor)
+        self.separation_aware = bool(separation_aware)
 
     def fit(self, X, Y):
         """Fit GSI-MLC-PA v6.3.3 using CV peeling, OS-NMF coupling, and Tri-Regime calibration."""
@@ -282,6 +284,8 @@ class GSIMLCPAv6_3_3Classifier(GSIMLCPAv6_3_2Classifier):
         # PHASE 3: Adaptive Tri-Regime Thresholds Table with Smooth Blending
         # -------------------------------------------------------------------------
         if self.use_prior_adaptive:
+            self.is_fitted_ = True
+            P_fitted = self.predict_proba(X) if self.separation_aware else None
             self.adaptive_thresholds_ = compute_tri_regime_adaptive_thresholds_table(
                 Y_train=Y,
                 OOF_probs=P_OOF_all,
@@ -292,6 +296,8 @@ class GSIMLCPAv6_3_3Classifier(GSIMLCPAv6_3_2Classifier):
                 precision_guard=self.precision_guard,
                 tau_1_cap=self.tau_1_cap,
                 tau_0_floor=self.tau_0_floor,
+                in_sample_probs=P_fitted,
+                separation_aware=self.separation_aware,
             )
         else:
             self.adaptive_thresholds_ = {
@@ -322,3 +328,29 @@ class GSIMLCPAv6_3_3Classifier(GSIMLCPAv6_3_2Classifier):
             )
         c = float(cost if cost is not None else self.cost)
         return self._apply_symmetric_chow_rejection(P, cost=c)
+
+    def predict_full(self, X, threshold: Optional[float] = None) -> np.ndarray:
+        """
+        Predict binary multilabel decisions without abstention.
+        If threshold is specified as float, applies static threshold across all labels.
+        If threshold is None (default), applies label-specific adaptive decision thresholds.
+        """
+        P = self.predict_proba(X)
+        if threshold is not None:
+            return (P >= float(threshold)).astype(np.int32)
+        if not hasattr(self, "adaptive_thresholds_"):
+            return (P >= 0.5).astype(np.int32)
+
+        N, K = P.shape
+        preds = np.zeros((N, K), dtype=np.int32)
+        for j in range(K):
+            th = self.adaptive_thresholds_[j]
+            pi = th.get("prior", 0.5)
+            if pi <= 0.20:
+                t = th["tau_1"]
+            elif pi >= 0.80:
+                t = th["tau_0"]
+            else:
+                t = 0.50
+            preds[:, j] = (P[:, j] >= t).astype(np.int32)
+        return preds
