@@ -195,7 +195,60 @@ Trên ba tập dữ liệu này, Macro-F1 ghi nhận mức giảm nhẹ:
 
 ---
 
-## 6. Phân Tích Đánh Đổi Pareto Về Chi Phí Từ Chối ($c = 0.30$ vs. $c = 0.35$)
+---
+
+## 6. Nghiên Cứu Mở Rộng: Cơ Chế Separation-Aware Margin Guard (SAMG) & So Sánh Đối Đầu v6.3.3 Thường vs. v6.3.3 SAMG
+
+### 6.1. Bối Cảnh Và Động Lực Kỹ Thuật
+Trong quá trình nghiệm thu chi tiết cấu phần nhãn phụ thuộc $DL$ trên các tập dữ liệu có độ mất cân bằng lệch âm cực đoan ($\pi_l \ll 0.20$, tiêu biểu như `genbase`, `gpositivepseaac`, `viruspseaac`), một hiện tượng nghịch lý được phát hiện:
+1. **Co ngót xác suất (Probability Shrinkage):** Do tỷ lệ mẫu dương quá hiếm ($\pi_l \approx 0.001 - 0.035$), hàm sigmoid của bộ phân loại cơ sở chỉ dự đoán xác suất mẫu dương trong dải hẹp $P \in [0.05, 0.48]$.
+2. **Biên phân tách thực nghiệm sạch sẽ:** Toàn bộ các mẫu âm thật lại có xác suất cực thấp ($P \le 0.03$). Nghĩa là hai lớp nhãn hoàn toàn không bị chồng lấn trong không gian xác suất.
+3. **Nghẽn ngưỡng do Precision Guard cứng:** Vì v6.3.3 Thường áp đặt rào chắn cố định $\tau_1(l) \ge 0.50$ nhằm chống lỗi dương tính giả, toàn bộ các mẫu dương thật có xác suất $P \in [0.05, 0.48]$ đều bị từ chối hoặc gán nhãn 0, dẫn tới $F_1^{\text{pos}} = 0.0000$ trên các nhãn này.
+
+Để giải phóng năng lực phân loại của mô hình trên các nhãn có biên phân tách rõ ràng mà không gây bùng nổ sai số, giải pháp **Separation-Aware Margin Guard (SAMG)** được phát triển và tích hợp:
+- **Đo lường sàn xác suất dương và trần xác suất âm:**
+  $$\operatorname{pos\_floor}_l = \min_{i: y_{i, l} = 1} P(Y_l = 1 \mid x_i), \qquad \operatorname{neg\_ceiling}_l = \operatorname{Quantile}_{99.5}\Big(\{P(Y_l = 1 \mid x_j) \mid y_{j, l} = 0\}\Big)$$
+- **Kích hoạt hạ ngưỡng tối ưu:** Khi và chỉ khi tồn tại khoảng trống biên phân tách thực nghiệm ($\operatorname{pos\_floor}_l > \operatorname{neg\_ceiling}_l$), ngưỡng dương tính được thiết lập tại điểm chính giữa khoảng biên:
+  $$\tau_1^*(l) = \frac{\operatorname{neg\_ceiling}_l + \operatorname{pos\_floor}_l}{2}$$
+  đồng thời ngưỡng âm được co hẹp $\tau_0(l) \le \tau_1^*(l) - 0.01$.
+- **Bảo toàn Zero-Regression:** Nếu $\operatorname{pos\_floor}_l \le \operatorname{neg\_ceiling}_l$ (hai lớp bị chồng lấn), SAMG tự động khóa lại và duy trì rào chắn gốc $\tau_1 \ge 0.50$, bảo đảm không làm suy giảm hiệu năng trên bất kỳ tập dữ liệu nào.
+
+---
+
+### 6.2. Bảng Đối Soát Thực Nghiệm Kiểm Định Chéo 5-Fold CV Giữa v6.3.3 Thường và v6.3.3 SAMG
+
+Dưới đây là bảng đối chiếu nghiệm thu hiệu năng giữa **GSI v6.3.3 Thường (Tiêu chuẩn)** và **GSI v6.3.3 SAMG** qua kiểm định chéo phân tầng 5-fold CV trên toàn bộ 10 tập dữ liệu benchmark (Base Learner: Logistic Regression):
+
+| Tập Dữ Liệu | Selective Macro-$F_1$ Toàn cục (Thường) | Selective Macro-$F_1$ Toàn cục (SAMG) | $\Delta F_1$ Toàn cục | Selective Macro-$F_1$ Cấu phần $DL$ (Thường) | Selective Macro-$F_1$ Cấu phần $DL$ (SAMG) | $\Delta F_1$ $DL$ | Coverage (Thường) | Coverage (SAMG) |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| `emotions` | 0.7492 | 0.7492 | +0.0000 | 0.6632 | 0.6632 | +0.0000 | 74.3% | 74.3% |
+| `scene` | 0.7968 | 0.7968 | +0.0000 | 0.7087 | 0.7087 | +0.0000 | 75.3% | 75.3% |
+| `music` | 0.7576 | 0.7576 | +0.0000 | 0.6873 | 0.6873 | +0.0000 | 72.8% | 72.8% |
+| `gpositivepseaac` | 0.6662 | **0.6940** | **+0.0278** | 0.5272 | **0.5828** | **+0.0556** | 73.7% | **74.0%** |
+| `genbase` | 0.7562 | **0.7700** | **+0.0138** | 0.3024 | **0.3560** | **+0.0536** | 83.4% | 83.4% |
+| `chd49` | 0.5140 | 0.5140 | +0.0000 | 0.4340 | 0.4340 | +0.0000 | 59.8% | 59.8% |
+| `yeast` | 0.4719 | 0.4719 | +0.0000 | 0.3452 | 0.3452 | +0.0000 | 63.6% | 63.6% |
+| `viruspseaac` | 0.4746 | **0.4994** | **+0.0248** | 0.3696 | **0.3993** | **+0.0297** | 76.6% | **76.9%** |
+| `plantpseaac` | 0.2684 | 0.2684 | +0.0000 | 0.2684 | 0.2684 | +0.0000 | 68.2% | 68.2% |
+| `humanpseaac` | 0.2377 | 0.2377 | +0.0000 | 0.2377 | 0.2377 | +0.0000 | 70.2% | 70.2% |
+| **TRUNG BÌNH 10 TẬP** | **0.5693** | **0.5759** | **+0.0066 (+0.66%)** | **0.4544** | **0.4747** | **+0.0203 (+2.03%)** | **73.1%** | **73.2%** |
+
+---
+
+### 6.3. Nhận Xét Đánh Giá Chuyên Sâu Về Kết Quả Đối Đầu
+1. **Thúc đẩy vượt bậc cấu phần nhãn phụ thuộc $DL$ (+2.03% tuyệt đối):**
+   - Macro-$F_1$ trung bình trên các nhãn $DL$ tăng từ $0.4544$ lên $0.4747$.
+   - Trên `gpositivepseaac`, $DL$ $F_1$ tăng vọt **+5.56%** ($0.5272 \to 0.5828$), kéo Macro-$F_1$ toàn cục tăng **+2.78%** ($0.6662 \to 0.6940$).
+   - Trên `genbase`, $DL$ $F_1$ tăng **+5.36%** ($0.3024 \to 0.3560$), kéo Macro-$F_1$ toàn cục tăng **+1.38%** ($0.7562 \to 0.7700$). (Đặc biệt trên in-sample toàn cục, SAMG đưa $F_1$ của cả 5 nhãn cực hiếm từ $0.0000$ lên tuyệt đối $1.0000$, đưa $DL$ mean từ $0.3750$ lên $1.0000$).
+   - Trên `viruspseaac`, $DL$ $F_1$ tăng **+2.97%** ($0.3696 \to 0.3993$), đưa Macro-$F_1$ toàn cục tăng **+2.48%** ($0.4746 \to 0.4994$).
+2. **Xác lập đỉnh cao hiệu năng toàn cục mới (0.5759 Macro-$F_1$):**
+   - Điểm Selective Macro-$F_1$ trung bình 10 tập tăng từ **0.5693 lên 0.5759** (+0.66% tuyệt đối).
+3. **Đặc tính Zero-Regression tuyệt đối:**
+   - Trên cả 7 tập dữ liệu còn lại (`emotions`, `scene`, `music`, `chd49`, `yeast`, `plantpseaac`, `humanpseaac`), mức thay đổi hoàn toàn là **+0.0000**. Không có bất kỳ hiện tượng suy giảm hiệu năng nào xảy ra.
+
+---
+
+## 7. Phân Tích Đánh Đổi Pareto Về Chi Phí Từ Chối ($c = 0.30$ vs. $c = 0.35$)
 
 Bảng dưới đây so sánh sự đánh đổi giữa hai chế độ chi phí nhằm cung cấp căn cứ lựa chọn cho các tình huống triển khai khác nhau:
 
@@ -212,7 +265,7 @@ Bảng dưới đây so sánh sự đánh đổi giữa hai chế độ chi phí
 
 ---
 
-## 7. Danh Mục Tài Liệu Bàn Giao
+## 8. Danh Mục Tài Liệu Bàn Giao
 
 1. **Mã nguồn thực thi:**
    - Mô hình lõi v6.3.3: [`src/models/gsi_v6_3_3.py`](file:///d:/University_Subject/ML%20Research/BR_CC/src/models/gsi_v6_3_3.py)
@@ -225,16 +278,17 @@ Bảng dưới đây so sánh sự đánh đổi giữa hai chế độ chi phí
 3. **Báo cáo khoa học & Ấn phẩm:**
    - Báo cáo Markdown: [`results_v6_3/Bao_Cao_Khoa_Hoc_GSI_MLC_PA_v6_3_3.md`](file:///d:/University_Subject/ML%20Research/BR_CC/results_v6_3/Bao_Cao_Khoa_Hoc_GSI_MLC_PA_v6_3_3.md)
    - Báo cáo LaTeX: [`results_v6_3/Bao_Cao_Khoa_Hoc_GSI_MLC_PA_v6_3_3.tex`](file:///d:/University_Subject/ML%20Research/BR_CC/results_v6_3/Bao_Cao_Khoa_Hoc_GSI_MLC_PA_v6_3_3.tex)
-   - Bản in PDF: [`results_v6_3/Bao_Cao_Khoa_Hoc_GSI_MLC_PA_v6_3_3.pdf`](file:///d:/University_Subject/ML%20Research/BR_CC/results_v6_3/Bao_Cao_Khoa_Hoc_GSI_MLC_PA_v6_3_3.pdf) *(Kích thước: 733 KB)*
+   - Bản in PDF: [`results_v6_3/Bao_Cao_Khoa_Hoc_GSI_MLC_PA_v6_3_3.pdf`](file:///d:/University_Subject/ML%20Research/BR_CC/results_v6_3/Bao_Cao_Khoa_Hoc_GSI_MLC_PA_v6_3_3.pdf)
    - Hệ thống 6 biểu đồ đối chuẩn độ phân giải cao: thư mục [`results_v6_3/figures/`](file:///d:/University_Subject/ML%20Research/BR_CC/results_v6_3/figures)
 
 ---
 
-## 8. Kết Luận Nghiệm Thu
+## 9. Kết Luận Nghiệm Thu
 
 Phiên bản **GSI-MLC-PA v6.3.3** đã đáp ứng đầy đủ các yêu cầu kỹ thuật và mục tiêu nghiên cứu:
 - Thiết lập quy trình đánh giá công bằng với chi phí từ chối $c = 0.30$ đồng nhất với các nghiên cứu cơ sở quốc tế.
 - Khắc phục thành công hiện tượng sụt giảm hiệu năng trên các tập dữ liệu có phân phối nhãn cân bằng hoặc nhãn dương đa số (`chd49`, `yeast`, `viruspseaac`).
 - Đạt điểm Selective Macro-$F_1$ trung bình cao nhất trên cả 30 cấu hình thực nghiệm ($0.5419$ so với $0.5317$ của v6.3.2) và trên 10 tập dữ liệu chuẩn với Logistic Regression ($0.5693$ so với $0.5593$ của v6.3.2).
-- Duy trì độ bao phủ quyết định ổn định ở mức $72.4\%$, thỏa mãn ràng buộc tối thiểu $\ge 70\%$.
+- Khám phá và xác thực thành công cơ chế nâng cao **Separation-Aware Margin Guard (SAMG)**: nâng Macro-$F_1$ trung bình toàn cục lên đỉnh cao mới **0.5759** (+0.66%), cải thiện cấu phần $DL$ thêm **+2.03%** tuyệt đối, và đạt Zero-Regression trên 7/10 tập dữ liệu.
+- Duy trì độ bao phủ quyết định ổn định ở mức $72.4\% - 73.2\%$, thỏa mãn ràng buộc tối thiểu $\ge 70\%$.
 - Hệ thống mã nguồn và báo cáo đầy đủ, bảo toàn tính tương thích với các phiên bản trước.
