@@ -229,7 +229,8 @@ Bảng 4 tổng hợp kết quả đánh giá 425 lượt nhãn theo 3 phân nh�
 | Tập dữ liệu | Cấu phần | Số lượt | $\pi_{\text{train}}$ | Ngưỡng $[\tau_0, \tau_1]$ | Coverage | $F_1^{\text{pos}}$ | $F_1^{\text{neg}}$ | Binary $F_1$ | Recall / Prec (Dương) | Recall / Prec (Âm) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | `chd49` | **DL** | 5 | 0.029 | [0.14, 0.50] | 73.2% | **0.0000** | 0.9850 | 0.4925 | **0.0%** / 0.0% | 99.7% / 97.3% |
-| `genbase` | **DL** | 40 | 0.004 | [0.02, 0.50] | 83.7% | 0.3167 | 0.9999 | 0.6583 | 32.5% / 31.2% | 100.0% / 100.0% |
+| `genbase` (Gốc) | **DL** | 40 | 0.004 | [0.02, 0.50] | 83.7% | 0.3167 | 0.9999 | 0.6583 | 32.5% / 31.2% | 100.0% / 100.0% |
+| `genbase` (SAMG) | **DL** | 40 | 0.004 | [0.02, 0.17] | 82.7% | **0.7385** | 0.9998 | **0.8692** | **76.9%** / **71.8%** | 100.0% / 100.0% |
 | `genbase` | **IL** | 90 | 0.053 | [0.02, 0.51] | 98.7% | **0.9382** | 0.9997 | 0.9689 | 94.2% / 93.6% | 100.0% / 100.0% |
 | `gpositivepseaac` | **DL** | 5 | 0.035 | [0.13, 0.50] | 70.5% | 0.3048 | 0.9806 | 0.6427 | 40.0% / 25.0% | 97.2% / 98.9% |
 | `humanpseaac` | **DL** | 60 | 0.049 | [0.17, 0.50] | 72.4% | 0.1958 | 0.9739 | 0.5848 | 22.3% / 19.4% | 97.4% / 97.4% |
@@ -241,8 +242,8 @@ Bảng 4 tổng hợp kết quả đánh giá 425 lượt nhãn theo 3 phân nh�
 | `yeast` | **DL** | 30 | 0.115 | [0.25, 0.50] | 64.2% | 0.1736 | 0.9436 | 0.5586 | **13.8%** / 33.0% | 96.7% / 92.1% |
 
 Các kết quả định lượng tại Bảng 5 xác lập các luận điểm kỹ thuật quan trọng:
-1. **Hiện tượng suy sụp độ nhạy lớp dương trên tập $DL$:** 
-Trên toàn bộ các nhãn thuộc $DL$, điểm $F_1^{\text{pos}}$ dao động từ $0.0000$ (`chd49`) đến $0.3167$ (`genbase`), với độ nhạy dương $\text{Recall}_{\text{pos}}$ bình quân chỉ đạt $26.52\%$. 
+1. **Hiện tượng suy sụp độ nhạy lớp dương trên tập $DL$ trước khi áp dụng SAMG:** 
+Trên toàn bộ các nhãn thuộc $DL$ ở cấu hình gốc, điểm $F_1^{\text{pos}}$ dao động từ $0.0000$ (`chd49`) đến $0.3167$ (`genbase`), với độ nhạy dương $\text{Recall}_{\text{pos}}$ bình quân chỉ đạt $26.52\%$. Tuy nhiên, khi cơ chế SAMG được tích hợp (xem thêm phân tích chi tiết tại Mục 4.4), điểm $F_1^{\text{pos}}$ của `genbase` $DL$ đã tăng vọt lên **$0.7385$** trong kiểm định 5-fold CV (và đạt **$1.0000$** trên kiểm tra toàn cục), với độ nhạy dương phục hồi mạnh mẽ từ $32.5\%$ lên **$76.9\%$**. 
 Đặc biệt trên `chd49` $DL$ (5 lượt đánh giá fold), mô hình hoàn toàn không nhận diện được bất kỳ mẫu dương tính nào ($\text{Recall}_{\text{pos}} = 0.0\%$, $\text{Precision}_{\text{pos}} = 0.0\%$). Tương tự, trên `yeast` $DL$, độ nhạy dương chỉ đạt $13.8\%$, nghĩa là hệ thống bỏ sót tới $86.2\%$ số mẫu dương tính thật. Trên hai tập dữ liệu protein quy mô lớn `humanpseaac` (60 lượt đánh giá) và `plantpseaac` (55 lượt đánh giá), độ nhạy dương cũng lần lượt chỉ đạt $22.3\%$ và $33.6\%$.
 2. **Ảo ảnh thống kê của chỉ số $F_1^{\text{neg}}$:** 
 Mặc dù $F_1^{\text{pos}}$ rất thấp hoặc bằng 0, giá trị $F_1^{\text{neg}}$ trên các tập này vẫn duy trì ở mức rất cao: $0.9850$ (`chd49`), $0.9739$ (`humanpseaac`), $0.9589$ (`plantpseaac`), và $0.9999$ (`genbase`). Hiện tượng này hoàn toàn phù hợp với phương trình giải tích lý thuyết: khi tỷ lệ tiên nghiệm $\pi < 0.05$, số lượng mẫu âm tính chiếm trên $95\%$ tổng thể. Ngay cả khi mô hình dự đoán toàn bộ các mẫu là âm tính, số lượng True Negative áp đảo vẫn tạo ra giá trị $F_1^{\text{neg}} > 0.95$.
