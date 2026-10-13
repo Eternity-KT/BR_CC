@@ -235,16 +235,40 @@ Dưới đây là bảng đối chiếu nghiệm thu hiệu năng giữa **GSI v
 
 ---
 
-### 6.3. Nhận Xét Đánh Giá Chuyên Sâu Về Kết Quả Đối Đầu
+### 6.3. Bảng Đối Soát Song Song Giữa Full Macro-$F_1$ (Không Chọn Lọc) và Selective Macro-$F_1$ (Có Chọn Lọc)
+Nhằm đánh giá toàn diện năng lực của SAMG cả trong tình huống bắt buộc phải đưa ra quyết định toàn phần (Full Inference - không từ chối) và trong tình huống cho phép từ chối có chọn lọc (Selective Inference với $c=0.30$), bảng dưới đây tổng hợp kết quả kiểm định chéo phân tầng 5-fold CV song song trên 10 tập dữ liệu (Base Learner: Logistic Regression):
+
+| Tập Dữ Liệu | Full Macro-$F_1$ (Thường) | Full Macro-$F_1$ (SAMG) | $\Delta$ Full $F_1$ | Selective Macro-$F_1$ (Thường) | Selective Macro-$F_1$ (SAMG) | $\Delta$ Sel $F_1$ | Coverage (Thường) | Coverage (SAMG) |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| `emotions` | 0.6733 | 0.6733 | +0.0000 | 0.7492 | 0.7492 | +0.0000 | 74.3% | 74.3% |
+| `scene` | 0.7271 | 0.7271 | +0.0000 | 0.7968 | 0.7968 | +0.0000 | 75.3% | 75.3% |
+| `music` | 0.6772 | 0.6772 | +0.0000 | 0.7576 | 0.7576 | +0.0000 | 73.0% | 73.0% |
+| `gpositivepseaac` | 0.5919 | **0.6130** | **+0.0211** | 0.6662 | **0.6940** | **+0.0278** | 73.7% | **74.0%** |
+| `genbase` | 0.7534 | **0.7675** | **+0.0141** | 0.7562 | **0.7700** | **+0.0138** | 94.3% | 94.3% |
+| `chd49` | 0.5039 | 0.5039 | +0.0000 | 0.5140 | 0.5140 | +0.0000 | 62.0% | 62.0% |
+| `yeast` | 0.4029 | 0.4029 | +0.0000 | 0.4719 | 0.4719 | +0.0000 | 63.6% | 63.6% |
+| `viruspseaac` | 0.4083 | **0.4321** | **+0.0238** | 0.4746 | **0.4994** | **+0.0248** | 76.6% | **76.9%** |
+| `plantpseaac` | 0.2003 | 0.2003 | +0.0000 | 0.2684 | 0.2684 | +0.0000 | 68.2% | 68.3% |
+| `humanpseaac` | 0.1740 | 0.1740 | +0.0000 | 0.2377 | 0.2377 | +0.0000 | 70.2% | 70.2% |
+| **TRUNG BÌNH 10 TẬP** | **0.5112** | **0.5171** | **+0.0059 (+0.59%)** | **0.5693** | **0.5759** | **+0.0066 (+0.66%)** | **73.1%** | **73.2%** |
+
+---
+
+### 6.4. Nhận Xét Đánh Giá Chuyên Sâu Về Kết Quả Đối Đầu
 1. **Thúc đẩy vượt bậc cấu phần nhãn phụ thuộc $DL$ (+2.03% tuyệt đối):**
    - Macro-$F_1$ trung bình trên các nhãn $DL$ tăng từ $0.4544$ lên $0.4747$.
    - Trên `gpositivepseaac`, $DL$ $F_1$ tăng vọt **+5.56%** ($0.5272 \to 0.5828$), kéo Macro-$F_1$ toàn cục tăng **+2.78%** ($0.6662 \to 0.6940$).
    - Trên `genbase`, $DL$ $F_1$ tăng **+5.36%** ($0.3024 \to 0.3560$), kéo Macro-$F_1$ toàn cục tăng **+1.38%** ($0.7562 \to 0.7700$). (Đặc biệt trên in-sample toàn cục, SAMG đưa $F_1$ của cả 5 nhãn cực hiếm từ $0.0000$ lên tuyệt đối $1.0000$, đưa $DL$ mean từ $0.3750$ lên $1.0000$).
    - Trên `viruspseaac`, $DL$ $F_1$ tăng **+2.97%** ($0.3696 \to 0.3993$), đưa Macro-$F_1$ toàn cục tăng **+2.48%** ($0.4746 \to 0.4994$).
-2. **Xác lập đỉnh cao hiệu năng toàn cục mới (0.5759 Macro-$F_1$):**
+2. **Cải thiện đồng bộ trên cả Full Macro-$F_1$ và Selective Macro-$F_1$:**
+   - SAMG nâng Full Macro-$F_1$ trung bình từ **$0.5112 \to 0.5171$** (+0.59% tuyệt đối), tăng mạnh nhất tại `viruspseaac` (+2.38%), `gpositivepseaac` (+2.11%) và `genbase` (+1.41%).
+   - Điều này chứng minh việc hạ ngưỡng vào khoảng trống biên $\tau_1^*$ thực sự tối ưu ranh giới quyết định thực nghiệm của mô hình, độc lập với cơ chế từ chối mẫu.
+3. **Lợi ích bền vững của phân loại có chọn lọc (Selective Gain):**
+   - Trên cả 10 tập dữ liệu, Selective Macro-$F_1$ luôn cao hơn Full Macro-$F_1$ khoảng **+5.88%** (0.5759 so với 0.5171), khẳng định cơ chế Chow Partial Abstention đã loại trừ xuất sắc các mẫu gây nhiễu tại vùng bất định.
+4. **Xác lập đỉnh cao hiệu năng toàn cục mới (0.5759 Macro-$F_1$):**
    - Điểm Selective Macro-$F_1$ trung bình 10 tập tăng từ **0.5693 lên 0.5759** (+0.66% tuyệt đối).
-3. **Đặc tính Zero-Regression tuyệt đối:**
-   - Trên cả 7 tập dữ liệu còn lại (`emotions`, `scene`, `music`, `chd49`, `yeast`, `plantpseaac`, `humanpseaac`), mức thay đổi hoàn toàn là **+0.0000**. Không có bất kỳ hiện tượng suy giảm hiệu năng nào xảy ra.
+5. **Đặc tính Zero-Regression tuyệt đối:**
+   - Trên cả 7 tập dữ liệu còn lại (`emotions`, `scene`, `music`, `chd49`, `yeast`, `plantpseaac`, `humanpseaac`), mức thay đổi hoàn toàn là **+0.0000** trên cả Full Macro-$F_1$ và Selective Macro-$F_1$. Không có bất kỳ hiện tượng suy giảm hiệu năng nào xảy ra.
 
 ---
 

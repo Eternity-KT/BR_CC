@@ -612,8 +612,40 @@ Bảng \ref{tab:v633_vs_samg} lượng hóa đối chứng chi tiết hiệu nă
 }
 \end{table}
 
+\subsubsection{Bảng Đối Soát Song Song Giữa \texorpdfstring{Full Macro-$F_1$}{Full Macro-F1} và \texorpdfstring{Selective Macro-$F_1$}{Selective Macro-F1} Khi Áp Dụng SAMG}
+Nhằm cung cấp góc nhìn toàn diện về tác động của cơ chế SAMG cả khi mô hình bắt buộc phải đưa ra quyết định trên toàn bộ mẫu (Full Inference - không từ chối) và khi kích hoạt cơ chế từ chối có chọn lọc (Selective Inference với $c=0.30$), Bảng \ref{tab:full_vs_selective_samg} tổng hợp kết quả đối chuẩn kiểm định chéo 5-fold CV song song trên cả 10 tập dữ liệu.
+
+\begin{table}[H]
+\centering
+\small
+\caption{Đối chiếu song song giữa Full Macro-$F_1$ (không chọn lọc) và Selective Macro-$F_1$ (có chọn lọc) giữa GSI v6.3.3 Thường và GSI v6.3.3 SAMG trên 10 tập dữ liệu benchmark (Base Learner: Logistic Regression).}
+\label{tab:full_vs_selective_samg}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcccccccc}
+\toprule
+\multirow{2}{*}{\textbf{Tập dữ liệu}} & \multicolumn{3}{c}{\textbf{Full Macro-$F_1$ (Không từ chối)}} & \multicolumn{3}{c}{\textbf{Selective Macro-$F_1$ ($c=0.30$)}} & \multicolumn{2}{c}{\textbf{Độ phủ Coverage (\%)}} \\
+\cmidrule(lr){2-4} \cmidrule(lr){5-7} \cmidrule(lr){8-9}
+ & \textbf{v6.3.3 Thường} & \textbf{v6.3.3 SAMG} & \textbf{$\Delta F_1$} & \textbf{v6.3.3 Thường} & \textbf{v6.3.3 SAMG} & \textbf{$\Delta F_1$} & \textbf{v6.3.3 Thường} & \textbf{v6.3.3 SAMG} \\
+\midrule
+\texttt{emotions}        & 0.6733 & 0.6733 & +0.0000 & 0.7492 & 0.7492 & +0.0000 & 74.3\% & 74.3\% \\
+\texttt{scene}           & 0.7271 & 0.7271 & +0.0000 & 0.7968 & 0.7968 & +0.0000 & 75.3\% & 75.3\% \\
+\texttt{music}           & 0.6772 & 0.6772 & +0.0000 & 0.7576 & 0.7576 & +0.0000 & 73.0\% & 73.0\% \\
+\texttt{gpositivepseaac} & 0.5919 & \textbf{0.6130} & \textbf{+0.0211} & 0.6662 & \textbf{0.6940} & \textbf{+0.0278} & 73.7\% & \textbf{74.0\%} \\
+\texttt{genbase}         & 0.7534 & \textbf{0.7675} & \textbf{+0.0141} & 0.7562 & \textbf{0.7700} & \textbf{+0.0138} & 94.3\% & 94.3\% \\
+\texttt{chd49}           & 0.5039 & 0.5039 & +0.0000 & 0.5140 & 0.5140 & +0.0000 & 62.0\% & 62.0\% \\
+\texttt{yeast}           & 0.4029 & 0.4029 & +0.0000 & 0.4719 & 0.4719 & +0.0000 & 63.6\% & 63.6\% \\
+\texttt{viruspseaac}     & 0.4083 & \textbf{0.4321} & \textbf{+0.0238} & 0.4746 & \textbf{0.4994} & \textbf{+0.0248} & 76.6\% & \textbf{76.9\%} \\
+\texttt{plantpseaac}     & 0.2003 & 0.2003 & +0.0000 & 0.2684 & 0.2684 & +0.0000 & 68.2\% & 68.3\% \\
+\texttt{humanpseaac}     & 0.1740 & 0.1740 & +0.0000 & 0.2377 & 0.2377 & +0.0000 & 70.2\% & 70.2\% \\
+\midrule
+\textbf{Trung bình 10 tập} & 0.5112 & \textbf{0.5171} & \textbf{+0.0059} & 0.5693 & \textbf{0.5759} & \textbf{+0.0066} & 73.1\% & \textbf{73.2\%} \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
 \subsubsection{Phân Tích So Sánh Chuyên Sâu Giữa v6.3.3 Thường và v6.3.3 SAMG}
-Kết quả thực nghiệm tại Bảng \ref{tab:v633_vs_samg} thiết lập các luận cứ khoa học quan trọng:
+Kết quả thực nghiệm tại Bảng \ref{tab:v633_vs_samg} và Bảng \ref{tab:full_vs_selective_samg} thiết lập các luận cứ khoa học quan trọng:
 \begin{enumerate}[leftmargin=*]
     \item \textbf{Cải thiện vượt bậc trên cấu phần nhãn phụ thuộc $DL$:} Trên cấu phần $DL$, điểm Selective Macro-$F_1$ trung bình toàn cục tăng từ $0.4544$ lên $0.4747$ ($+0.0203$, tức tăng $+2.03\%$ tuyệt đối). Trong đó:
     \begin{itemize}
@@ -621,8 +653,12 @@ Kết quả thực nghiệm tại Bảng \ref{tab:v633_vs_samg} thiết lập c�
         \item Trên \texttt{genbase}, $DL$ $F_1$ tăng $+5.36\%$ ($0.3024 \to 0.3560$), đưa Macro-$F_1$ toàn cục tăng $+1.38\%$ ($0.7562 \to 0.7700$). (Đặc biệt trên in-sample toàn cục, SAMG khôi phục chính xác $100\%$ mẫu dương của cả 5 nhãn cực hiếm, đưa $DL$ $F_1$ từ $0.3750$ lên tuyệt đối $1.0000$).
         \item Trên \texttt{viruspseaac}, $DL$ $F_1$ tăng $+2.97\%$ ($0.3696 \to 0.3993$), đưa Macro-$F_1$ toàn cục tăng $+2.48\%$ ($0.4746 \to 0.4994$).
     \end{itemize}
+    \item \textbf{Cải thiện đồng bộ trên cả hai không gian đánh giá Full $F_1$ và Selective $F_1$:}
+    Không chỉ mang lại ưu thế trong chế độ phân loại có từ chối, SAMG còn trực tiếp nâng điểm Full Macro-$F_1$ (không từ chối) trung bình 10 tập từ $0.5112$ lên $\mathbf{0.5171}$ ($+0.59\%$ tuyệt đối), trong đó tăng mạnh nhất tại \texttt{viruspseaac} ($+2.38\%$), \texttt{gpositivepseaac} ($+2.11\%$) và \texttt{genbase} ($+1.41\%$). Sự cải thiện đồng pha này khẳng định việc hạ ngưỡng vào khoảng trống biên $\tau_1^*$ phản ánh đúng bản chất phân tách thực nghiệm của mô hình cơ sở, chứ không phụ thuộc nhân tạo vào việc loại trừ mẫu qua cơ chế từ chối.
+    \item \textbf{Lợi ích bền vững của cơ chế phân loại có chọn lọc (Selective Gain):}
+    Trên toàn bộ 10 tập dữ liệu, điểm Selective Macro-$F_1$ luôn vượt trội đáng kể so với Full Macro-$F_1$ (trung bình toàn cục đạt $0.5759$ so với $0.5171$, chênh lệch vượt trội $+5.88\%$ tuyệt đối). Điều này chứng minh cơ chế Chow Partial Abstention đã loại bỏ triệt để các trường hợp có độ bất định cao ở vùng lân cận ranh giới phân tách.
     \item \textbf{Xác lập đỉnh cao hiệu năng trung bình toàn cục 10 tập dữ liệu:} Sự kết hợp giữa cơ chế Tri-Regime và SAMG nâng Selective Macro-$F_1$ trung bình 10 tập dữ liệu của v6.3.3 từ $0.5693$ lên $\mathbf{0.5759}$ (tăng $+0.66\%$ tuyệt đối trên toàn bộ không gian bài toán với bộ học Logistic Regression).
-    \item \textbf{Tính chất bảo toàn tuyệt đối (Zero Regression):} Trên 7 tập dữ liệu còn lại (\texttt{emotions}, \texttt{scene}, \texttt{music}, \texttt{chd49}, \texttt{yeast}, \texttt{plantpseaac}, \texttt{humanpseaac}), mức độ chênh lệch là $\Delta F_1 = \mathbf{+0.0000}$ tuyệt đối. Điều này khẳng định cơ chế kiểm tra điều kiện biên $\operatorname{pos\_floor} > \operatorname{neg\_ceiling}$ có độ chọn lọc rất cao, chỉ can thiệp hạ ngưỡng khi có bằng chứng toán học chắc chắn, không gây ra bất kỳ tác dụng phụ hay hiện tượng bùng nổ dương tính giả nào.
+    \item \textbf{Tính chất bảo toàn tuyệt đối (Zero Regression):} Trên 7 tập dữ liệu còn lại (\texttt{emotions}, \texttt{scene}, \texttt{music}, \texttt{chd49}, \texttt{yeast}, \texttt{plantpseaac}, \texttt{humanpseaac}), mức độ chênh lệch là $\Delta F_1 = \mathbf{+0.0000}$ tuyệt đối trên cả Full Macro-$F_1$ và Selective Macro-$F_1$. Điều này khẳng định cơ chế kiểm tra điều kiện biên $\operatorname{pos\_floor} > \operatorname{neg\_ceiling}$ có độ chọn lọc rất cao, chỉ can thiệp hạ ngưỡng khi có bằng chứng toán học chắc chắn, không gây ra bất kỳ tác dụng phụ hay hiện tượng bùng nổ dương tính giả nào.
 \end{enumerate}
 
 \section{Hệ Thống Biểu Đồ Metric Trực Quan}
@@ -678,7 +714,7 @@ Kết quả thực nghiệm tại Bảng \ref{tab:v633_vs_samg} thiết lập c�
 \section{Kết Luận (Conclusion)}
 Nghiên cứu này đã hoàn thiện mô hình \textbf{GSI-MLC-PA v6.3.3} nhằm giải quyết hiện tượng suy giảm hiệu năng trên các tập dữ liệu có phân phối nhãn cân bằng hoặc nhãn dương đa số trong bài toán phân loại đa nhãn có chọn lọc. Thông qua việc kết hợp cơ chế Suy diễn Ba Chế Độ Thích Ứng (Adaptive Tri-Regime Inference), Chốt chặn Xác thực Âm (Negative Precision Guard), Hàm nội suy trơn biên giới Sigmoid và kỹ thuật kẹp ngưỡng hai đầu Smooth Dual F1-Clamping, phiên bản tiêu chuẩn v6.3.3 đã khắc phục triệt để điểm nghẽn trên các tập dữ liệu phức tạp (\texttt{chd49}, \texttt{yeast}, \texttt{viruspseaac}) trong khi vẫn duy trì độ ổn định cao trên các tập dữ liệu còn lại.
 
-Đặc biệt, nghiên cứu mở rộng với cơ chế \textbf{Separation-Aware Margin Guard (SAMG)} đã giải phóng tiềm năng dự đoán trên các nhãn phụ thuộc cực hiếm ($DL$) gặp hiện tượng co ngót xác suất nhưng có biên phân tách thực nghiệm sạch sẽ. Kiểm định chéo 5-fold CV trên toàn bộ 10 tập dữ liệu benchmark khẳng định GSI v6.3.3 SAMG thiết lập đỉnh cao hiệu năng mới với Macro-$F_1$ trung bình đạt $\mathbf{0.5759}$ ($+0.66\%$ so với v6.3.3 Thường), thúc đẩy cấu phần $DL$ tăng $+2.03\%$ tuyệt đối (đặc biệt tăng vọt trên \texttt{gpositivepseaac} $+5.56\%$, \texttt{genbase} $+5.36\%$, \texttt{viruspseaac} $+2.97\%$), đồng thời bảo toàn tính chất Zero-Regression tuyệt đối trên 7 tập dữ liệu còn lại. Đây là minh chứng vững chắc cho tính khả thi, độ tin cậy và tiềm năng ứng dụng thực tiễn của khung phương pháp GSI-MLC-PA.
+Đặc biệt, nghiên cứu mở rộng với cơ chế \textbf{Separation-Aware Margin Guard (SAMG)} đã giải phóng tiềm năng dự đoán trên các nhãn phụ thuộc cực hiếm ($DL$) gặp hiện tượng co ngót xác suất nhưng có biên phân tách thực nghiệm sạch sẽ. Kiểm định chéo 5-fold CV trên toàn bộ 10 tập dữ liệu benchmark khẳng định GSI v6.3.3 SAMG thiết lập đỉnh cao hiệu năng mới: Selective Macro-$F_1$ trung bình đạt $\mathbf{0.5759}$ ($+0.66\%$ so với v6.3.3 Thường) và Full Macro-$F_1$ (không từ chối) tăng từ $0.5112$ lên $\mathbf{0.5171}$ ($+0.59\%$), thúc đẩy cấu phần $DL$ tăng $+2.03\%$ tuyệt đối (đặc biệt tăng vọt trên \texttt{gpositivepseaac} $+5.56\%$, \texttt{genbase} $+5.36\%$, \texttt{viruspseaac} $+2.97\%$), đồng thời bảo toàn tính chất Zero-Regression tuyệt đối trên 7 tập dữ liệu còn lại. Đây là minh chứng vững chắc cho tính khả thi, độ tin cậy và tiềm năng ứng dụng thực tiễn của khung phương pháp GSI-MLC-PA.
 
 \begin{thebibliography}{10}
 \bibitem{read2011} J. Read, B. Pfahringer, G. Holmes, and E. Frank, ``Classifier chains for multi-label classification,'' \textit{Machine Learning}, vol. 85, no. 3, pp. 333--359, 2011.
