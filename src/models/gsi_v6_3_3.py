@@ -76,6 +76,11 @@ class GSIMLCPAv6_3_3Classifier(GSIMLCPAv6_3_2Classifier):
         tau_1_cap: float = 0.55,
         tau_0_floor: float = 0.45,
         separation_aware: bool = True,
+        samg_strategy: str = "legacy_margin",
+        samg_min_positive_support: int = 5,
+        samg_min_f1_gain: float = 0.02,
+        samg_max_f1_negative_drop: float = 0.01,
+        rejection_scope: str = "all_labels",
     ):
         super().__init__(
             base_learner=base_learner,
@@ -105,6 +110,16 @@ class GSIMLCPAv6_3_3Classifier(GSIMLCPAv6_3_2Classifier):
         self.tau_1_cap = float(tau_1_cap)
         self.tau_0_floor = float(tau_0_floor)
         self.separation_aware = bool(separation_aware)
+        self.samg_strategy = str(samg_strategy)
+        self.samg_min_positive_support = int(samg_min_positive_support)
+        self.samg_min_f1_gain = float(samg_min_f1_gain)
+        self.samg_max_f1_negative_drop = float(samg_max_f1_negative_drop)
+        if rejection_scope not in ("all_labels", "dl_only"):
+            raise ValueError(
+                "rejection_scope must be 'all_labels' or 'dl_only', "
+                f"got {rejection_scope!r}"
+            )
+        self.rejection_scope = rejection_scope
 
     def fit(self, X, Y):
         """Fit GSI-MLC-PA v6.3.3 using CV peeling, OS-NMF coupling, and Tri-Regime calibration."""
@@ -285,7 +300,15 @@ class GSIMLCPAv6_3_3Classifier(GSIMLCPAv6_3_2Classifier):
         # -------------------------------------------------------------------------
         if self.use_prior_adaptive:
             self.is_fitted_ = True
-            P_fitted = self.predict_proba(X) if self.separation_aware else None
+            use_fitted_margin = self.samg_strategy in (
+                "legacy_margin",
+                "oof_guarded_margin",
+            )
+            P_fitted = (
+                self.predict_proba(X)
+                if self.separation_aware and use_fitted_margin
+                else None
+            )
             self.adaptive_thresholds_ = compute_tri_regime_adaptive_thresholds_table(
                 Y_train=Y,
                 OOF_probs=P_OOF_all,
@@ -298,6 +321,10 @@ class GSIMLCPAv6_3_3Classifier(GSIMLCPAv6_3_2Classifier):
                 tau_0_floor=self.tau_0_floor,
                 in_sample_probs=P_fitted,
                 separation_aware=self.separation_aware,
+                samg_strategy=self.samg_strategy,
+                samg_min_positive_support=self.samg_min_positive_support,
+                samg_min_f1_gain=self.samg_min_f1_gain,
+                samg_max_f1_negative_drop=self.samg_max_f1_negative_drop,
             )
         else:
             self.adaptive_thresholds_ = {
@@ -323,19 +350,22 @@ class GSIMLCPAv6_3_3Classifier(GSIMLCPAv6_3_2Classifier):
         """
         P = self.predict_proba(X)
         if self.use_prior_adaptive and hasattr(self, "adaptive_thresholds_"):
-            return apply_tri_regime_abstention(
+            preds = apply_tri_regime_abstention(
                 P, self.adaptive_thresholds_, abstain_value=self.abstain_value
             )
-        c = float(cost if cost is not None else self.cost)
-        return self._apply_symmetric_chow_rejection(P, cost=c)
+        else:
+            c = float(cost if cost is not None else self.cost)
+            preds = self._apply_symmetric_chow_rejection(P, cost=c)
 
-    def predict_full(self, X, threshold: Optional[float] = None) -> np.ndarray:
-        """
-        Predict binary multilabel decisions without abstention.
-        If threshold is specified as float, applies static threshold across all labels.
-        If threshold is None (default), applies label-specific adaptive decision thresholds.
-        """
-        P = self.predict_proba(X)
+        if self.rejection_scope == "dl_only" and self.independent_labels_:
+            full_preds = self._predict_full_from_probabilities(P)
+            preds[:, self.independent_labels_] = full_preds[:, self.independent_labels_]
+        return preds
+
+    def _predict_full_from_probabilities(
+        self, P: np.ndarray, threshold: Optional[float] = None
+    ) -> np.ndarray:
+        """Convert an existing probability matrix to complete 0/1 decisions."""
         if threshold is not None:
             return (P >= float(threshold)).astype(np.int32)
         if not hasattr(self, "adaptive_thresholds_"):
@@ -354,3 +384,12 @@ class GSIMLCPAv6_3_3Classifier(GSIMLCPAv6_3_2Classifier):
                 t = 0.50
             preds[:, j] = (P[:, j] >= t).astype(np.int32)
         return preds
+
+    def predict_full(self, X, threshold: Optional[float] = None) -> np.ndarray:
+        """
+        Predict binary multilabel decisions without abstention.
+        If threshold is specified as float, applies static threshold across all labels.
+        If threshold is None (default), applies label-specific adaptive decision thresholds.
+        """
+        P = self.predict_proba(X)
+        return self._predict_full_from_probabilities(P, threshold=threshold)

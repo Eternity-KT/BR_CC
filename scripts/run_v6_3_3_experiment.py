@@ -32,6 +32,8 @@ from src.evaluation.metrics import (
 )
 from src.models.gsi_v6_3_2 import GSIMLCPAv6_3_2Classifier
 from src.models.gsi_v6_3_3 import GSIMLCPAv6_3_3Classifier
+from src.models.gsi_v6_3_4 import GSIMLCPAv6_3_4Classifier
+from src.models.gsi_v6_3_5 import GSIMLCPAv6_3_5Classifier
 
 DEFAULT_DATASETS = [
     "emotions",
@@ -45,6 +47,12 @@ DEFAULT_DATASETS = [
     "genbase",
     "viruspseaac",
 ]
+
+
+def _nanmean_or_nan(values) -> float:
+    finite = np.asarray(values, dtype=np.float64)
+    finite = finite[np.isfinite(finite)]
+    return float(np.mean(finite)) if finite.size else np.nan
 
 
 def evaluate_fold(y_test: np.ndarray, model: Any, X_test: np.ndarray, cost: Any = None) -> Dict[str, float]:
@@ -62,7 +70,7 @@ def evaluate_fold(y_test: np.ndarray, model: Any, X_test: np.ndarray, cost: Any 
         else 0.0
     )
 
-    return {
+    result = {
         "Selective_Macro_F1": float(sel_macro_f1),
         "Coverage": float(coverage),
         "Full_Macro_F1": float(full_metrics["Macro-F1"]),
@@ -72,6 +80,23 @@ def evaluate_fold(y_test: np.ndarray, model: Any, X_test: np.ndarray, cost: Any 
         "Selective_Hamming_Loss": float(sel_hamming),
         "Subset_Accuracy": float(full_metrics["Subset Accuracy"]),
     }
+    for group_name, label_indices in (
+        ("IL", model.independent_labels_),
+        ("DL", model.dependent_labels_),
+    ):
+        if label_indices:
+            group_truth = y_test[:, label_indices]
+            group_preds = sel_preds[:, label_indices]
+            result[f"{group_name}_Label_Count"] = int(len(label_indices))
+            result[f"{group_name}_Coverage"] = float(np.mean(group_preds != -1))
+            result[f"{group_name}_Selective_Macro_F1"] = float(
+                compute_selective_macro_f1(group_truth, group_preds)
+            )
+        else:
+            result[f"{group_name}_Label_Count"] = 0
+            result[f"{group_name}_Coverage"] = np.nan
+            result[f"{group_name}_Selective_Macro_F1"] = np.nan
+    return result
 
 
 def run_v6_3_3_benchmark(
@@ -81,6 +106,7 @@ def run_v6_3_3_benchmark(
     n_splits: int = 5,
     cost: Any = None,
     random_state: int = 42,
+    model_set: str = "legacy",
     output_dir: Path = WORKSPACE_ROOT / "results_v6_3",
 ):
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -90,8 +116,13 @@ def run_v6_3_3_benchmark(
     detailed_rows: List[Dict[str, Any]] = []
     summary_rows: List[Dict[str, Any]] = []
 
+    benchmark_title = (
+        "GSI-MLC-PA v6.3.2 vs. v6.3.3 (Adaptive Tri-Regime)"
+        if model_set == "legacy"
+        else "GSI-MLC-PA selective rejection audit"
+    )
     print("\n" + "=" * 95)
-    print(f"BENCHMARK: GSI-MLC-PA v6.3.2 vs. v6.3.3 (Adaptive Tri-Regime) [{tag}]")
+    print(f"BENCHMARK: {benchmark_title} [{tag}]")
     print(f"Datasets: {datasets}")
     print(f"Base Learner: {base_learner} | Folds: {n_splits}")
     print("=" * 95)
@@ -107,26 +138,68 @@ def run_v6_3_3_benchmark(
         cv = get_multilabel_cv(n_splits=n_splits, random_state=random_state)
         fold_indices = list(cv.split(X, Y))
 
-        models_to_test = {
-            "GSI_v6_3_2": lambda seed: GSIMLCPAv6_3_2Classifier(
-                base_learner=base_learner,
-                mf_alpha=0.25,
-                mf_z_max=0.5,
-                random_state=seed,
-            ),
-            "GSI_v6_3_3": lambda seed: GSIMLCPAv6_3_3Classifier(
-                base_learner=base_learner,
-                mf_alpha=0.25,
-                mf_z_max=0.5,
-                tau_balance=0.85,
-                blend_kappa=20.0,
-                cost=0.30,
-                gamma_min=0.70,
-                tau_1_cap=0.55,
-                tau_0_floor=0.45,
-                random_state=seed,
-            ),
-        }
+        common_v633 = dict(
+            base_learner=base_learner,
+            mf_alpha=0.25,
+            mf_z_max=0.5,
+            tau_balance=0.85,
+            blend_kappa=20.0,
+            cost=0.30,
+            gamma_min=0.70,
+            tau_1_cap=0.55,
+            tau_0_floor=0.45,
+        )
+        if model_set == "legacy":
+            models_to_test = {
+                "GSI_v6_3_2": lambda seed: GSIMLCPAv6_3_2Classifier(
+                    base_learner=base_learner,
+                    mf_alpha=0.25,
+                    mf_z_max=0.5,
+                    random_state=seed,
+                ),
+                "GSI_v6_3_3": lambda seed: GSIMLCPAv6_3_3Classifier(
+                    **common_v633,
+                    random_state=seed,
+                ),
+            }
+        elif model_set == "samg_audit":
+            models_to_test = {
+                "GSI_v6_3_3_No_SAMG": lambda seed: GSIMLCPAv6_3_3Classifier(
+                    **common_v633,
+                    separation_aware=False,
+                    random_state=seed,
+                ),
+                "GSI_v6_3_3_SAMG": lambda seed: GSIMLCPAv6_3_3Classifier(
+                    **common_v633,
+                    separation_aware=True,
+                    random_state=seed,
+                ),
+                "GSI_v6_3_4_SAMG2": lambda seed: GSIMLCPAv6_3_4Classifier(
+                    **common_v633,
+                    separation_aware=True,
+                    random_state=seed,
+                ),
+            }
+        elif model_set == "dl_only_rejection":
+            models_to_test = {
+                "GSI_v6_3_3_All_Label_Rejection": lambda seed: GSIMLCPAv6_3_3Classifier(
+                    **common_v633,
+                    separation_aware=True,
+                    random_state=seed,
+                ),
+                "GSI_v6_3_4_All_Label_Rejection": lambda seed: GSIMLCPAv6_3_4Classifier(
+                    **common_v633,
+                    separation_aware=True,
+                    random_state=seed,
+                ),
+                "GSI_v6_3_5_DL_Only_Rejection": lambda seed: GSIMLCPAv6_3_5Classifier(
+                    **common_v633,
+                    separation_aware=True,
+                    random_state=seed,
+                ),
+            }
+        else:
+            raise ValueError(f"Unknown model_set={model_set!r}")
 
         dataset_fold_results: Dict[str, List[Dict[str, float]]] = {m: [] for m in models_to_test}
 
@@ -158,16 +231,11 @@ def run_v6_3_3_benchmark(
                     **res,
                 })
 
-            v2_sel_f1 = dataset_fold_results["GSI_v6_3_2"][-1]["Selective_Macro_F1"]
-            v3_sel_f1 = dataset_fold_results["GSI_v6_3_3"][-1]["Selective_Macro_F1"]
-            diff = v3_sel_f1 - v2_sel_f1
-            sign = "+" if diff >= 0 else ""
-            print(
-                f"  Fold {fold_idx + 1}/{n_splits} | "
-                f"v6.3.2 Sel-F1: {v2_sel_f1:.4f} | "
-                f"v6.3.3 Sel-F1: {v3_sel_f1:.4f} ({sign}{diff:.4f})",
-                flush=True,
+            fold_scores = " | ".join(
+                f"{name}: {dataset_fold_results[name][-1]['Selective_Macro_F1']:.4f}"
+                for name in models_to_test
             )
+            print(f"  Fold {fold_idx + 1}/{n_splits} | {fold_scores}", flush=True)
 
         # Dataset summary
         for m_name in models_to_test:
@@ -183,6 +251,12 @@ def run_v6_3_3_benchmark(
                 "Subset_Accuracy_Mean": float(np.mean([f["Subset_Accuracy"] for f in folds])),
                 "Hamming_Loss_Mean": float(np.mean([f["Hamming_Loss"] for f in folds])),
                 "Selective_Micro_F1_Mean": float(np.mean([f["Selective_Micro_F1"] for f in folds])),
+                "IL_Label_Count_Mean": float(np.mean([f["IL_Label_Count"] for f in folds])),
+                "IL_Coverage_Mean": _nanmean_or_nan([f["IL_Coverage"] for f in folds]),
+                "IL_Selective_Macro_F1_Mean": _nanmean_or_nan([f["IL_Selective_Macro_F1"] for f in folds]),
+                "DL_Label_Count_Mean": float(np.mean([f["DL_Label_Count"] for f in folds])),
+                "DL_Coverage_Mean": _nanmean_or_nan([f["DL_Coverage"] for f in folds]),
+                "DL_Selective_Macro_F1_Mean": _nanmean_or_nan([f["DL_Selective_Macro_F1"] for f in folds]),
                 "Fit_Time_Mean": float(np.mean([f["Fit_Time_s"] for f in folds])),
             })
 
@@ -212,10 +286,16 @@ if __name__ == "__main__":
     parser.add_argument("--datasets", nargs="+", default=DEFAULT_DATASETS)
     parser.add_argument("--tag", type=str, default="v6_3_3_all10ds")
     parser.add_argument("--base_learner", type=str, default="logistic")
+    parser.add_argument(
+        "--model_set",
+        choices=("legacy", "samg_audit", "dl_only_rejection"),
+        default="legacy",
+    )
     args = parser.parse_args()
 
     run_v6_3_3_benchmark(
         datasets=args.datasets,
         tag=args.tag,
         base_learner=args.base_learner,
+        model_set=args.model_set,
     )

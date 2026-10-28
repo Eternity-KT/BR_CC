@@ -20,6 +20,8 @@ if str(WORKSPACE_ROOT) not in sys.path:
 from src.data.loader import load_dataset
 from src.evaluation.cv import get_multilabel_cv
 from src.models.gsi_v6_3_3 import GSIMLCPAv6_3_3Classifier
+from src.models.gsi_v6_3_4 import GSIMLCPAv6_3_4Classifier
+from src.models.gsi_v6_3_5 import GSIMLCPAv6_3_5Classifier
 
 DEFAULT_DATASETS = [
     "emotions",
@@ -40,10 +42,20 @@ def run_negative_f1_analysis(
     base_learner: str = "logistic",
     n_splits: int = 5,
     random_state: int = 42,
+    model_version: str = "v6_3_3",
     output_dir: Path = WORKSPACE_ROOT / "results_v6_3" / "negative_f1_analysis",
 ):
     output_dir.mkdir(parents=True, exist_ok=True)
     label_records: List[Dict[str, Any]] = []
+    pooled_predictions: Dict[Any, Dict[str, Any]] = {}
+    model_classes = {
+        "v6_3_3": GSIMLCPAv6_3_3Classifier,
+        "v6_3_4": GSIMLCPAv6_3_4Classifier,
+        "v6_3_5": GSIMLCPAv6_3_5Classifier,
+    }
+    if model_version not in model_classes:
+        raise ValueError(f"Unknown model_version={model_version!r}")
+    model_class = model_classes[model_version]
 
     print("\n" + "=" * 90)
     print("ANALYSIS OF POSITIVE VS NEGATIVE F1 ON RARE LABELS ACROSS IL & DL")
@@ -68,7 +80,7 @@ def run_negative_f1_analysis(
             Y_tr, Y_te = Y[train_idx], Y[test_idx]
 
             seed = random_state + fold_idx
-            model = GSIMLCPAv6_3_3Classifier(
+            model = model_class(
                 base_learner=base_learner,
                 random_state=seed,
             )
@@ -84,6 +96,14 @@ def run_negative_f1_analysis(
                 p_col = preds[:, j]
                 decided = p_col != -1
                 cov_j = float(np.mean(decided))
+                positive_mask = y_true_col == 1
+                negative_mask = ~positive_mask
+                positive_coverage = (
+                    float(np.mean(decided[positive_mask])) if np.any(positive_mask) else np.nan
+                )
+                negative_coverage = (
+                    float(np.mean(decided[negative_mask])) if np.any(negative_mask) else np.nan
+                )
 
                 pi_train = float(np.mean(Y_tr[:, j]))
                 pi_test = float(np.mean(y_true_col))
@@ -106,6 +126,10 @@ def run_negative_f1_analysis(
                     prec_neg = float(precision_score(y_dec, p_dec, pos_label=0, zero_division=0))
                     rec_pos = float(recall_score(y_dec, p_dec, pos_label=1, zero_division=0))
                     rec_neg = float(recall_score(y_dec, p_dec, pos_label=0, zero_division=0))
+                    tp = int(np.sum((y_dec == 1) & (p_dec == 1)))
+                    fp = int(np.sum((y_dec == 0) & (p_dec == 1)))
+                    tn = int(np.sum((y_dec == 0) & (p_dec == 0)))
+                    fn_decided = int(np.sum((y_dec == 1) & (p_dec == 0)))
                 else:
                     f1_pos = 0.0
                     f1_neg = 0.0
@@ -113,6 +137,15 @@ def run_negative_f1_analysis(
                     prec_neg = 0.0
                     rec_pos = 0.0
                     rec_neg = 0.0
+                    tp = fp = tn = fn_decided = 0
+
+                support_positive = int(np.sum(positive_mask))
+                support_negative = int(np.sum(negative_mask))
+                positive_abstained = int(np.sum(positive_mask & ~decided))
+                negative_abstained = int(np.sum(negative_mask & ~decided))
+                recall_positive_end_to_end = (
+                    float(tp / support_positive) if support_positive else np.nan
+                )
 
                 f1_binary_macro = 0.5 * (f1_pos + f1_neg)
 
@@ -120,6 +153,23 @@ def run_negative_f1_analysis(
                 t0 = threshold_info.get("tau_0", 0.30)
                 t1 = threshold_info.get("tau_1", 0.70)
                 regime = threshold_info.get("regime", "Unknown")
+
+                pooled_key = (d_name, j)
+                pooled_entry = pooled_predictions.setdefault(
+                    pooled_key,
+                    {
+                        "Dataset": d_name,
+                        "Label_Idx": j,
+                        "Group_Values": [],
+                        "Y_True": [],
+                        "Y_Pred": [],
+                        "Prior_Train": [],
+                    },
+                )
+                pooled_entry["Group_Values"].append(group)
+                pooled_entry["Y_True"].append(y_true_col.copy())
+                pooled_entry["Y_Pred"].append(p_col.copy())
+                pooled_entry["Prior_Train"].append(pi_train)
 
                 label_records.append({
                     "Dataset": d_name,
@@ -133,19 +183,76 @@ def run_negative_f1_analysis(
                     "Tau_0": t0,
                     "Tau_1": t1,
                     "Coverage": cov_j,
+                    "Positive_Coverage": positive_coverage,
+                    "Negative_Coverage": negative_coverage,
+                    "Support_Positive": support_positive,
+                    "Support_Negative": support_negative,
+                    "TP": tp,
+                    "FP": fp,
+                    "TN": tn,
+                    "FN_Decided": fn_decided,
+                    "Positive_Abstained": positive_abstained,
+                    "Negative_Abstained": negative_abstained,
                     "F1_Positive": f1_pos,
                     "F1_Negative": f1_neg,
                     "Binary_Macro_F1": f1_binary_macro,
                     "Prec_Positive": prec_pos,
                     "Prec_Negative": prec_neg,
                     "Recall_Positive": rec_pos,
+                    "Recall_Positive_EndToEnd": recall_positive_end_to_end,
                     "Recall_Negative": rec_neg,
+                    "SAMG_Strategy": threshold_info.get("samg_strategy", "unknown"),
+                    "SAMG_Applied": threshold_info.get("samg_applied", False),
+                    "SAMG_Reason": threshold_info.get("samg_reason", "unknown"),
+                    "SAMG_Probability_Source": threshold_info.get(
+                        "samg_probability_source", "unknown"
+                    ),
+                    "SAMG_Pos_Floor": threshold_info.get("samg_pos_floor", np.nan),
+                    "SAMG_Neg_Ceiling": threshold_info.get("samg_neg_ceiling", np.nan),
                 })
 
     df = pd.DataFrame(label_records)
     raw_csv = output_dir / "label_level_detailed_metrics.csv"
     df.to_csv(raw_csv, index=False)
     print(f"\n[Saved] Label detailed records: {raw_csv}")
+
+    pooled_rows: List[Dict[str, Any]] = []
+    for entry in pooled_predictions.values():
+        y_true = np.concatenate(entry["Y_True"])
+        y_pred = np.concatenate(entry["Y_Pred"])
+        decided = y_pred != -1
+        y_dec = y_true[decided]
+        p_dec = y_pred[decided]
+        positive_mask = y_true == 1
+        negative_mask = ~positive_mask
+        tp = int(np.sum((y_dec == 1) & (p_dec == 1)))
+        support_positive = int(np.sum(positive_mask))
+        pooled_rows.append({
+            "Dataset": entry["Dataset"],
+            "Label_Idx": entry["Label_Idx"],
+            "Group": "/".join(sorted(set(entry["Group_Values"]))),
+            "Prior_Train": float(np.mean(entry["Prior_Train"])),
+            "Support_Positive": support_positive,
+            "Support_Negative": int(np.sum(negative_mask)),
+            "Coverage": float(np.mean(decided)),
+            "Positive_Coverage": float(np.mean(decided[positive_mask])) if np.any(positive_mask) else np.nan,
+            "Negative_Coverage": float(np.mean(decided[negative_mask])) if np.any(negative_mask) else np.nan,
+            "F1_Positive": float(f1_score(y_dec, p_dec, pos_label=1, zero_division=0)),
+            "F1_Negative": float(f1_score(y_dec, p_dec, pos_label=0, zero_division=0)),
+            "Recall_Positive_Selective": float(recall_score(y_dec, p_dec, pos_label=1, zero_division=0)),
+            "Recall_Positive_EndToEnd": float(tp / support_positive) if support_positive else np.nan,
+            "Insufficient_Support": support_positive < n_splits,
+        })
+    pd.DataFrame(pooled_rows).to_csv(
+        output_dir / "pooled_label_metrics.csv", index=False
+    )
+
+    threshold_columns = [
+        "Dataset", "Fold", "Label_Idx", "Group", "Prior_Train", "Tau_0", "Tau_1",
+        "SAMG_Strategy", "SAMG_Applied", "SAMG_Reason", "SAMG_Probability_Source",
+        "SAMG_Pos_Floor", "SAMG_Neg_Ceiling",
+    ]
+    df[threshold_columns].to_csv(output_dir / "samg_threshold_audit.csv", index=False)
 
     # Aggregations
     # 1. By Dataset & Group (IL vs DL)
@@ -158,6 +265,9 @@ def run_negative_f1_analysis(
         "Recall_Positive": "mean",
         "Recall_Negative": "mean",
         "Coverage": "mean",
+        "Positive_Coverage": "mean",
+        "Negative_Coverage": "mean",
+        "Recall_Positive_EndToEnd": "mean",
         "Prior_Train": "mean",
     }).reset_index()
     ds_group.to_csv(output_dir / "summary_by_dataset_and_group.csv", index=False)
@@ -221,4 +331,20 @@ def run_negative_f1_analysis(
 
 
 if __name__ == "__main__":
-    run_negative_f1_analysis()
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--model_version", choices=("v6_3_3", "v6_3_4", "v6_3_5"), default="v6_3_3"
+    )
+    parser.add_argument("--datasets", nargs="+", default=DEFAULT_DATASETS)
+    parser.add_argument("--output_dir", type=Path, default=None)
+    args = parser.parse_args()
+    selected_output = args.output_dir or (
+        WORKSPACE_ROOT / "results_v6_3" / f"negative_f1_analysis_{args.model_version}"
+    )
+    run_negative_f1_analysis(
+        datasets=args.datasets,
+        model_version=args.model_version,
+        output_dir=selected_output,
+    )

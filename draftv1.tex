@@ -1,0 +1,1157 @@
+% !TeX program = xelatex
+% UTF-8. Overleaf: Compiler = XeLaTeX; biên dịch hai lần.
+\documentclass[11pt,a4paper]{article}
+\usepackage[a4paper,margin=24mm,headheight=14pt]{geometry}
+\usepackage{fontspec}
+\setmainfont{Latin Modern Roman}
+\setsansfont{Latin Modern Sans}
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{booktabs,array,tabularx,longtable,multirow}
+\usepackage{graphicx,xcolor,enumitem,needspace}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc}
+\usepackage{caption,fancyhdr,xurl}
+\usepackage{float}
+\usepackage[section]{placeins}
+\usepackage{etoolbox}
+\pretocmd{\section}{\Needspace{8\baselineskip}}{}{}
+\pretocmd{\subsection}{\FloatBarrier\Needspace{5\baselineskip}}{}{}
+\usepackage[unicode,hidelinks]{hyperref}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+
+\hypersetup{pdftitle={GSI-MLC-PA-V6.3.3: Phân loại đa nhãn với từ chối từng phần}}
+\renewcommand{\abstractname}{Tóm tắt}
+\renewcommand{\refname}{Tài liệu tham khảo}
+\renewcommand{\tablename}{Bảng}
+\renewcommand{\figurename}{Hình}
+\captionsetup{font=small,labelfont=bf,skip=6pt}
+\setlength{\parskip}{3pt}
+\setlength{\parindent}{1.3em}
+\linespread{1.08}
+\setlist[itemize]{leftmargin=1.5em,itemsep=2pt,topsep=3pt}
+\setlist[enumerate]{leftmargin=1.9em,itemsep=2pt,topsep=3pt}
+\setcounter{secnumdepth}{3}
+\newcommand{\ind}{\mathbb{I}}
+\newcommand{\IL}{\mathcal{IL}}
+\newcommand{\DL}{\mathcal{DL}}
+\newcommand{\Lset}{\mathcal{L}}
+\newcommand{\sig}{\sigma}
+\DeclareMathOperator{\logit}{logit}
+\DeclareMathOperator{\clip}{clip}
+\DeclareMathOperator{\Cov}{Cov}
+\newcommand{\ds}[1]{\texttt{#1}}
+\newcommand{\NA}{\textemdash}
+\newcommand{\doi}[1]{\href{https://doi.org/#1}{\nolinkurl{#1}}}
+\newcounter{alg}
+\newenvironment{pseudo}[2]{\par\Needspace{6\baselineskip}\refstepcounter{alg}\label{#1}
+ \noindent\textbf{Thuật toán \thealg. #2}\par
+ \begingroup\small\begin{enumerate}[label=\arabic*:,leftmargin=2.1em,itemsep=2pt,parsep=0pt,topsep=3pt]}
+ {\end{enumerate}\endgroup\par\medskip}
+\newcommand{\algohead}[1]{\item[]\hspace{-1.7em}#1}
+\newcommand{\inset}{\hspace*{1em}}
+
+% ---------------------------------------------------------------------
+
+\begin{document}
+
+\title{\textbf{Sparse classifier chains for robust multi-label classification}}
+\author{Anonymous Authors\\[0.35em]\small Department of Computer Science and Engineering
+Machine Learning Research Laboratory\\\small Email: [bổ sung email]}
+\date{}
+\maketitle
+
+%----------------------------------------------------------------------
+
+\begin{abstract}
+Phân loại đa nhãn đóng vai trò quan trọng trong nhiều ứng dụng thực tế tuy nhiên trong các ứng dụng có chi phí sai sót cao đòi hỏi mô hình phải dự đoán với độ chính xác cao. Từ đó phân loại đa nhãn kết hợp với cơ chế từ chối từng phần cho phép hệ thống chỉ quyết định trên một số nhãn có độ chắc chắn cao và từ chối các nhãn còn lại. Trong nghiên cứu này, chúng tôi giới thiệu mô hình đề xuất Greedy Selection of Independent Labels for Multi-Label Classification with Partial Abstention. Phương pháp này cho phép bóc tách các nhãn có thể dự đoán tốt bằng BR qua các tầng dự đoán, ghép nối xác suất bằng đồ thị tương quan phần dư sau đó biến đổi điểm số theo ba vùng tỷ lệ nhãn, và cuối cùng là ra quyết định từ chối. Thông qua thực nghiệm với 10 bộ dữ liệu , chúng tôi đánh giá hiệu suất của phương pháp đề xuất GSI-MLC-PA-V6.3.3 so với các phương pháp Binary Relevance (BR), Classifier Chains (CC), Multi-Label Classification with Partial Abstention (MLC-PA) và chứng minh kết quả cạnh tranh mạnh mẽ với các phương pháp khác ngay cả trong nhiều bộ học cơ sở khác nhau.
+\end{abstract}
+\noindent\textbf{Từ khóa:} phân loại đa nhãn; từ chối từng phần; tương quan phần dư; hiệu chuẩn.
+
+\section{Giới thiệu}
+Giữa sự phát triển vượt bậc của kỷ nguyên số, quản trị và xử lý dữ liệu đã trở thành bài toán cấp thiết hàng đầu. Nếu như ở giai đoạn đầu, các nghiên cứu học máy tập trung chủ yếu vào phân loại đơn nhãn (chỉ gán một đối tượng vào một lớp duy nhất), thì sự phức tạp của thực tế đã nhanh chóng đòi hỏi các tiếp cận toàn diện hơn. Từ đó, phân loại đa nhãn (Multi-label Classification) đã ra đời và đóng vai trò quan trọng trong nhiều ứng dụng thực tế. Phương pháp này cho phép mô hình gán đồng thời nhiều nhãn thuộc tính cho một đối tượng. Một hướng tiếp cận sớm là BR, trong đó từng nhãn được học bằng một bộ phân loại nhị phân. BR cung cấp cách phân rã thuận tiện nhưng không đưa nhãn khác vào đầu vào của từng bộ học; các biến thể được như Stacking Aggregation được hệ thống hóa trong \cite{br2018}.
+
+Năm 2009, Classifier Chains (CC) đưa dự đoán của nhãn đứng trước vào đặc trưng của nhãn đứng sau; phiên bản tạp chí năm 2011 trình bày phương pháp và các thí nghiệm \cite{cc2011}. Cách tổ chức này sử dụng được quan hệ nhãn, đồng thời khiến dự đoán phụ thuộc mạnh vào các bước trước và thứ tự chuỗi. Trong năm 2021, tổng quan CC hệ thống hóa các cải tiến về cấu trúc và suy luận trong bài báo \cite{cc2021}, cũng trong năm 2021, Alarcón và Destercke đề xuất phương pháp xem xét nhiều phân phối xác suất có thể phù hợp với thông tin hiện có, rồi chỉ đưa ra quyết định khi mọi phân phối trong tập đều ủng hộ quyết định ấy. \cite{cc2021,skeptical2021}.
+
+Tuy nhiên BR hay CC thông thường vẫn phải trả về 0 hoặc 1 ngay cả khi xác suất dự đoán gần 0.5. Việc bắt mô hình đưa ra đự đoán trên những quyết định có độ tin cậy thấp có thể làm tăng rủi ro sai phân loại, đặc biệt trong các ứng dụng yêu cầu độ tin cậy cao có thể dẫn đến những hậu quả nghiêm trọng. Nghiên cứu về quyết định có từ chối có nền tảng từ quy tắc Chow năm 1970: mô hình có thể trì hoãn thay vì buộc đưa ra một quyết định có rủi ro cao \cite{chow1970}.Từ đó Nguyen và Hüllermeier nghiên cứu cơ chế từ chối từng phần vào năm 2020, rồi mở rộng phân tích bộ dự đoán tối ưu theo rủi ro trong bài JAIR năm 2021 \cite{nguyen2020,nguyen2021}. (Bài năm 2021 được coi là mô hình MLC-PA có trong báo cáo).
+
+GSI-MLC-PA-V6.3.3 được đề xuất nhằm kết hợp khai thác quan hệ giữa các nhãn với khả năng từ chối từng phần. So với mô hình BR \cite{br2018}, vốn dự đoán từng nhãn chỉ từ đặc trưng đầu vào, GSI-MLC-PA-V6.3.3 cho phép những nhãn vượt qua ngưỡng đánh giá do mô hình đưa ra được đưa vào nhóm Independent label (IL); xác suất của chúng được bổ sung vào đặc trưng để học các nhãn ở tầng tiếp theo. Các nhãn còn lại thuộc nhóm Dependent label (DL), được dự đoán từ đặc trưng gốc kết hợp với thông tin xác suất của IL. Cơ chế này khai thác quan hệ nhãn theo từng tầng mà không đưa toàn bộ nhãn vào một chuỗi duy nhất. 
+
+Tiếp theo, mô hình tính phần dư giữa nhãn thật và xác suất OOF của DL để xây dựng đồ thị tương quan phần dư. So với CC thông thường \cite{cc2011}, OS-NMF không yêu cầu sắp xếp thứ tự dự đoán giữa các nhãn DL. Cơ chế One-Step Normalized Mean-Field (OS-NMF) sử dụng đồ thị này để điều chỉnh đồng thời điểm dự đoán của các nhãn DL trong một bước, kết hợp với việc chuẩn hóa trọng số và giới hạn độ dịch logit giúp kiểm soát mức tác động của tín hiệu liên nhãn. Sau đó, toàn bộ nhãn được phân vào ba chế độ theo tỷ lệ dương: lệch âm, cân bằng và lệch dương. Mô hình sử dụng phép hiệu chuẩn Platt có trọng số cho hai vùng lệch và giữ nguyên điểm ở vùng cân bằng. 
+
+So với cặp ngưỡng đối xứng trong trường hợp Hamming loss với chi phí từ chối tuyến tính \cite{nguyen2020,nguyen2021}, thiết kế của mô hình cho phép điều chỉnh riêng hai phía quyết định đối với các nhãn có tỷ lệ dương khác nhau. Hai ngưỡng quyết định của từng nhãn được thiết lập bằng cách kết hợp ngưỡng đối xứng với ngưỡng phụ thuộc tỷ lệ nhãn, sau đó áp dụng nội suy, kẹp biên và kiểm soát độ phủ trên dữ liệu OOF. Khi dự đoán mẫu mới, mô hình sử dụng các thành phần đã học để quyết định nhãn bằng 0, 1 hoặc từ chối.
+
+Để hiểu rõ hơn về hiệu suất của phương pháp GSI-MLC-PA-V6.3.3 so với các phương pháp phân loại đa nhãn khác, chúng tôi tiến hành một loạt các cuộc thực nghiệm toàn diện. Các cuộc thức nghiệm cho phép chúng tôi xác định điểm mạnh và hạn chế của các bộ phân loại đang được so sánh. Kết quả cho thấy phương pháp GSI-MLC-PA-V6.3.3 nhìn chung vượt trội hơn các phương pháp chuẩn trên nhiều chỉ số đánh giá.
+
+Phần còn lại của bài báo này được cấu trúc như sau. Phần 2 trình bày tổng quan về các công trình liên quan. Trong Phần 3, chúng tôi trình bày tổng quan phương pháp GSI-MLC-PA-V6.3.3 và quy trình ước lượng của nó. Phần 4 nêu thiết kế thực nghiệm; Phần 5 báo cáo kết quả; Phần 6 thảo luận và công việc tương lai.
+
+\section{Các công trình liên quan}
+\subsection{Mô hình hóa phụ thuộc nhãn}
+Các phương pháp MLC thường được phân biệt theo bậc phụ thuộc nhãn mà chúng mô hình hóa. BR là phương pháp bậc một: với $K$ nhãn, BR khớp $K$ hàm $f_l(x)$, mỗi hàm dự đoán một nhãn. Mô hình này không sử dụng tường minh nhãn khác trong từng đầu vào; điều đó không có nghĩa dữ liệu phải độc lập thì BR mới có ích \cite{br2018,cc2021}. Trong tổng quan BR, các cấu trúc stacking và mở rộng đặc trưng được phân biệt với cấu hình BR thuần.
+
+\subsection{Classifier Chains và các mô hình mở rộng}
+CC phân rã phân phối chung theo một thứ tự nhãn $\rho$:
+\begin{equation}
+ P(y\mid x)=\prod_{t=1}^{K}P(y_{\rho_t}\mid x,y_{\rho_1},\ldots,y_{\rho_{t-1}}).
+ \label{eq:cc}
+\end{equation}
+Việc dùng nhãn thật khi học và dự đoán tiền nhiệm khi suy luận có thể tạo khác biệt giữa hai giai đoạn. Các hướng mở rộng gồm tổ hợp nhiều thứ tự, suy luận xác suất và thay đổi cấu trúc liên kết \cite{cc2011,cc2021}. Công thức \eqref{eq:cc} là phân rã xác suất; một lượt dự đoán tham lam của CC không đồng nhất với biên hóa chính xác trên mọi cấu hình.
+
+CCN năm 2025 dùng dự đoán liên tục và ước lượng đồng thời tham số của mạng nhãn \cite{ccn2025}. GSI cũng dùng điểm liên tục, nhưng học các bộ cơ sở theo tầng và thêm một phép sửa logit sau cùng; GSI không phải cách ước lượng đồng thời của CCN. Multi-label Chaining with Imprecise Probabilities năm 2021 là hướng mở rộng CC theo tập xác suất để tạo quyết định thận trọng \cite{imprecisechain2021}.
+
+\subsection{cơ chế từ chối và các phát triển về quyết định không đầy đủ}
+cơ chế từ chối của Vu-Linh Nguyen và Eyke Hüllermeier, mở rộng dự đoán sang $\{0,1,\bot\}^{K}$ và tối thiểu hóa kỳ vọng mất mát có tính chi phí từ chối \cite{nguyen2021}. So với công trình ban đầu năm 2020 \cite{nguyen2020}, bản năm 2021 mở rộng phân tích cấu trúc nghiệm và thuật toán tính bộ dự đoán tối ưu cho nhiều mất mát. Một hướng phát triển liên quan là suy luận hoài nghi: chỉ quyết định khi kết luận phù hợp với mọi phân phối trong tập đang xét \cite{skeptical2021}. Hướng conformal trên BR năm 2025 bổ sung tập dự đoán theo nhãn \cite{conformal2025}.
+
+\subsection{Hiệu chuẩn và nền tảng của phép ghép nối}
+Hiệu chuẩn hậu nghiệm học một ánh xạ từ điểm sang xác suất bằng dữ liệu riêng hoặc dự đoán ngoài fold. Platt scaling là một lựa chọn logistic; tổng quan năm 2023 trình bày cả ưu điểm lẫn giới hạn của các cách đánh giá hiệu chuẩn \cite{cal2023}. Nghiên cứu XMLC năm 2025 cung cấp thêm bằng chứng rằng hiệu năng phân loại và hiệu chuẩn cần được đo riêng \cite{xmlcal2025}. Trường trung bình xấp xỉ một phân phối chung bằng họ phân phối đơn giản hơn \cite{meanfield2008}.
+
+\section{Mô hình đề xuất GSI-MLC-PA-V6.3.3}
+\subsection{Tổng quan mô hình}
+Hiện nay, việc khai thác cấu trúc phụ thuộc nhãn (label interdependencies) trong bài toán phân loại có từ chối đối mặt với một sự đánh đổi lớn về mặt tính toán và độ tin cậy suy luận. Phương pháp Binary Relevance (BR) \cite{br2018} phân rã bài toán thành $K$ bài toán phân loại nhị phân độc lập, có ưu thế về tốc độ và khả năng mở rộng nhưng bỏ qua hoàn toàn quan hệ giữa các nhãn. Ngược lại, phương pháp Classifier Chains (CC) \cite{cc2011,cc2021} nắm bắt tương quan bằng cách sắp xếp các nhãn theo một chuỗi tuần tự và đưa dự đoán của nhãn phía trước vào đặc trưng của nhãn phía sau; song cách tiếp cận này phụ thuộc nặng nề vào thứ tự nhãn (việc tìm thứ tự tối ưu là bài toán NP-hard \cite{cc2021}) và dễ gây tích lũy sai số lan truyền (error propagation) dọc theo chuỗi. Dù phương pháp Classifier Chain Networks (CCN) gần đây \cite{ccn2025} đã đề xuất ước lượng đồng thời tham số mạng nhãn, mô hình này đòi hỏi quy trình tối ưu hóa phi lồi phức tạp và chưa được tích hợp cơ chế quyết định có từ chối. Từ đó, chúng tôi giới thiệu mô hình GSI-MLC-PA-V6.3.3 phương pháp này kết hợp cơ chế phân nhóm nhãn thích ứng với việc tinh chỉnh xác suất trên đồ thị phần dư sai số và bộ quyết định ngưỡng bất đối xứng, cho phép khai thác triệt để tương quan nhãn mà không cần áp đặt một cấu trúc chuỗi tuần tự nhân tạo.
+
+\subsubsection{Đầu vào, đầu ra và luồng xử lý chính}
+Mô hình GSI-MLC-PA-V6.3.3 được xác định bởi các không gian đầu vào và đầu ra sau:
+\begin{itemize}
+  \item Dữ liệu huấn luyện: Tập dữ liệu $S = \{(x_i, y_i)\}_{i=1}^N$, trong đó $x_i \in \mathbb{R}^d$ là vector đặc trưng của mẫu thứ $i$ và $y_i = (Y_{i,1}, \ldots, Y_{i,K})^\top \in \{0, 1\}^K$ là vector nhãn nhị phân thật. Ma trận đặc trưng và ma trận nhãn huấn luyện lần lượt là $X \in \mathbb{R}^{N \times d}$ và $Y \in \{0, 1\}^{N \times K}$.
+  \item Các đầu ra của mô hình:
+    \begin{enumerate}
+      \item \emph{Ma trận xác suất hậu nghiệm}: $P^* \in [0, 1]^{N^* \times K}$, trong đó $P^*_{i,l}$ biểu thị xác suất dự đoán đã qua tinh chỉnh và hiệu chuẩn cho nhãn $l$ của mẫu kiểm tra thứ $i$.
+      \item \emph{Dự đoán chọn lọc (Selective prediction)}: $\hat Y^{*,\mathrm{sel}} \in \{0, 1, \bot\}^{N^* \times K}$, trong đó $\bot$ biểu thị hành động từ chối đưa ra quyết định tại ô nhãn không chắc chắn.
+      \item \emph{Dự đoán đầy đủ (Complete prediction)}: $\hat Y^{*,\mathrm{full}} \in \{0, 1\}^{N^* \times K}$, buộc mô hình phải đưa ra quyết định nhị phân $\{0, 1\}$ tại mọi ô nhãn.
+    \end{enumerate}
+\end{itemize}
+
+Quy trình hoạt động của mô hình chia làm 5 giai đoạn liên tiếp:
+\begin{enumerate}
+  \item Giai đoạn 1 - Bóc tách đa tầng $IL/DL$: Đánh giá khả năng dự đoán độc lập của từng nhãn dựa trên thước đo $F_1$ chọn lọc. Các nhãn vượt ngưỡng được đưa vào nhóm nhãn độc lập theo tầng ($IL$), các nhãn còn lại được xếp vào nhóm nhãn phụ thuộc ($DL$).
+  \item Giai đoạn 2 - Khớp mô hình cơ sở và thiết lập đồ thị tương quan phần dư: Huấn luyện các bộ phân loại nhị phân trên không gian đặc trưng mở rộng bởi ngữ cảnh xác suất mềm của $IL$. Tính sai số còn lại (phần dư $R$) của các nhãn $DL$ trên dữ liệu ngoài fold và thiết lập ma trận tương quan Pearson.
+  \item Giai đoạn 3 - Ghép nối đồng thời bằng chuẩn hóa trường trung bình (OS-NMF): Áp dụng cơ chế One-Step Normalized Mean-Field để điều chỉnh đồng thời điểm logit của các nhãn $DL$ trong đúng một bước dựa trên ma trận trọng số tương quan phần dư đã lọc và chuẩn hóa.
+  \item Giai đoạn 4 - Hiệu chuẩn xác suất ba chế độ: Phân loại từng nhãn vào ba vùng dựa trên tỷ lệ dương và chỉ số cân bằng (Lệch âm, Cân bằng, Lệch dương); áp dụng phép hiệu chuẩn Platt có trọng số căn bậc hai nhằm tái cân bằng rủi ro đuôi xác suất.
+  \item Giai đoạn 5 - Thiết lập ngưỡng thích ứng và các chốt chặn bảo vệ: Tính toán cặp ngưỡng quyết định riêng $(\tau_0(l), \tau_1(l))$ cho từng nhãn bằng cách nội suy trơn giữa neo Chow đối xứng và neo Bayes phụ thuộc prior, kết hợp kẹp biên an toàn, bảo vệ độ phủ OOF (Coverage Guard) và điều chỉnh tách biên (SAMG).
+\end{enumerate}
+
+\subsubsection{Vai trò của nhóm nhãn độc lập (IL) và nhóm nhãn phụ thuộc (DL)}
+Trọng tâm thiết kế của GSI-MLC-PA-V6.3.3 là sự phân rã tập nhãn $\mathcal{L} = \{1, \ldots, K\}$ thành hai nhóm có vai trò chuyên biệt:
+\begin{itemize}
+  \item Nhóm nhãn độc lập theo tầng ($IL$): Bao gồm các nhãn có thể dự đoán chính xác trực tiếp từ đặc trưng $X$ (hoặc từ $X$ kết hợp với xác suất của các tầng $IL$ trước đó). Các nhãn này cung cấp các tín hiệu xác suất mềm tin cậy để bổ sung vào không gian đặc trưng mà không làm lan truyền lỗi rời rạc hóa.
+  \item Nhóm nhãn phụ thuộc ($DL$): Bao gồm các nhãn còn lại có cấu trúc tương quan phức tạp hoặc khó dự đoán độc lập ($DL = \mathcal{L} \setminus IL$). Thay vì áp đặt một chuỗi nhân quả giả định, các nhãn $DL$ được dự đoán cơ sở song song và sau đó được ghép nối đồng thời qua cấu trúc phần dư sai số, loại bỏ hoàn toàn bài toán tìm thứ tự chuỗi.
+\end{itemize}
+
+\subsubsection{Hệ thống ký hiệu cơ bản}
+Để bảo đảm tính chặt chẽ và nhất quán xuyên suốt tài liệu, các ký hiệu điểm dự đoán ở từng giai đoạn được phân biệt rõ trong Bảng~\ref{tab:notations}.
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.7500}}@{}}
+\caption{Ký hiệu toán học và ý nghĩa các đại lượng trong mô hình GSI-MLC-PA-V6.3.3.} \label{tab:notations} \\
+\toprule
+\textbf{Ký hiệu} & \textbf{Ý nghĩa và phạm vi} \\
+\midrule
+\endhead
+\(N, d, K\) & Số mẫu huấn luyện, số chiều đặc trưng gốc và tổng số nhãn (\(N, d, K \in \mathbb{N}^*\)). \\
+\(X, Y\) & Ma trận đặc trưng huấn luyện (\(N \times d\)) và ma trận nhãn nhị phân thật (\(N \times K\)). \\
+\(\mathcal{L}\) & Tập chỉ số toàn bộ các nhãn: \(\mathcal{L} = \{1, \ldots, K\}\); \(i\) là chỉ số mẫu, \(l, k\) là chỉ số nhãn. \\
+\(IL_m, IL, DL\) & Nhóm nhãn độc lập bóc tách tại tầng \(m\), hợp toàn bộ nhãn độc lập và nhóm nhãn phụ thuộc. \\
+\(P^{\mathrm{OOF}}_{i,l}\) & Điểm xác suất ngoài fold (Out-Of-Fold) của mẫu \(i\), nhãn \(l\), trước khi qua OS-NMF và hiệu chuẩn. \\
+\(P^{\mathrm{OOF,ref}}_{i,l}\) & Điểm OOF sau khi áp dụng cơ chế ghép nối OS-NMF; nhãn \(IL\) giữ nguyên điểm cơ sở. \\
+\(P^{\mathrm{OOF,cal}}_{i,l}\) & Điểm OOF sau khi áp dụng hàm ánh xạ hiệu chuẩn ba chế độ \(\mathcal{C}_l\). \\
+\(P^*_{i,l}\) & Xác suất dự đoán cuối cùng của nhãn \(l\) trên mẫu kiểm tra mới \(i\), sau ghép nối và hiệu chuẩn. \\
+\(X^*\) & Ma trận đặc trưng của \(N^*\) mẫu mới hoặc mẫu kiểm tra (\(N^* \times d\)). \\
+\(\tau_0(l), \tau_1(l)\) & Ngưỡng quyết định âm (gán lớp 0) và dương (gán lớp 1) của nhãn \(l\), thỏa mãn \(0 \le \tau_0(l) \le \tau_1(l) \le 1\). \\
+\(\bot\) & Ký hiệu hành động từ chối quyết định tại một ô nhãn (trong mã nguồn được gán giá trị mặc định là \(-1\)). \\
+\bottomrule
+\end{longtable}
+
+\subsubsection{Sơ đồ kiến trúc}
+
+Sơ đồ kiến trúc tổng thể và luồng truyền thông tin giữa các pha của mô hình được mô tả chi tiết trong Hình~\ref{fig:flow}.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+ node distance=6mm and 18mm,
+ box/.style={draw,rounded corners=1pt,align=center,text width=60mm,minimum height=11mm,font=\small,inner sep=4pt},
+ line/.style={-{Latex[length=2mm]},thin}]
+\node[box] (tr) {Outer-train: $X,Y$\\Chuẩn hóa và chia fold nội bộ};
+\node[box,right=of tr] (te) {Outer-test: $X^*$\\Dùng bộ biến đổi đã học};
+\node[box,below=of tr] (peel) {Bóc tách đa tầng\\Nhóm $IL_1,IL_2,IL_3$ và $DL$};
+\node[box,below=of te] (pred) {Dự đoán theo tầng\\Ngữ cảnh mềm cho $DL$};
+\node[box,below=of peel] (graph) {Phần dư OOF của $DL$\\Lập $W$, cơ chế OS-NMF};
+\node[box,below=of pred] (mf) {cơ chế OS-NMF\\Dùng $W$ đã cố định};
+\node[box,below=of graph] (cal) {Học biến đổi theo ba chế độ\\Thiết lập và co biên ngưỡng OOF};
+\node[box,below=of mf] (dec) {Áp dụng biến đổi và ngưỡng\\Đầu ra $\{0,1,\bot\}^K$};
+\draw[line] (tr)--(peel);\draw[line] (peel)--(graph);\draw[line] (graph)--(cal);
+\draw[line] (te)--(pred);\draw[line] (pred)--(mf);\draw[line] (mf)--(dec);
+\draw[line,dashed] (peel)--node[above,font=\scriptsize]{Bộ học}(pred);
+\draw[line,dashed] (graph)--node[above,font=\scriptsize]{$W$}(mf);
+\draw[line,dashed] (cal)--node[above,font=\scriptsize]{Tham số}(dec);
+\end{tikzpicture}
+\caption{Luồng học và suy luận. Nét đứt chuyển thành phần đã học sang pha kiểm tra; không sử dụng nhãn kiểm tra để chọn cấu trúc hoặc ngưỡng.}
+\label{fig:flow}
+\end{figure}
+
+\subsection{Cơ chế bóc tách đa tầng và thiết lập đồ thị phần dư sai số}
+\subsubsection{Bóc tách theo khả năng dự đoán}
+Trong các bài toán đa nhãn, sự phụ thuộc giữa các nhãn thường có tính phân cấp và không đồng đều. Việc áp đặt một chuỗi toàn phần như Classifier Chains \cite{cc2011} đòi hỏi chi phí tính toán lớn và khiến các nhãn dễ bị ảnh hưởng bởi lỗi của các nhãn đứng trước. Do đó, GSI-MLC-PA-V6.3.3 đề xuất cơ chế bóc tách tham lam nhiều tầng nhằm tách biệt các nhãn có thể học tốt bằng mô hình độc lập ra khỏi các nhãn có cấu trúc phụ thuộc phức tạp.
+
+Tại mỗi tầng bóc tách \(m \in \{1, \ldots, M\}\) (với độ sâu tối đa \(M=3\)), tập các nhãn độc lập đã chọn ở các tầng trước được ký hiệu là
+
+\begin{equation}
+IL_{<m} = \bigcup_{r=1}^{m-1} IL_r
+\qquad \bigl(\text{với } IL_{<1} = \varnothing\bigr).
+\end{equation}
+
+Để truyền tải thông tin của các nhãn đã chọn sang các tầng sau mà không làm mất tính định lượng về độ bất định, mô hình xây dựng vector đặc trưng mở rộng:
+\begin{equation}
+x_{\mathrm{context},i}^{(m)} = \left[x_i, \; \operatorname{Normalize}_m\left(P^{\mathrm{OOF}}_{i,IL_{<m}}\right)\right], \qquad X_{\mathrm{context}}^{(m)} \in \mathbb{R}^{N \times (d + |IL_{<m}|)}.
+\label{eq:context}
+\end{equation}
+
+Ở tầng đầu tiên (\(m=1\)), do chưa có nhãn nào được chọn nên \(X_{\mathrm{context}}^{(1)} = X\). Tiêu chuẩn để một nhãn ứng viên được thăng hạng vào tầng \(IL_m\) là điểm F1 trên dự đoán OOF phải vượt qua ngưỡng suy giảm theo tầng:
+\begin{equation}
+\tau_m = \max\left(0.50, \; \tau_{\mathrm{init}} - (m-1)\delta_\tau\right), \qquad m=1, \ldots, M,
+\label{eq:peel-thresh}
+\end{equation}
+với các tham số mặc định \(\tau_{\mathrm{init}} = 0.75\), \(\delta_\tau = 0.05\) và \(M = 3\), tương ứng với ba ngưỡng hiệu dụng lần lượt là \(\tau_1 = 0.75\), \(\tau_2 = 0.70\) và \(\tau_3 = 0.65\).
+
+Tập nhãn độc lập tại tầng \(m\), tập toàn bộ nhãn độc lập \(IL\) và tập nhãn phụ thuộc \(DL\) được xác định theo:
+\begin{equation}
+IL_m = \left\{ l \in \mathcal L \setminus IL_{<m} : \operatorname{SelF1}_{l}^{\mathrm{OOF},(m)} \ge \tau_m \right\}, \qquad IL = \bigcup_{m=1}^{M} IL_m, \qquad DL = \mathcal L \setminus IL.
+\label{eq:il-dl}
+\end{equation}
+
+Trong phương pháp, quá trình dừng sớm khi một tầng không chọn được nhãn. Nếu sau bóc tách chỉ còn một nhãn DL, nhãn đó được chuyển sang IL và không thực hiện ghép nối DL.
+
+
+\subsubsection{Đồ thị tương quan phần dư sai số}
+Hai nhãn có thể xuất hiện cùng nhau chỉ vì chúng cùng phụ thuộc vào một đặc trưng đầu vào. Nếu các mô hình cơ sở đã khai thác tốt đặc trưng đầu vào, việc tiếp tục đưa tương quan nhãn thật vào suy luận sẽ dẫn đến hiện tượng tính trùng lặp tín hiệu (double counting) và bắt nhầm các tương quan giả (spurious correlations). Ngược lại, phần dư sai số biểu thị lượng thông tin mà các đặc trưng đầu vào và ngữ cảnh \(IL\) chưa giải thích được. Do đó, tương quan giữa các phần dư phản ánh chính xác cấu trúc phụ thuộc điều kiện bậc cao (conditional dependency) thực sự còn sót lại giữa các nhãn. Vì vậy trong phương pháp hiện tại, sau khi hoàn tất quá trình bóc tách và phân hoạch nhãn, các bộ học cho từng tầng \(IL_m\) được khớp lại trên toàn bộ tập dữ liệu huấn luyện. Toàn bộ các nhãn trong \(DL\) sau đó được học bằng các bộ phân loại cơ sở trên không gian ngữ cảnh cuối cùng \(FS = [X, \operatorname{Normalize}(P^{\mathrm{OOF}}_{:,IL})]\) để thu được ma trận xác suất ngoài fold \(P^{\mathrm{OOF}}_{:,DL}\).
+
+Sau khi cố định các tầng, học bộ dự đoán DL trên ngữ cảnh cuối và tạo \(P^{\mathrm{OOF}}_{DL}\). Phần dư được tính với \(R_{i,l}\) là sai lệch giữa nhãn thật và điểm OOF của mẫu \(i\):
+
+\begin{equation}
+R_{i,l}=Y_{i,l}-P^{\mathrm{OOF}}_{i,l},
+\qquad i=1,\ldots,N,\quad l\in DL.
+\end{equation}
+
+Phần dư của nhãn phụ thuộc \(l \in DL\) trên mẫu \(i\) được xác định bởi:
+\begin{equation}
+R_{i,l} = Y_{i,l} - P^{\mathrm{OOF}}_{i,l}, \qquad i=1,\ldots,N, \quad l \in DL.
+\label{eq:residual}
+\end{equation}
+
+Hệ số tương quan tuyến tính Pearson có dấu giữa hai cột phần dư của nhãn \(l\) và \(k\) (\(l \ne k\)) là:
+\begin{equation}
+C_{l,k}^{\mathrm{res,raw}} = \frac{\sum_{i=1}^{N}(R_{i,l}-\bar R_l)(R_{i,k}-\bar R_k)}{\sqrt{\sum_{i=1}^{N}(R_{i,l}-\bar R_l)^2}\sqrt{\sum_{i=1}^{N}(R_{i,k}-\bar R_k)^2}}, \qquad \bar R_l = \frac{1}{N}\sum_{i=1}^{N}R_{i,l}.
+\label{eq:pearson}
+\end{equation}
+
+Nhằm triệt tiêu nhiễu thống kê từ các liên kết yếu và kiểm soát mức độ tác động tổng hợp lên từng nhãn, mô hình thực hiện lọc ngưỡng và chuẩn hóa hàng ma trận:
+\begin{equation}
+C_{l,k}^{\mathrm{res}} = C_{l,k}^{\mathrm{res,raw}} \cdot \mathbb I\left[\left|C_{l,k}^{\mathrm{res,raw}}\right| \ge \theta_{\mathrm{corr}}\right], \qquad \theta_{\mathrm{corr}} = 0.25,
+\label{eq:filter}
+\end{equation}
+\begin{equation}
+W_{l,k} = \frac{C_{l,k}^{\mathrm{res}}}{\max\left(1, \; \sum_{j \in DL}\left|C_{l,j}^{\mathrm{res}}\right|\right)}, \qquad l, k \in DL.
+\label{eq:weight-matrix}
+\end{equation}
+
+\floatname{algorithm}{Thuật toán}
+\begin{algorithm}[H]
+\caption{Bóc tách đa tầng, khớp các bộ học và thiết lập phụ thuộc phần dư}
+\label{alg:peeling-residual}
+\footnotesize
+\begin{algorithmic}[1]
+\renewcommand{\algorithmicrequire}{\textbf{Đầu vào:}}
+\renewcommand{\algorithmicensure}{\textbf{Đầu ra:}}
+\REQUIRE \parbox[t]{0.82\linewidth}{\(X,Y\); hàm tạo bộ học \(\mathcal B\); \(F=5\), \(M=3\), \(c=0.30\), \(\tau_{\mathrm{init}}=0.75\), \(\delta_\tau=0.05\), \(\theta_{\mathrm{corr}}=0.25\); phép \(\operatorname{Normalize}\).}
+\ENSURE \parbox[t]{0.82\linewidth}{Các tầng \(IL_1,\ldots,IL_M\), tập \(DL\), các bộ học đã khớp, \(P^{\mathrm{OOF}}\), ma trận tương quan phần dư có dấu \(C^{\mathrm{res,raw}}\) và đồ thị phụ thuộc \(\mathcal G\).}
+\STATE \(IL\gets\varnothing\), \(DL\gets\mathcal L\), \(X^{(1)}\gets X\); khởi tạo bộ nhớ OOF rỗng.
+\FOR{\(m=1,\ldots,M\)}
+  \STATE \(\tau_m\gets\max\{0.50,\tau_{\mathrm{init}}-(m-1)\delta_\tau\}\).
+  \FORALL{\(l\in DL\)}
+    \STATE \((s_l,p_l^{\mathrm{OOF}})\gets\operatorname{CV\text{-}OOF}(X^{(m)},Y_{:,l},\mathcal B,F,c)\), trong đó \(s_l\) là Selective-\(F_1\) dưới dải từ chối \([c,1-c]\).
+  \ENDFOR
+  \STATE \(IL_m\gets\{l\in DL:s_l\ge\tau_m\}\).
+  \IF{\(IL_m=\varnothing\)}
+    \STATE \textbf{dừng} vòng bóc tách.
+  \ENDIF
+  \STATE Lưu \(p_l^{\mathrm{OOF}}\) với mọi \(l\in IL_m\); \(IL\gets IL\cup IL_m\), \(DL\gets DL\setminus IL_m\).
+  \IF{\(|DL|\le1\) hoặc \(m=M\)}
+    \STATE \textbf{dừng} vòng bóc tách.
+  \ENDIF
+  \STATE \(X^{(m+1)}\gets[X,\operatorname{Normalize}(P^{\mathrm{OOF}}_{:,IL};X)]\).
+\ENDFOR
+\IF{\(|DL|=1\)}
+  \STATE Chuyển nhãn còn lại thành một tầng IL mới và dùng điểm OOF đã tính ở tầng cuối; đặt \(DL\gets\varnothing\).
+\ENDIF
+\STATE Sắp thứ tự các nhãn còn lại trong \(DL\) theo tổng tương quan nhãn tuyệt đối tăng dần.
+\STATE \(Z\gets X\), \(IL_{\le0}\gets\varnothing\), \(P^{\mathrm{OOF}}\gets0_{N\times K}\).
+\FORALL{các tầng \(IL_m\) theo thứ tự}
+  \FORALL{\(l\in IL_m\)}
+    \STATE \(f_l^{(m)}\gets\operatorname{FitSafe}(\mathcal B,Z,Y_{:,l})\); chép điểm OOF đã lưu vào \(P^{\mathrm{OOF}}_{:,l}\).
+  \ENDFOR
+  \STATE \(IL_{\le m}\gets IL_{\le m-1}\cup IL_m\), \(Z\gets[X,\operatorname{Normalize}(P^{\mathrm{OOF}}_{:,IL_{\le m}};X)]\).
+\ENDFOR
+\FORALL{\(l\in DL\)}
+  \STATE \((\_,P^{\mathrm{OOF}}_{:,l})\gets\operatorname{CV\text{-}OOF}(Z,Y_{:,l},\mathcal B,F,c)\); \(f_{\mathrm{base},l}\gets\operatorname{FitSafe}(\mathcal B,Z,Y_{:,l})\).
+\ENDFOR
+\IF{\(|DL|\ge2\)}
+  \STATE \(R\gets Y_{:,DL}-P^{\mathrm{OOF}}_{:,DL}\); \(C^{\mathrm{res,raw}}\gets\operatorname{PCC}(R)\).
+  \STATE \(\mathcal G(l)\gets\{k\in DL\setminus\{l\}:|C^{\mathrm{res,raw}}_{l,k}|\ge\theta_{\mathrm{corr}}\}\) cho mọi \(l\in DL\).
+\ELSE
+  \STATE Đặt \(C^{\mathrm{res,raw}}\) rỗng và \(\mathcal G(l)=\varnothing\).
+\ENDIF
+\RETURN \(\{IL_m\},DL,\{f_l^{(m)}\},\{f_{\mathrm{base},l}\},P^{\mathrm{OOF}},C^{\mathrm{res,raw}},\mathcal G\).
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Chuẩn hóa trường trung bình (OS-NMF) và hiệu chuẩn ba chế độ}
+\subsubsection{Ghép nối đồng thời một bước}
+Sau khi đã xác định được ma trận trọng số tương quan \(W\), bài toán đặt ra là làm thế nào để điều chỉnh xác suất của các nhãn \(DL\) bằng thông tin liên nhãn này.
+Trong Classifier Chains \cite{cc2011}, việc suy luận diễn ra tuần tự một chiều, khiến nhãn đi trước không thể tiếp nhận thông tin từ nhãn đi sau. Mặt khác, các phương pháp trường trung bình biến phân cổ điển (Variational Mean-Field) \cite{meanfield2008} thường đòi hỏi giải thuật lặp qua nhiều vòng cho đến khi hội tụ điểm bất động, tiềm ẩn nguy cơ phân kỳ khi đồ thị có liên kết âm hoặc chu trình phức tạp.
+Để khắc phục triệt để hai nhược điểm trên, GSI đề xuất cơ chế \textbf{One-Step Normalized Mean-Field (OS-NMF)}: cập nhật đồng thời toàn bộ các nhãn \(DL\) trong đúng một bước suy diễn giải tích đóng trực tiếp trên không gian logit.
+
+Mô hình sử dụng các hàm chuyển đổi toán học tiêu chuẩn: hàm sigmoid \(\sigma(z) = (1 + \exp(-z))^{-1}\), hàm logit \(\operatorname{logit}(p) = \log\frac{p}{1-p}\) và hàm kẹp biên \(\operatorname{clip}(x, a, b) = \min(b, \max(a, x))\). Nhằm tránh lỗi tràn số khi tính logit trên các điểm xác suất cực đoan, điểm OOF cơ sở được kẹp an toàn:
+\begin{equation}
+\widetilde P^{\mathrm{OOF}}_{i,l} = \operatorname{clip}\left(P^{\mathrm{OOF}}_{i,l}, \; \varepsilon, \; 1-\varepsilon\right), \qquad \varepsilon = 10^{-6}.
+\label{eq:clip-oof}
+\end{equation}
+
+Với các nhãn thuộc \(DL\), cơ chế OS-NMF thực hiện điều chỉnh điểm số như sau:
+\begin{align}
+s_{i,k} &= 2 P^{\mathrm{OOF}}_{i,k} - 1 \in [-1, 1], \label{eq:spin} \\
+\Delta z_{i,l} &= \operatorname{clip}\left(\alpha \sum_{k \in DL} W_{l,k} s_{i,k}, \; -z_{\max}, \; z_{\max}\right), \label{eq:delta-z} \\
+P^{\mathrm{OOF,ref}}_{i,l} &= \sigma\left(\operatorname{logit}\left(\widetilde P^{\mathrm{OOF}}_{i,l}\right) + \Delta z_{i,l}\right), \qquad l \in DL, \label{eq:osnmf}
+\end{align}
+trong đó hệ số ghép nối được cố định là \(\alpha = 0.25\), giới hạn dịch chuyển cực đại \(z_{\max} = 0.50\). Đối với các nhãn độc lập (\(l \in IL\)), điểm số được giữ nguyên không đổi: \(P^{\mathrm{OOF,ref}}_{i,l} = P^{\mathrm{OOF}}_{i,l}\).
+
+\subsubsection{Ba vùng tỷ lệ nhãn và biến đổi điểm}
+Mặc dù điểm số sau OS-NMF đã nắm bắt được cấu trúc phụ thuộc nhãn, chúng chưa bảo đảm phản ánh chính xác phân phối xác suất hậu nghiệm thực tế \cite{cal2023,xmlcal2025}. Trong các bài toán MLC thực tế, hiện tượng mất cân bằng phân phối diễn ra rất phổ biến: nhiều nhãn có tần suất xuất hiện cực thấp (dưới \(5\%\) hoặc \(1\%\)) \cite{imb2021}. Khi đó, các bộ phân loại cơ sở thường có xu hướng dự đoán xác suất bị lệch hoặc thiếu độ nhạy ở lớp thiểu số. Do đó, việc hiệu chuẩn hậu nghiệm là bắt buộc trước khi đưa xác suất vào tầng quyết định ngưỡng.
+
+Từ tập huấn luyện, tỷ lệ mẫu dương \(\pi_l\) và chỉ số cân bằng \(\beta_l\) của từng nhãn \(l \in \mathcal L\) được tính toán như sau:
+\begin{equation}
+\pi_l = \frac{1}{N}\sum_{i=1}^{N}Y_{i,l}, \qquad \beta_l = 1 - 2|\pi_l - 0.5| = 2\min(\pi_l, 1-\pi_l) \in [0, 1].
+\label{eq:balance-index}
+\end{equation}
+Chỉ số \(\beta_l = 1\) khi nhãn cân bằng hoàn hảo (\(\pi_l = 0.5\)), và \(\beta_l\) tiến dần về 0 khi nhãn bị lệch cực đoan. Với ngưỡng cân bằng được chọn là \(\tau_{\mathrm{balance}} = 0.85\), điều kiện \(\beta_l \ge 0.85\) tương đương với khoảng tỷ lệ dương đối xứng \(0.425 \le \pi_l \le 0.575\). Mô hình phân hoạch các nhãn thành ba chế độ:
+\begin{itemize}
+  \item Lệch âm (\emph{Rare-Negative}): \(\pi_l < 0.425\) (lớp 0 chiếm đa số, lớp 1 là lớp hiếm). Áp dụng hồi quy Platt có trọng số căn bậc hai ưu tiên lớp dương.
+  \item Cân bằng (\emph{Symmetric}): \(0.425 \le \pi_l \le 0.575\). Sử dụng ánh xạ đồng nhất \(\mathcal C_l(p) = p\), giữ nguyên điểm số mà không cần huấn luyện thêm.
+  \item Lệch dương (\emph{Rare-Positive}): \(\pi_l > 0.575\) (lớp 1 chiếm đa số, lớp 0 là lớp hiếm). Áp dụng hồi quy Platt có trọng số căn bậc hai ưu tiên lớp âm.
+\end{itemize}
+
+Đối với hai vùng lệch (\(0 < \pi_l < 1\)), phương pháp Balanced-Root Platt Scaling được chúng tôi đề xuất để tối ưu hóa hàm mất mát log-loss có trọng số trên thang logit của điểm OOF đã tinh chỉnh:
+\begin{align}
+q_{i,l}(a, b) &= \sigma\left(a \operatorname{logit}\left(P^{\mathrm{OOF,ref}}_{i,l}\right) + b\right), \label{eq:platt-model} \\
+(a_l, b_l) &= \operatorname*{arg\,min}_{a, b} \left\{ -\sum_{i=1}^{N} \left[ w_{1l} Y_{i,l} \log q_{i,l}(a, b) + w_{0l}(1-Y_{i,l}) \log(1-q_{i,l}(a, b)) \right] \right\}, \label{eq:platt-loss} \\
+\mathcal C_l(p) &= \sigma\left(a_l \operatorname{logit}(p) + b_l\right), \qquad P^{\mathrm{OOF,cal}}_{i,l} = \mathcal C_l\left(P^{\mathrm{OOF,ref}}_{i,l}\right), \label{eq:platt-apply}
+\end{align}
+trong đó cặp trọng số mẫu \((w_{1l}, w_{0l})\) được xác định bởi:
+\begin{equation}
+(w_{1l}, w_{0l}) =
+\begin{cases}
+\left(\sqrt{\dfrac{1-\pi_l}{\pi_l}}, \; 1\right) = \left(\sqrt{\dfrac{N_{0l}}{N_{1l}}}, \; 1\right), & \pi_l < 0.425, \\
+(1, \; 1), & 0.425 \le \pi_l \le 0.575, \\
+\left(1, \; \sqrt{\dfrac{\pi_l}{1-\pi_l}}\right) = \left(1, \; \sqrt{\dfrac{N_{1l}}{N_{0l}}}\right), & \pi_l > 0.575,
+\end{cases}
+\label{eq:class-weights}
+\end{equation}
+với \(N_{1l} = \sum_i Y_{i,l}\) và \(N_{0l} = N - N_{1l}\) lần lượt là số mẫu dương và số mẫu âm của nhãn \(l\).
+
+\begin{algorithm}[H]
+\caption{Ghép nối OS-NMF và học bộ hiệu chuẩn ba chế độ}
+\label{alg:osnmf-calibration}
+\footnotesize
+\begin{algorithmic}[1]
+\renewcommand{\algorithmicrequire}{\textbf{Đầu vào:}}
+\renewcommand{\algorithmicensure}{\textbf{Đầu ra:}}
+\REQUIRE \parbox[t]{0.82\linewidth}{\(P^{\mathrm{OOF}},Y,IL,DL,C^{\mathrm{res,raw}}\); \(\alpha=0.25\), \(z_{\max}=0.50\), \(\theta_{\mathrm{corr}}=0.25\), \(\varepsilon=10^{-6}\), \(\tau_{\mathrm{balance}}=0.85\).}
+\ENSURE \parbox[t]{0.82\linewidth}{\(P^{\mathrm{OOF,cal}}\), các bộ hiệu chuẩn \(\{\mathcal C_l\}_{l=1}^{K}\), \(\boldsymbol\pi\) và \(\boldsymbol\beta\).}
+\STATE \(P^{\mathrm{OOF,ref}}\gets P^{\mathrm{OOF}}\).
+\IF{\(|DL|\ge2\)}
+  \STATE \(A\gets C^{\mathrm{res,raw}}\); đặt \(A_{l,l}\gets0\) và \(A_{l,k}\gets0\) nếu \(|A_{l,k}|<\theta_{\mathrm{corr}}\).
+  \STATE \(W_{l,k}\gets\alpha A_{l,k}/\max\{1,\sum_j|A_{l,j}|\}\) với mọi \(l,k\in DL\).
+  \STATE \(S\gets2P^{\mathrm{OOF}}_{:,DL}-1\); \(D\gets\operatorname{clip}(SW^{\mathsf T},-z_{\max},z_{\max})\).
+  \STATE \(P^{\mathrm{OOF,ref}}_{:,DL}\gets\sigma\!\left(\operatorname{logit}(\operatorname{clip}(P^{\mathrm{OOF}}_{:,DL},\varepsilon,1-\varepsilon))+D\right)\).
+\ENDIF
+\FOR{\(l=1,\ldots,K\)}
+  \STATE \(\pi_l\gets N^{-1}\sum_iY_{i,l}\); \(\beta_l\gets1-2|\pi_l-0.5|\).
+  \IF{\(Y_{:,l}\) chỉ chứa một lớp}
+    \STATE Đặt \(\mathcal C_l\) là bộ dự đoán hằng bằng lớp quan sát được.
+  \ELSIF{\(\beta_l\ge\tau_{\mathrm{balance}}\)}
+    \STATE Đặt \(\mathcal C_l(p)=p\).
+  \ELSIF{\(\pi_l\le0.5\)}
+    \STATE Khớp Platt trên \(\operatorname{logit}(P^{\mathrm{OOF,ref}}_{:,l})\), với trọng số mẫu dương \(\sqrt{N_{0l}/N_{1l}}\) và trọng số mẫu âm bằng 1.
+    \STATE Nếu việc khớp thất bại hoặc hệ số dốc không dương, thay \(\mathcal C_l\) bằng ánh xạ đồng nhất.
+  \ELSE
+    \STATE Khớp Platt trên \(\operatorname{logit}(P^{\mathrm{OOF,ref}}_{:,l})\), với trọng số mẫu âm \(\sqrt{N_{1l}/N_{0l}}\) và trọng số mẫu dương bằng 1.
+    \STATE Nếu việc khớp thất bại hoặc hệ số dốc không dương, thay \(\mathcal C_l\) bằng ánh xạ đồng nhất.
+  \ENDIF
+  \STATE \(P^{\mathrm{OOF,cal}}_{:,l}\gets\mathcal C_l(P^{\mathrm{OOF,ref}}_{:,l})\).
+\ENDFOR
+\RETURN \(P^{\mathrm{OOF,cal}},\{\mathcal C_l\}_{l=1}^{K},\boldsymbol\pi,\boldsymbol\beta\).
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Suy diễn ba chế độ thích ứng và chốt chặn bảo vệ}
+\subsubsection{Từ quy tắc Chow đến ngưỡng phụ thuộc prior}
+Trong lý thuyết quyết định Bayes cổ điển với chi phí từ chối cố định \(0 < c < 0.5\), quy tắc Chow (1970) \cite{chow1970} chỉ ra rằng với hàm mất mát 0--1 nhị phân đối xứng, rủi ro có điều kiện của các hành động chọn lớp 0, chọn lớp 1 và từ chối (\(\bot\)) khi biết xác suất hậu nghiệm \(p(x)\) lần lượt là:
+\begin{equation}
+\operatorname{Risk}(0\mid x) = p(x), \qquad \operatorname{Risk}(1\mid x) = 1 - p(x), \qquad \operatorname{Risk}(\bot\mid x) = c.
+\label{eq:chow-risks}
+\end{equation}
+Việc cực tiểu hóa rủi ro kỳ vọng dẫn đến cặp ngưỡng Chow đối xứng nổi tiếng: dự đoán 0 nếu \(p(x) \le c\), dự đoán 1 nếu \(p(x) \ge 1-c\), và từ chối nếu \(c < p(x) < 1-c\). Nguyen và Hüllermeier \cite{nguyen2020,nguyen2021} đã mở rộng phân tích bộ dự đoán Bayes tối ưu cho bài toán MLC-PA dưới hàm Hamming loss có chi phí từ chối theo ô nhãn. Khi các nhãn có tỷ lệ tiên nghiệm lệch (\(\pi_l \ne 0.5\)), tỷ số hợp lý (likelihood ratio) \(\Lambda_l(x) = \frac{p_l(x)}{1-p_l(x)} \frac{1-\pi_l}{\pi_l}\) khi được cân bằng với các tỷ số rủi ro từ chối \(\frac{c}{1-c}\) và \(\frac{1-c}{c}\) sẽ dẫn đến cặp ngưỡng Bayes phụ thuộc prior:
+\begin{equation}
+\tau_0^{(\mathrm{Bayes})}(l) = \frac{c\pi_l}{(1-c)(1-\pi_l)+c\pi_l}, \qquad \tau_1^{(\mathrm{Bayes})}(l) = \frac{(1-c)\pi_l}{c(1-\pi_l)+(1-c)\pi_l}.
+\label{eq:bayes-thresh}
+\end{equation}
+
+Từ đó, trong phương pháp GSI, chúng tôi xây dựng phương pháp neo bất đối xứng. Khi nhãn có tỷ lệ dương cực thấp (\(\pi_l \ll 0.5\)), công thức \eqref{eq:bayes-thresh} có thể kéo \(\tau_1^{(\mathrm{Bayes})}(l)\) xuống dưới \(0.50\). Ngược lại, khi nhãn chiếm đa số dương (\(\pi_l \gg 0.5\)), \(\tau_0^{(\mathrm{Bayes})}(l)\) có thể bị đẩy lên trên \(0.50\). Để bảo đảm ranh giới tự nhiên giữa hai lớp và ngăn ngừa việc một dự đoán dương lại diễn ra ở vùng xác suất dưới \(0.50\), GSI đề xuất cấu trúc neo bất đối xứng có chặn giữa:
+\begin{align}
+\tau_{0,\mathrm{asym}}(l) &=
+\begin{cases}
+\tau_0^{(\mathrm{Bayes})}(l), & \pi_l \le 0.5, \\
+\min\left(0.50, \; \tau_0^{(\mathrm{Bayes})}(l)\right), & \pi_l > 0.5,
+\end{cases} \label{eq:asym-0} \\
+\tau_{1,\mathrm{asym}}(l) &=
+\begin{cases}
+\max\left(0.50, \; \tau_1^{(\mathrm{Bayes})}(l)\right), & \pi_l \le 0.5, \\
+\tau_1^{(\mathrm{Bayes})}(l), & \pi_l > 0.5.
+\end{cases} \label{eq:asym-1}
+\end{align} 
+
+\subsubsection{Nội suy và kẹp ngưỡng}
+Nhằm tránh hiện tượng ngưỡng bị thay đổi đột ngột khi chỉ số cân bằng \(\beta_l\) dao động quanh giá trị ranh giới \(\tau_{\mathrm{balance}} = 0.85\), mô hình GSI thiết kế một hàm nội suy sigmoid trơn:
+\begin{equation}
+w_{\mathrm{blend}}(l) = \sigma\left(\kappa(\beta_l - \tau_{\mathrm{balance}})\right), \qquad \kappa = 20, \quad \tau_{\mathrm{balance}} = 0.85.
+\label{eq:blend-weight}
+\end{equation}
+
+Ngưỡng trung gian sau nội suy được xác định bởi:
+\begin{align}
+\tau_0^{(\mathrm{blend})}(l) &= (1 - w_{\mathrm{blend}}(l))\tau_{0,\mathrm{asym}}(l) + w_{\mathrm{blend}}(l)c, \label{eq:blend-0} \\
+\tau_1^{(\mathrm{blend})}(l) &= (1 - w_{\mathrm{blend}}(l))\tau_{1,\mathrm{asym}}(l) + w_{\mathrm{blend}}(l)(1-c). \label{eq:blend-1}
+\end{align}
+
+Tiếp theo, các ngưỡng được kẹp biên an toàn trong khoảng \([0.005, 0.49]\) cho \(\tau_0\) và \([0.51, 0.995]\) cho \(\tau_1\). Nếu khoảng cách giữa hai ngưỡng vi phạm độ rộng tối thiểu (\(\tau_1 - \tau_0 < 0.02\)), hai biên được tịnh tiến đối xứng quanh trung điểm để bảo đảm vùng từ chối luôn có độ rộng tối thiểu là 0.02.
+
+\subsubsection{Chốt chặn độ phủ OOF và điều chỉnh SAMG}
+Chúng tôi thiết lập cơ chế Coverage Guard nhằm bảo đảm độ phủ thực nghiệm trên dữ liệu ngoài fold không thấp hơn ngưỡng mục tiêu \(\gamma_{\min} = 0.70\) vì nếu mật độ xác suất tập trung dày đặc bên trong khoảng \((\tau_0, \tau_1)\), mô hình sẽ từ chối quá nhiều, làm sụt giảm nghiêm trọng độ phủ quyết định (Coverage) và tước đi tính hữu dụng của hệ thống trong thực tế. Độ phủ ngoài fold của nhãn \(l\) được định nghĩa là tỷ lệ mẫu được mô hình chấp nhận quyết định:
+\begin{equation}
+\widehat{\operatorname{Coverage}}_l = \frac{1}{N}\sum_{i=1}^{N}\mathbb I\left[P^{\mathrm{OOF,cal}}_{i,l} \le \tau_0(l) \ \lor\ P^{\mathrm{OOF,cal}}_{i,l} \ge \tau_1(l)\right].
+\label{eq:emp-cov}
+\end{equation}
+
+Nếu \(\widehat{\operatorname{Coverage}}_l < \gamma_{\min}\), thuật toán thực hiện co hẹp vùng từ chối tuần tự qua tối đa \(Q=50\) bước với độ dài bước cố định \(\Delta = (\tau_1 - \tau_0)/(2Q)\):
+\begin{itemize}
+  \item Khi \(\pi_l \le 0.5\): tăng dần \(\tau_0 \gets \tau_0 + \Delta\) và co \(\tau_1 \gets \max(0.50, \tau_1 - \Delta)\).
+  \item Khi \(\pi_l > 0.5\): giảm dần \(\tau_1 \gets \tau_1 - \Delta\) và đẩy \(\tau_0 \gets \min(0.50, \tau_0 + \Delta)\).
+  \item Quá trình co biên dừng lại ngay khi đạt \(\widehat{\operatorname{Coverage}}_l \ge \gamma_{\min}\), hoặc khi hai ngưỡng chạm nhau.
+\end{itemize}
+
+Chúng tôi còn thiết kế riêng một cơ chế xử lý là biến thể SAMG (Separation-Aware Margin Guard) cho các nhãn có độ lệch cực đoan (\(\pi_l \le 0.20\) hoặc \(\pi_l \ge 0.80\)). Khi cờ SAMG được kích hoạt, mô hình kiểm tra phân bố điểm số khớp \(P^{\mathrm{fit}}\) trên tập huấn luyện:
+\begin{itemize}
+  \item Với \(\pi_l \le 0.20\): nếu mẫu dương có điểm thấp nhất vẫn cao hơn phân vị \(99.5\%\) của mẫu âm (\(\min P^{\mathrm{fit}}_{Y_l=1,l} > Q_{99.5}(P^{\mathrm{fit}}_{Y_l=0,l})\)), chứng tỏ tồn tại một khoảng trống phân tách rất sạch giữa hai lớp. Ngưỡng \(\tau_1\) sẽ được điều chỉnh hạ xuống trung điểm của khoảng phân tách này (nếu trung điểm nhỏ hơn \(\tau_1\) hiện tại).
+  \item Tương tự cho \(\pi_l \ge 0.80\) với phân vị \(Q_{0.5}(P^{\mathrm{fit}}_{Y_l=1,l})\) và giá trị cực đại của mẫu âm.
+  \item Mục đích của cơ chế này là tận dụng khả năng tách biệt lớp hoàn hảo của bộ phân loại cơ sở trên các nhãn hiếm để giảm bớt việc từ chối không cần thiết.
+\end{itemize}
+
+Thuật toán thiết lập bảng ngưỡng thích ứng được chi tiết hóa trong Thuật toán~\ref{alg:adaptive-thresholds}.
+
+\begin{algorithm}[H]
+\caption{Thiết lập ngưỡng ba chế độ, bảo vệ độ phủ và điều chỉnh SAMG}
+\label{alg:adaptive-thresholds}
+\scriptsize
+\begin{algorithmic}[1]
+\renewcommand{\algorithmicrequire}{\textbf{Đầu vào:}}
+\renewcommand{\algorithmicensure}{\textbf{Đầu ra:}}
+\REQUIRE \parbox[t]{0.82\linewidth}{\(Y,P^{\mathrm{OOF,cal}},P^{\mathrm{fit}}\); \(c=0.30\), \(\tau_{\mathrm{balance}}=0.85\), \(\kappa=20\), \(\gamma_{\min}=0.70\), \(u_1=0.55\), \(u_0=0.45\), \(Q=50\); cờ SAMG.}
+\ENSURE Bảng \(\mathcal T[l]=(\tau_0(l),\tau_1(l),\pi_l,\beta_l,\mathrm{regime}_l)\).
+\FOR{\(l=1,\ldots,K\)}
+  \STATE \(\pi_l\gets N^{-1}\sum_iY_{i,l}\), \(\beta_l\gets1-2|\pi_l-0.5|\), \((t_0^{C},t_1^{C})\gets(c,1-c)\).
+  \STATE \(\widetilde\pi_l\gets\operatorname{clip}(\pi_l,10^{-6},1-10^{-6})\).
+  \IF{\(\widetilde\pi_l\le0.5\)}
+    \STATE \(a_0\gets\operatorname{clip}\!\left(\dfrac{c\widetilde\pi_l}{(1-c)(1-\widetilde\pi_l)+c\widetilde\pi_l},0.005,0.49\right)\).
+    \STATE \(a_1\gets\operatorname{clip}\!\left(\dfrac{(1-c)\widetilde\pi_l}{c(1-\widetilde\pi_l)+(1-c)\widetilde\pi_l},0.51,0.995\right)\); \(a_1\gets\min\{\max(0.50,a_1),u_1\}\).
+    \STATE \(\mathrm{regime}_l\gets\mathrm{Symmetric}\) nếu \(\beta_l\ge\tau_{\mathrm{balance}}\), ngược lại \(\mathrm{Rare\text{-}Negative}\).
+  \ELSE
+    \STATE \(q\gets1-\widetilde\pi_l\); \(a_0\gets1-\operatorname{clip}\!\left(\dfrac{(1-c)q}{c\widetilde\pi_l+(1-c)q},0.51,0.995\right)\).
+    \STATE \(a_1\gets1-\operatorname{clip}\!\left(\dfrac{cq}{(1-c)\widetilde\pi_l+cq},0.005,0.49\right)\); \(a_0\gets\max\{\min(0.50,a_0),u_0\}\).
+    \STATE \(\mathrm{regime}_l\gets\mathrm{Symmetric}\) nếu \(\beta_l\ge\tau_{\mathrm{balance}}\), ngược lại \(\mathrm{Rare\text{-}Positive}\).
+  \ENDIF
+  \STATE \(w_l\gets[1+\exp\{-\operatorname{clip}(\kappa(\beta_l-\tau_{\mathrm{balance}}),-30,30)\}]^{-1}\).
+  \STATE \(t_0\gets\operatorname{clip}(w_lt_0^C+(1-w_l)a_0,0.005,0.49)\); \(t_1\gets\operatorname{clip}(w_lt_1^C+(1-w_l)a_1,0.51,0.995)\).
+  \IF{\(t_1-t_0<0.02\)}
+    \STATE Dịch hai biên quanh trung điểm để thu được \(t_1-t_0=0.02\), đồng thời giữ chúng trong \([0.005,0.995]\).
+  \ENDIF
+  \STATE \(\widehat\gamma_l\gets N^{-1}\sum_i\mathbb I[P^{\mathrm{OOF,cal}}_{i,l}\le t_0\ \lor\ P^{\mathrm{OOF,cal}}_{i,l}\ge t_1]\).
+  \IF{\(\widehat\gamma_l<\gamma_{\min}\)}
+    \STATE \((t_0^{\mathrm{start}},t_1^{\mathrm{start}})\gets(t_0,t_1)\); \(\Delta\gets(t_1-t_0)/(2Q)\).
+    \FOR{\(q=1,\ldots,Q\)}
+      \IF{\(\pi_l\le0.5\)}
+        \STATE \(t_0\gets t_0+\Delta\); nếu \(t_1>0.50\) thì \(t_1\gets\max(0.50,t_1-\Delta)\).
+      \ELSE
+        \STATE \(t_1\gets t_1-\Delta\); nếu \(t_0<0.50\) thì \(t_0\gets\min(0.50,t_0+\Delta)\).
+      \ENDIF
+      \IF{\(t_0\ge t_1\)}
+        \STATE \(m\gets(t_0^{\mathrm{start}}+t_1^{\mathrm{start}})/2\); \((t_0,t_1)\gets(m-10^{-4},m+10^{-4})\); \textbf{dừng}.
+      \ENDIF
+      \STATE Cập nhật \(\widehat\gamma_l\); nếu \(\widehat\gamma_l\ge\gamma_{\min}\) thì \textbf{dừng}.
+    \ENDFOR
+  \ENDIF
+  \IF{SAMG được bật và \(\pi_l\le0.20\), đồng thời \(\min P^{\mathrm{fit}}_{Y_l=1,l}>Q_{99.5}(P^{\mathrm{fit}}_{Y_l=0,l})\)}
+    \STATE Đặt \(m\) bằng trung điểm của hai đại lượng trên; nếu \(m<t_1\) thì \(t_1\gets m\), rồi sửa \(t_0\gets\max(0.005,t_1-0.01)\) khi cần.
+  \ELSIF{SAMG được bật và \(\pi_l\ge0.80\), đồng thời \(\max P^{\mathrm{fit}}_{Y_l=0,l}<Q_{0.5}(P^{\mathrm{fit}}_{Y_l=1,l})\)}
+    \STATE Đặt \(m\) bằng trung điểm của hai đại lượng trên; nếu \(m>t_0\) thì \(t_0\gets m\), rồi sửa \(t_1\gets\min(0.995,t_0+0.01)\) khi cần.
+  \ENDIF
+  \STATE \(\mathcal T[l]\gets(t_0,t_1,\pi_l,\beta_l,\mathrm{regime}_l)\).
+\ENDFOR
+\RETURN \(\mathcal T\).
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Quy trình suy luận}
+Chi tiết toàn bộ quy trình suy luận được mô tả trong Thuật toán~\ref{alg:inference}.
+
+
+\begin{algorithm}[H]
+\caption{Suy luận xác suất, dự đoán chọn lọc và dự đoán đầy đủ}
+\label{alg:inference}
+\footnotesize
+\begin{algorithmic}[1]
+\renewcommand{\algorithmicrequire}{\textbf{Đầu vào:}}
+\renewcommand{\algorithmicensure}{\textbf{Đầu ra:}}
+\REQUIRE \parbox[t]{0.82\linewidth}{\(X^*\) đã được tiền xử lý như dữ liệu học; \(\{IL_m\},DL\); các bộ học đã lưu; \(C^{\mathrm{res,raw}}\), \(\{\mathcal C_l\}\), bảng ngưỡng \(\mathcal T\); các tham số OS-NMF; ngưỡng đầy đủ tùy chọn \(t\).}
+\ENSURE \(P^*\), \(\hat Y^{*,\mathrm{sel}}\in\{0,1,\bot\}^{N^*\times K}\), \(\hat Y^{*,\mathrm{full}}\in\{0,1\}^{N^*\times K}\).
+\STATE \(P^{*,\mathrm{base}}\gets0_{N^*\times K}\), \(Z^*\gets X^*\), \(IL_{\le0}\gets\varnothing\).
+\FORALL{các tầng \(IL_m\) theo thứ tự}
+  \FORALL{\(l\in IL_m\)}
+    \STATE \(P^{*,\mathrm{base}}_{:,l}\gets f_l^{(m)}(Z^*)\).
+  \ENDFOR
+  \STATE \(IL_{\le m}\gets IL_{\le m-1}\cup IL_m\).
+  \STATE \(Z^*\gets[X^*,\operatorname{Normalize}(P^{*,\mathrm{base}}_{:,IL_{\le m}};X^*)]\).
+\ENDFOR
+\FORALL{\(l\in DL\)}
+  \STATE \(P^{*,\mathrm{base}}_{:,l}\gets f_{\mathrm{base},l}(Z^*)\).
+\ENDFOR
+\STATE \(P^{*,\mathrm{ref}}\gets P^{*,\mathrm{base}}\).
+\IF{\(|DL|\ge2\)}
+  \STATE Lập \(W\) từ \(C^{\mathrm{res,raw}}\) bằng cùng phép lọc, chuẩn hóa hàng và hệ số \(\alpha\) trong Thuật toán~\ref{alg:osnmf-calibration}.
+  \STATE \(D^*\gets\operatorname{clip}((2P^{*,\mathrm{base}}_{:,DL}-1)W^{\mathsf T},-z_{\max},z_{\max})\).
+  \STATE \(P^{*,\mathrm{ref}}_{:,DL}\gets\sigma\!\left(\operatorname{logit}(\operatorname{clip}(P^{*,\mathrm{base}}_{:,DL},\varepsilon,1-\varepsilon))+D^*\right)\).
+\ENDIF
+\FOR{\(l=1,\ldots,K\)}
+  \STATE \(P^*_{:,l}\gets\operatorname{clip}(\mathcal C_l(P^{*,\mathrm{ref}}_{:,l}),0,1)\).
+  \STATE Khởi tạo \(\hat Y^{*,\mathrm{sel}}_{:,l}\gets\bot\); gán 0 nếu \(P^*_{:,l}\le\tau_0(l)\), gán 1 nếu \(P^*_{:,l}\ge\tau_1(l)\).
+  \IF{người dùng cung cấp \(t\)}
+    \STATE \(t_l^{\mathrm{full}}\gets t\).
+  \ELSIF{\(\pi_l\le0.20\)}
+    \STATE \(t_l^{\mathrm{full}}\gets\tau_1(l)\).
+  \ELSIF{\(\pi_l\ge0.80\)}
+    \STATE \(t_l^{\mathrm{full}}\gets\tau_0(l)\).
+  \ELSE
+    \STATE \(t_l^{\mathrm{full}}\gets0.50\).
+  \ENDIF
+  \STATE \(\hat Y^{*,\mathrm{full}}_{:,l}\gets\mathbb I[P^*_{:,l}\ge t_l^{\mathrm{full}}]\).
+\ENDFOR
+\RETURN \(P^*,\hat Y^{*,\mathrm{sel}},\hat Y^{*,\mathrm{full}}\).
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Chỉ số đánh giá}
+\subsubsection{Số đếm đầy đủ và số đếm chọn lọc}
+Gọi $N$ là số mẫu kiểm tra và K là số nhãn trong tập đánh giá. Để phân biệt rõ giữa chế độ dự đoán đầy đủ và chế độ dự đoán chọn lọc có từ chối, ta định nghĩa biến chỉ thị quyết định của mẫu $i$ trên nhãn $l$ là:
+\begin{equation}
+a_{il} = \mathbb I\left[\hat y^s_{il} \ne \bot\right], \qquad a_{il} \in \{0, 1\}.
+\label{eq:decision-mask}
+\end{equation}
+Với ký hiệu chế độ $r \in \{c, s\}$, trong đó $c$ đại diện cho chế độ đầy đủ (\emph{complete}) và $s$ đại diện cho chế độ chọn lọc (\emph{selective}), ta đặt trọng số ô mẫu--nhãn tương ứng là:
+\begin{equation}
+v^c_{il} = 1, \qquad v^s_{il} = a_{il}.
+\end{equation}
+
+Các đại lượng đếm ma trận nhầm lẫn cho từng nhãn $l \in \mathcal L$ được xác định theo:
+\begin{align}
+TP_l^r &= \sum_{i=1}^N v^r_{il} \cdot \mathbb I\left[y_{il}=1, \; \hat y^r_{il}=1\right], \nonumber \\
+FP_l^r &= \sum_{i=1}^N v^r_{il} \cdot \mathbb I\left[y_{il}=0, \; \hat y^r_{il}=1\right], \label{eq:counts} \\
+FN_l^r &= \sum_{i=1}^N v^r_{il} \cdot \mathbb I\left[y_{il}=1, \; \hat y^r_{il}=0\right]. \nonumber
+\end{align}
+
+\noindent\textbf{Nguyên tắc xử lý các ô nhãn bị từ chối ($\bot$)}:
+\begin{itemize}
+  \item Trong chế độ đánh giá đầy đủ ($r=c$), mọi vị trí đều bị buộc phải dự đoán $\{0, 1\}$ ($v_{il}^c = 1$), tương ứng với đánh giá chuẩn tắc trong học đa nhãn \cite{zhang2014}.
+  \item Trong chế độ đánh giá chọn lọc ($r=s$), loại bỏ hoàn toàn các ô nhãn có hành động từ chối ($\hat y_{il}^s = \bot$) ra khỏi cả tử số lẫn mẫu số của các đại lượng đếm.
+\end{itemize}
+
+Cách xử lý này tuân thủ chặt chẽ định nghĩa đánh giá độ chính xác có điều kiện trên vùng chấp nhận dự đoán (conditional accuracy on accepted instances) trong khung lý thuyết MLC-PA của Nguyen và Hüllermeier \cite{nguyen2021}, phản ánh chân thực năng lực phân loại của hệ thống khi mô hình thực sự tự tin đưa ra quyết định.
+
+\subsubsection{Macro-\texorpdfstring{$F_1$}{F1} và Micro-\texorpdfstring{$F_1$}{F1}}
+Dựa trên các đại lượng đếm ở \eqref{eq:counts}, điểm $F_1$ của từng nhãn $l$ được tính toán theo \cite{zhang2014,bogatinovski2022}:
+\begin{equation}
+F_{1,l}^r = \frac{2TP_l^r}{2TP_l^r + FP_l^r + FN_l^r}, \qquad r \in \{c, s\}.
+\label{eq:f1label}
+\end{equation}
+
+Các chỉ số tổng hợp toàn cục Macro-$F_1$ và Micro-$F_1$ lần lượt là:
+\begin{align}
+F_{\rm macro}^r &= \frac{1}{K}\sum_{l=1}^{K}F_{1,l}^r, \label{eq:macro} \\
+F_{\rm micro}^r &= \frac{2\sum_{l=1}^K TP_l^r}{2\sum_{l=1}^K TP_l^r + \sum_{l=1}^K FP_l^r + \sum_{l=1}^K FN_l^r}. \label{eq:micro}
+\end{align}
+
+\subsubsection{Hamming loss, độ phủ và mất mát có từ chối}
+Hamming loss đầy đủ ($HL^c$) và Hamming loss chọn lọc ($HL^s$) được định nghĩa theo \cite{zhang2014}:
+\begin{align}
+HL^c &= \frac{1}{NK}\sum_{i=1}^N\sum_{l=1}^K \mathbb I\left[\hat y^c_{il} \ne y_{il}\right], \label{eq:hl} \\
+HL^s &= \frac{\sum_{i=1}^N\sum_{l=1}^K a_{il} \mathbb I\left[\hat y^s_{il} \ne y_{il}\right]}{\sum_{i=1}^N\sum_{l=1}^K a_{il}}, \qquad \text{khi } \sum_{i,l}a_{il} > 0. \label{eq:shl}
+\end{align}
+
+Độ phủ quyết định ($\Cov$) và tỷ lệ từ chối ($\operatorname{Rej}$) trên toàn bảng dữ liệu kiểm tra là:
+\begin{equation}
+\Cov = \frac{1}{NK}\sum_{i=1}^N\sum_{l=1}^K a_{il}, \qquad \operatorname{Rej} = 1 - \Cov.
+\label{eq:cov}
+\end{equation}
+Độ phủ thể hiện tỷ lệ ô mẫu--nhãn được chấp nhận đưa ra quyết định, không phải tỷ lệ các mẫu có toàn bộ $100\%$ số nhãn được quyết định.
+
+Để đo lường sự đánh đổi toàn diện giữa chất lượng dự đoán chọn lọc và độ phủ, hàm mất mát có chi phí từ chối theo ô (Generalized Loss) \cite{chow1970,nguyen2021} được xác định bởi:
+\begin{align}
+\ell_c(y, \hat y) &=
+\begin{cases}
+c, & \hat y = \bot, \\
+\mathbb I[y \ne \hat y], & \hat y \in \{0, 1\},
+\end{cases} \nonumber \\
+GL_c &= \frac{1}{NK}\sum_{i=1}^N\sum_{l=1}^K \ell_c\left(y_{il}, \; \hat y^s_{il}\right) \label{eq:gl}
+\end{align}
+Công thức \eqref{eq:gl} phản ánh trực tiếp sự đánh đổi: nếu mô hình từ chối quá nhiều để làm giảm $HL^s$, lượng phạt $c(1-\Cov)$ sẽ tăng lên; ngược lại nếu mô hình dự đoán bừa bãi để tăng $\Cov$, tỷ lệ sai lỗi $HL^s$ sẽ tăng vọt.
+
+\subsubsection{Phân rã IL/DL và tổng hợp qua fold}
+Để phân tích sâu sắc đóng góp của từng nhóm nhãn, với mỗi nhóm $G \in \{\IL, \DL\}$, ta tính $F_G^r$ bằng cách áp dụng \eqref{eq:macro} trên các nhãn thuộc $G$, và tính $\Cov_G$ bằng cách áp dụng \eqref{eq:cov} với mẫu số $N|G|$. Trên từng fold kiểm định, các chỉ số toàn cục phân rã tuyến tính theo tỷ lệ số nhãn:
+\begin{equation}
+F_{\rm macro}^s = \frac{|\IL|}{K}F_{\IL}^s + \frac{|\DL|}{K}F_{\DL}^s, \qquad \Cov = \frac{|\IL|}{K}\Cov_{\IL} + \frac{|\DL|}{K}\Cov_{\DL}.
+\label{eq:decomp}
+\end{equation}
+
+Với một chỉ số đánh giá $z_f$ ghi nhận trên từng fold trong quy trình kiểm định chéo $F=5$ fold vòng ngoài, giá trị trung bình $\bar z$ và độ lệch chuẩn mẫu $s_z$ được tính theo:
+\begin{equation}
+\bar z = \frac{1}{F}\sum_{f=1}^{F}z_f, \qquad s_z = \sqrt{\frac{1}{F-1}\sum_{f=1}^{F}(z_f - \bar z)^2}.
+\label{eq:sd}
+\end{equation}
+
+\section{Thiết kế thực nghiệm}
+\subsection{Bộ dữ liệu}
+Bảng~\ref{tab:datasets} tóm tắt mười bộ dữ liệu có mặt trong tệp kết quả.
+\begin{table}[H]
+\centering
+\caption{Đặc trưng thống kê 10 tập dữ liệu thực nghiệm trong hệ thống đối chuẩn GSI-MLC-PA.}
+\label{tab:datasets}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrrrcr}
+\toprule
+\textbf{Tập dữ liệu} & \textbf{Lĩnh vực} & \textbf{Mẫu ($N$)} & \textbf{Đặc trưng ($d$)} & \textbf{Nhãn ($K$)} & \textbf{Tỷ lệ dương ($\bar{\pi}$)} & \textbf{Mức độ mất cân bằng} \\
+\midrule
+\texttt{emotions} & Âm thanh / Cảm xúc & 593 & 72 & 6 & 0.3113 & Cân bằng \\
+\texttt{scene} & Thị giác máy tính & 2407 & 294 & 6 & 0.1790 & Mất cân bằng vừa \\
+\texttt{yeast} & Sinh học / Gen & 2417 & 103 & 14 & 0.3027 & Cân bằng vừa \\
+\texttt{plantpseaac} & Protein thực vật & 978 & 440 & 12 & 0.0890 & Mất cân bằng cao \\
+\texttt{humanpseaac} & Protein người & 3106 & 440 & 14 & 0.0308 & Mất cân bằng cực đoan \\
+\texttt{chd49} & Y sinh / Tim mạch & 555 & 49 & 6 & 0.4300 & Dày đặc / Cân bằng \\
+\texttt{music} & Âm nhạc / Thể loại & 592 & 71 & 6 & 0.3117 & Mất cân bằng vừa \\
+\texttt{gpositivepseaac} & Protein vi khuẩn Gram+ & 519 & 440 & 4 & 0.2519 & Mất cân bằng vừa \\
+\texttt{genbase} & Hệ gen học & 662 & 1186 & 27 & 0.0464 & Mất cân bằng cao \\
+\texttt{viruspseaac} & Protein virus & 207 & 440 & 6 & 0.2029 & Mất cân bằng vừa \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\subsection{Giao thức}
+Thực nghiệm dùng đánh giá chéo 5 folds ở vòng ngoài. Trong từng outer-train, GSI-MLC-PA-V6.3.3 dành $20\%$ cho tập xác nhận nội bộ để học phân hoạch $\IL$--$\DL$; outer-test chỉ được dùng sau khi cấu trúc đã cố định và mô hình đã được khớp lại trên toàn bộ outer-train. Cách tổ chức này ngăn việc chọn cấu trúc trực tiếp từ dữ liệu kiểm tra. 
+
+\subsection{Mô hình so sánh}
+
+Để đánh giá hiệu suất của phương pháp GSI-MLC-PA-V6.3.3 chúng tôi so sánh nó với một tập hợp đa dạng các phương pháp phân loại đa nhãn gồm 3 phương pháp là BR, CC, MLC-PA. Thực nghiệm được tiến hành lần lượt với ba bộ học cơ sở gồm Logistic Regression, SVM, MLP. Với mỗi bộ học cơ sở, cả bốn phương pháp đều sử dụng cùng loại bộ học để bảo đảm tính nhất quán trong so sánh. BR và CC không có hành động từ chối nên Coverage bằng 1 và Generalized Loss của chúng trùng Hamming Loss đầy đủ. MLC-PA và GSI-MLC-PA-V6.3.3 được đánh giá ở cả hai chế độ là dự đoán đầy đủ và dự đoán có cơ chế từ chối. Bằng cách này, chúng tôi hướng đến việc hiểu rõ hơn khả năng hoạt động độc lập của các phương pháp này và những đóng góp tiềm năng của chúng vào các mô hình phức tạp hơn. Mỗi phương pháp được đánh giá bằng nhiều chỉ số khác nhau để nắm bắt sự khác biệt về hiệu suất trên các thước đo khác nhau.
+
+\begin{table}[h]
+\centering
+\caption{Cấu hình bộ học cơ sở.}
+\label{tab:base-learners}
+\small
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+Bộ học & Cấu hình \\
+\midrule
+Logistic & LogisticRegression, phạt $\ell_2$, $C=1$, solver \texttt{liblinear}, tối đa 1000 vòng, dung sai $10^{-3}$. \\
+SVM & LinearSVC, $C=1$, squared hinge, tối đa 5000 vòng, dung sai $10^{-3}$; hiệu chỉnh sigmoid bằng 3 fold lồng trong fold huấn luyện; nhãn hiếm dùng prior làm trơn. \\
+MLP & BR đa đầu ra có hai lớp ẩn $(128,64)$ và dropout $0{,}15$; bộ phân loại nhị phân trong chuỗi có lớp ẩn 64; 30 epoch, learning rate $10^{-3}$, weight decay $10^{-3}$, BCE có trọng số và hiệu chỉnh sigmoid. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+
+\section{Kết quả thực nghiệm}
+
+Phần này trình bày kết quả thực nghiệm toàn diện trên 30 cấu hình (10 tập dữ liệu $\times$ 3 bộ phân loại cơ sở) dưới 5-fold cross-validation. Toàn bộ các chỉ số định lượng được tổng hợp, đối sánh và phân tích chi tiết qua các bảng số liệu dưới đây.
+
+\subsection{Phân Bố Cấu Trúc Nhãn In-Fold}
+Bảng \ref{tab:partition} trình bày thống kê số lượng và tỷ lệ nhãn được phân luồng vào $IL$ và $DL$ trên 10 tập benchmark qua 5 folds.
+
+\begin{table}[H]
+\centering
+\small
+\caption{Thống kê số lượng và tỷ lệ phân luồng nhãn $IL$ và $DL$ (trung bình 5 folds).}
+\label{tab:partition}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Tập dữ liệu} & \textbf{Tổng $K$} & \textbf{$|IL|$} & \textbf{$|DL|$} & \textbf{Tỷ lệ $IL$ (\%)} & \textbf{Tỷ lệ $DL$ (\%)} & \textbf{Chỉ số các nhãn thuộc tập $IL$} \\
+\midrule
+\texttt{emotions}        & 6  & 3.6 $\pm$ 0.5 & 2.4 $\pm$ 0.5 & 60.0\% & 40.0\% & $\{2, 3, 5\}$ (phần lớn các fold) \\
+\texttt{scene}           & 6  & 5.6 $\pm$ 0.9 & 0.4 $\pm$ 0.9 & 93.3\% & 6.7\%  & $\{0, 1, 2, 3, 4, 5\}$ (4/5 folds chứa toàn bộ nhãn) \\
+\texttt{music}           & 6  & 3.2 $\pm$ 0.4 & 2.8 $\pm$ 0.4 & 53.3\% & 46.7\% & $\{2, 3, 5\}$ \\
+\texttt{gpositivepseaac} & 4  & 2.0 $\pm$ 0.0 & 2.0 $\pm$ 0.0 & 50.0\% & 50.0\% & $\{0, 2\}$ \\
+\texttt{genbase}         & 27 & 19.0 $\pm$ 1.2& 8.0 $\pm$ 1.2 & 70.4\% & 29.6\% & 19 nhãn đạt độ phân tách cao trên đặc trưng amino acid \\
+\midrule
+\texttt{chd49}           & 6  & 2.0 $\pm$ 0.0 & 4.0 $\pm$ 0.0 & 33.3\% & 66.7\% & $\{0, 5\}$ ($\pi_0=0.61, \pi_5=0.76$ - nhãn dương đa số) \\
+\texttt{yeast}           & 14 & 4.0 $\pm$ 0.0 & 10.0 $\pm$ 0.0& 28.6\% & 71.4\% & $\{2, 3, 11, 12\}$ \\
+\texttt{viruspseaac}     & 6  & 1.0 $\pm$ 0.0 & 5.0 $\pm$ 0.0 & 16.7\% & 83.3\% & $\{0\}$ \\
+\texttt{plantpseaac}     & 12 & 0.0 $\pm$ 0.0 & 12.0 $\pm$ 0.0& 0.0\%  & 100.0\%& Không có nhãn nào vượt qua ngưỡng F1 in-fold 0.65 \\
+\texttt{humanpseaac}     & 14 & 0.0 $\pm$ 0.0 & 14.0 $\pm$ 0.0& 0.0\%  & 100.0\%& Không có nhãn nào vượt qua ngưỡng F1 in-fold 0.65 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\subsection{Bảng Đối Soát Hiệu Năng Phân Rã và Tỷ Trọng Đóng Góp}
+Bảng \ref{tab:main_results} lượng hóa chi tiết mức độ đóng góp tuyệt đối và tỷ trọng tương đối của từng tập cấu phần vào Selective Macro-$F_1^{\text{pos}}$ toàn cục.
+
+\begin{table}[H]
+\centering
+\small
+\caption{Bảng phân rã hiệu năng Selective Macro-$F_1^{\text{pos}}$, tỷ trọng đóng góp và độ phủ quyết định (GSI-MLC-PA v6.3.3).}
+\label{tab:main_results}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcccccccccc}
+\toprule
+\multirow{2}{*}{\textbf{Tập dữ liệu}} & \multicolumn{3}{c}{\textbf{Selective Macro-$F_1^{\text{pos}}$}} & \multicolumn{2}{c}{\textbf{Đóng góp tuyệt đối}} & \multicolumn{2}{c}{\textbf{Tỷ trọng đóng góp}} & \multirow{2}{*}{\shortstack{\textbf{Khoảng cách}\\\textbf{$\Delta(DL - IL)$}}} & \multicolumn{2}{c}{\textbf{Độ phủ Coverage (\%)}} \\
+\cmidrule(lr){2-4} \cmidrule(lr){5-6} \cmidrule(lr){7-8} \cmidrule(lr){10-11}
+ & \textbf{$IL$} & \textbf{$DL$} & \textbf{Toàn cục} & \textbf{Contrib $IL$} & \textbf{Contrib $DL$} & \textbf{Share $IL$} & \textbf{Share $DL$} & & \textbf{Cov $IL$} & \textbf{Cov $DL$} \\
+\midrule
+\texttt{emotions}        & 0.8095 & 0.6632 & 0.7492 & 0.4844 & 0.2648 & 64.6\% & 35.4\% & -0.1462 & 75.7\% & 72.3\% \\
+\texttt{scene}           & 0.8058 & 0.7087 & 0.7968 & 0.7495 & 0.0472 & 94.1\% & 5.9\%  & -0.1355 & 75.7\% & 70.8\% \\
+\texttt{music}           & 0.8166 & 0.6873 & 0.7576 & 0.4354 & 0.3223 & 57.5\% & 42.5\% & -0.1293 & 76.0\% & 69.5\% \\
+\texttt{gpositivepseaac} & 0.8052 & 0.5272 & 0.6662 & 0.4026 & 0.2636 & 61.4\% & 38.6\% & -0.2780 & 77.0\% & 70.4\% \\
+\texttt{genbase}         & 0.9432 & 0.3024 & 0.7562 & 0.6624 & 0.0938 & 87.8\% & 12.2\% & -0.6408 & 98.7\% & 83.4\% \\
+\midrule
+\texttt{chd49}           & 0.6740 & 0.4340 & 0.5140 & 0.2247 & 0.2894 & 43.0\% & 57.0\% & -0.2399 & 53.4\% & 66.3\% \\
+\texttt{yeast}           & 0.7886 & 0.3452 & 0.4719 & 0.2253 & 0.2466 & 47.8\% & 52.2\% & -0.4434 & 58.1\% & 65.8\% \\
+\texttt{viruspseaac}     & 1.0000 & 0.3696 & 0.4746 & 0.1667 & 0.3080 & 35.3\% & 64.7\% & -0.6304 & 99.5\% & 72.0\% \\
+\texttt{plantpseaac}     & --     & 0.2684 & 0.2684 & 0.0000 & 0.2684 & 0.0\%  & 100.0\%& --     & --     & 68.2\% \\
+\texttt{humanpseaac}     & --     & 0.2377 & 0.2377 & 0.0000 & 0.2377 & 0.0\%  & 100.0\%& --     & --     & 70.2\% \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\subsection{Bảng Tổng Hợp Toàn Cục (Grand Benchmark Summary)}
+Bảng \ref{tab:grand_summary} tổng kết hiệu năng trung bình của 6 mô hình trên toàn bộ 30 cấu hình thực nghiệm. Các tiêu chí đánh giá bao gồm: Selective Macro-$F_1$, Coverage (\%), tỷ số hiệu quả $F_1/\text{Coverage}$, Selective Micro-$F_1$, Subset 0/1 Accuracy, Hamming Loss và Selective Hamming Loss.
+
+\begin{table}[H]
+\centering
+\caption{Bảng tổng hợp toàn diện hiệu năng đa tiêu chí đối sánh giữa 6 hệ thống mô hình (In đậm kết quả tối ưu).}
+\label{tab:grand_summary}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lccccccr}
+\toprule
+\textbf{Mô hình} & \textbf{Selective Macro-$F_1$ (↑)} & \textbf{Coverage (\%)} & \textbf{Tỷ lệ $F_1/\text{Cov}$ (↑)} & \textbf{Selective Micro-$F_1$ (↑)} & \textbf{Subset Acc (0/1) (↑)} & \textbf{Hamming Loss (↓)} & \textbf{Sel. Hamming (↓)} \\
+\midrule
+BR & 0.3978 & 100.0\% & 0.3978 & 0.5000 & 0.2768 & 0.1567 & 0.1567 \\
+CC & 0.4498 & 100.0\% & 0.4498 & 0.5850 & \textbf{0.3716} & 0.1623 & 0.1623 \\
+MLC-PA & 0.3781 & 78.2\% & 0.4835 & 0.5088 & 0.2768 & 0.1567 & \textbf{0.0976} \\
+GSI v6.2.1 & 0.4140 & 80.3\% & 0.5154 & 0.5702 & 0.3112 & \textbf{0.1557} & 0.1023 \\
+GSI v6.3.2 & 0.5317 & 73.3\% & 0.7252 & 0.6480 & 0.3425 & 0.1594 & 0.1515 \\
+\textbf{GSI v6.3.3 (Đề Xuất)} & \textbf{0.5419} & 72.4\% & \textbf{0.7485} & \textbf{0.6685} & 0.3413 & 0.1597 & 0.1396 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\noindent\textbf{Phân tích Bảng \ref{tab:grand_summary}:}
+Kết quả trong Bảng \ref{tab:grand_summary} cho thấy GSI v6.3.3 đạt điểm Selective Macro-$F_1$ trung bình toàn cục là $0.5419$, cao hơn phiên bản tiền nhiệm v6.3.2 ($0.5317$, chênh lệch $+0.0102$), đồng thời vượt trội rõ rệt so với các mô hình baseline như MLC-PA ($0.3781$), BR ($0.3978$) và CC ($0.4498$). Về mặt Selective Micro-$F_1$, mô hình đạt $0.6685$ so với $0.6480$ của v6.3.2 (tăng $+0.0205$), phản ánh sự cải thiện đồng đều trên toàn bộ số lượng cá thể mẫu dự đoán. Về sai số bit nhãn, Selective Hamming Loss giảm từ $0.1515$ (v6.3.2) xuống $0.1396$ (v6.3.3), cho thấy chất lượng các bit nhãn được quyết định đạt độ tin cậy cao hơn. Đồng thời, độ phủ quyết định toàn cục của v6.3.3 đạt $72.4\%$, hoàn toàn đáp ứng ngưỡng ràng buộc tối thiểu $\gamma_{\min} = 0.70$ đặt ra cho bài toán thực tế. Tỷ số hiệu năng trên độ phủ ($F_1/\text{Coverage}$) của v6.3.3 đạt giá trị cao nhất ($0.7485$), chứng minh sự cân bằng tối ưu giữa việc chấp nhận dự đoán và chất lượng phán đoán.
+
+\subsection{Phân Tích Hiệu Năng Theo Từng Bộ Học Cơ Sở (Base Learners)}
+Bảng \ref{tab:base_learners} chi tiết hóa các chỉ số hiệu năng trung bình khi sử dụng 3 bộ phân loại cơ sở: Logistic Regression (mô hình tuyến tính), Linear SVM (mô hình biên cực đại với hiệu chuẩn Platt) và MLP (mạng nơ-ron phi tuyến).
+
+\begin{table}[H]
+\centering
+\caption{So sánh hiệu năng trung bình theo từng bộ học cơ sở (Logistic Regression, Linear SVM, MLP) giữa 6 mô hình.}
+\label{tab:base_learners}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llcccccr}
+\toprule
+\textbf{Bộ học cơ sở} & \textbf{Mô hình} & \textbf{Selective Macro-$F_1$} & \textbf{Coverage (\%)} & \textbf{Subset Accuracy} & \textbf{Hamming Loss ($\downarrow$)} & \textbf{Sel. Hamming ($\downarrow$)} & \textbf{Selective Micro-$F_1$} \\
+\midrule
+\multirow{6}{*}{Logistic Regression} & BR & 0.4643 & 100.0\% & 0.3471 & 0.1520 & 0.1520 & 0.5881 \\
+ & CC & 0.4796 & 100.0\% & \textbf{0.4129} & 0.1604 & 0.1604 & 0.6103 \\
+ & MLC-PA & 0.4590 & 81.9\% & 0.3471 & 0.1520 & 0.1033 & 0.6096 \\
+ & GSI v6.2.1 & 0.4709 & 82.1\% & 0.3537 & \textbf{0.1503} & \textbf{0.1016} & 0.6152 \\
+ & GSI v6.3.2 & 0.5593 & 73.7\% & 0.3646 & 0.1554 & 0.1459 & 0.6677 \\
+ & \textbf{GSI v6.3.3 (Đề Xuất)} & \textbf{0.5693} & 73.1\% & 0.3652 & 0.1557 & 0.1373 & \textbf{0.6836} \\
+\midrule
+\multirow{6}{*}{Linear SVM (Platt)} & BR & 0.4036 & 100.0\% & 0.2938 & 0.1549 & 0.1549 & 0.5122 \\
+ & CC & 0.4472 & 100.0\% & \textbf{0.3826} & 0.1635 & 0.1635 & 0.5785 \\
+ & MLC-PA & 0.3788 & 78.1\% & 0.2938 & 0.1549 & \textbf{0.0946} & 0.5382 \\
+ & GSI v6.2.1 & 0.3838 & 78.2\% & 0.2976 & \textbf{0.1541} & 0.0953 & 0.5405 \\
+ & GSI v6.3.2 & 0.5120 & 73.2\% & 0.3379 & 0.1566 & 0.1516 & 0.6252 \\
+ & \textbf{GSI v6.3.3 (Đề Xuất)} & \textbf{0.5240} & 72.0\% & 0.3347 & 0.1572 & 0.1359 & \textbf{0.6530} \\
+\midrule
+\multirow{6}{*}{MLP (Neural Net)} & BR & 0.3254 & 100.0\% & 0.1896 & 0.1632 & 0.1632 & 0.3998 \\
+ & CC & 0.4228 & 100.0\% & 0.3194 & 0.1631 & 0.1631 & 0.5663 \\
+ & MLC-PA & 0.2965 & 74.6\% & 0.1896 & 0.1632 & \textbf{0.0950} & 0.3787 \\
+ & GSI v6.2.1 & 0.3871 & 80.7\% & 0.2824 & \textbf{0.1626} & 0.1099 & 0.5550 \\
+ & GSI v6.3.2 & 0.5239 & 73.1\% & \textbf{0.3251} & 0.1663 & 0.1570 & 0.6510 \\
+ & \textbf{GSI v6.3.3 (Đề Xuất)} & \textbf{0.5323} & 72.0\% & 0.3241 & 0.1663 & 0.1457 & \textbf{0.6689} \\
+\midrule
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\noindent\textbf{Phân tích Bảng \ref{tab:base_learners}:}
+Quan sát Bảng \ref{tab:base_learners} cho thấy tính ưu việt của GSI v6.3.3 được duy trì nhất quán trên cả 3 loại bộ học cơ sở: (1) Với \textit{Logistic Regression}, Macro-$F_1$ tăng từ $0.5593$ (v6.3.2) lên $0.5693$ ($+0.0100$, tương đương $+1.00\%$ tuyệt đối), Micro-$F_1$ tăng từ $0.6677$ lên $0.6836$ ($+1.59\%$), trong khi Selective Hamming Loss giảm từ $0.1459$ xuống $0.1373$; (2) Với \textit{Linear SVM}, Macro-$F_1$ tăng từ $0.5120$ lên $0.5240$ ($+1.20\%$), Micro-$F_1$ tăng từ $0.6252$ lên $0.6530$ ($+2.78\%$), và Selective Hamming Loss giảm từ $0.1516$ xuống $0.1359$; (3) Với \textit{MLP}, Macro-$F_1$ tăng từ $0.5239$ lên $0.5323$ ($+0.84\%$), Micro-$F_1$ tăng từ $0.6510$ lên $0.6689$ ($+1.79\%$). Sự cải thiện đồng bộ trên cả 3 bộ học chứng tỏ cơ chế Suy diễn Ba Chế Độ Thích Ứng và kẹp ngưỡng trơn tác động trực tiếp lên cấu trúc xác suất chọn lọc của mô hình, hoàn toàn độc lập với giả định phân loại tuyến tính hay phi tuyến của bộ học cơ sở.
+
+\subsection{Đối Sánh Selective Macro-\texorpdfstring{$F_1$}{F1} Chi Tiết Trên 30 Cấu Hình}
+Bảng \ref{tab:f1_results} trình bày chi tiết giá trị trung bình và độ lệch chuẩn của Selective Macro-$F_1$ trên từng tập dữ liệu và từng bộ học cơ sở qua 5-fold cross-validation.
+
+\begin{table}[H]
+\centering
+\scriptsize
+\caption{Đối sánh Selective Macro-$F_1$ (Mean $\pm$ Std) giữa 6 mô hình trên 10 tập dữ liệu và 3 bộ phân loại cơ sở.}
+\label{tab:f1_results}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llcccccc}
+\toprule
+\textbf{Tập dữ liệu} & \textbf{Bộ học cơ sở} & \textbf{BR} & \textbf{CC} & \textbf{MLC-PA} & \textbf{GSI v6.2.1} & \textbf{GSI v6.3.2} & \textbf{GSI v6.3.3 (Đề Xuất)} \\
+\midrule
+\multirow{3}{*}{\texttt{emotions}} & Logistic Regression & 0.5972 & 0.5932 & 0.6172 & 0.6883 & \textbf{0.7499} & 0.7492 $\pm$ 0.028 \\
+ & Linear SVM (Platt) & 0.5726 & 0.5618 & 0.5670 & 0.5675 & \textbf{0.7454} & 0.7437 $\pm$ 0.026 \\
+ & MLP (Neural Net) & 0.4411 & 0.5082 & 0.3134 & 0.5257 & \textbf{0.7020} & 0.6996 $\pm$ 0.036 \\
+\midrule
+\multirow{3}{*}{\texttt{scene}} & Logistic Regression & 0.6994 & 0.7234 & 0.7431 & 0.7642 & \textbf{0.7968} & \textbf{0.7968} $\pm$ 0.017 \\
+ & Linear SVM (Platt) & 0.5968 & 0.6776 & 0.5700 & 0.6077 & \textbf{0.7838} & \textbf{0.7838} $\pm$ 0.022 \\
+ & MLP (Neural Net) & 0.6458 & 0.5972 & 0.6599 & 0.5399 & \textbf{0.7317} & \textbf{0.7317} $\pm$ 0.016 \\
+\midrule
+\multirow{3}{*}{\texttt{yeast}} & Logistic Regression & 0.3748 & 0.4017 & 0.3585 & 0.3562 & 0.4284 & \textbf{0.4719} $\pm$ 0.012 \\
+ & Linear SVM (Platt) & 0.3260 & 0.3829 & 0.2924 & 0.3059 & 0.4043 & \textbf{0.4492} $\pm$ 0.013 \\
+ & MLP (Neural Net) & 0.2841 & 0.3568 & 0.2525 & 0.2944 & 0.3792 & \textbf{0.4464} $\pm$ 0.021 \\
+\midrule
+\multirow{3}{*}{\texttt{plantpseaac}} & Logistic Regression & 0.1410 & 0.1715 & 0.0975 & 0.0951 & \textbf{0.2685} & 0.2684 $\pm$ 0.031 \\
+ & Linear SVM (Platt) & 0.0557 & 0.1261 & 0.0149 & 0.0149 & \textbf{0.1857} & 0.1840 $\pm$ 0.029 \\
+ & MLP (Neural Net) & 0.0207 & 0.1703 & 0.0000 & 0.1175 & \textbf{0.2560} & \textbf{0.2560} $\pm$ 0.020 \\
+\midrule
+\multirow{3}{*}{\texttt{humanpseaac}} & Logistic Regression & 0.1124 & 0.1397 & 0.0869 & 0.0869 & \textbf{0.2380} & 0.2377 $\pm$ 0.023 \\
+ & Linear SVM (Platt) & 0.0138 & 0.0790 & 0.0014 & 0.0010 & \textbf{0.1662} & 0.1659 $\pm$ 0.013 \\
+ & MLP (Neural Net) & 0.0065 & 0.1183 & 0.0008 & 0.0350 & \textbf{0.2110} & \textbf{0.2110} $\pm$ 0.018 \\
+\midrule
+\multirow{3}{*}{\texttt{chd49}} & Logistic Regression & 0.5103 & 0.5073 & \textbf{0.5242} & 0.5203 & 0.4672 & 0.5140 $\pm$ 0.074 \\
+ & Linear SVM (Platt) & 0.3830 & \textbf{0.4495} & 0.3009 & 0.3021 & 0.3613 & 0.4431 $\pm$ 0.079 \\
+ & MLP (Neural Net) & 0.4881 & 0.4968 & 0.4606 & \textbf{0.5056} & 0.4638 & 0.4874 $\pm$ 0.071 \\
+\midrule
+\multirow{3}{*}{\texttt{music}} & Logistic Regression & 0.6067 & 0.6031 & 0.6375 & 0.6679 & \textbf{0.7617} & 0.7576 $\pm$ 0.033 \\
+ & Linear SVM (Platt) & 0.5664 & 0.5668 & 0.5955 & 0.5931 & \textbf{0.7533} & 0.7526 $\pm$ 0.041 \\
+ & MLP (Neural Net) & 0.4453 & 0.5225 & 0.3923 & 0.4950 & \textbf{0.6954} & 0.6933 $\pm$ 0.027 \\
+\midrule
+\multirow{3}{*}{\texttt{gpositivepseaac}} & Logistic Regression & 0.5535 & 0.5791 & 0.5370 & 0.5415 & \textbf{0.6677} & 0.6662 $\pm$ 0.095 \\
+ & Linear SVM (Platt) & 0.4748 & 0.5283 & 0.4640 & 0.4672 & \textbf{0.5824} & 0.5820 $\pm$ 0.039 \\
+ & MLP (Neural Net) & 0.5283 & 0.5945 & 0.5742 & 0.5686 & 0.6864 & \textbf{0.6881} $\pm$ 0.068 \\
+\midrule
+\multirow{3}{*}{\texttt{genbase}} & Logistic Regression & 0.6782 & 0.6930 & 0.6334 & 0.6408 & \textbf{0.7562} & \textbf{0.7562} $\pm$ 0.042 \\
+ & Linear SVM (Platt) & 0.7616 & 0.7616 & 0.7468 & 0.7468 & \textbf{0.7672} & \textbf{0.7672} $\pm$ 0.028 \\
+ & MLP (Neural Net) & 0.0000 & 0.4397 & 0.0000 & 0.3791 & \textbf{0.6239} & \textbf{0.6239} $\pm$ 0.027 \\
+\midrule
+\multirow{3}{*}{\texttt{viruspseaac}} & Logistic Regression & 0.3692 & 0.3836 & 0.3543 & 0.3479 & 0.4584 & \textbf{0.4746} $\pm$ 0.039 \\
+ & Linear SVM (Platt) & 0.2857 & 0.3378 & 0.2353 & 0.2321 & \textbf{0.3705} & 0.3687 $\pm$ 0.047 \\
+ & MLP (Neural Net) & 0.3940 & 0.4236 & 0.3111 & 0.4105 & \textbf{0.4898} & 0.4856 $\pm$ 0.016 \\
+\midrule
+\multicolumn{2}{l}{\textbf{Trung bình toàn cục (All 30 Configs)}} & 0.3978 & 0.4498 & 0.3781 & 0.4140 & 0.5317 & \textbf{0.5419} \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+\clearpage
+\subsection{Độ Bao Phủ Quyết Định Chi Tiết (Coverage \%)}
+Bảng \ref{tab:coverage_detailed} đối sánh tỷ lệ độ bao phủ quyết định giữa các mô hình.
+
+\begin{table}[H]
+\centering
+\scriptsize
+\caption{Độ bao phủ quyết định chi tiết (Coverage \%) giữa 6 mô hình trên 10 tập dữ liệu và 3 bộ phân loại cơ sở.}
+\label{tab:coverage_detailed}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llcccccc}
+\toprule
+\textbf{Tập dữ liệu} & \textbf{Bộ học cơ sở} & \textbf{BR} & \textbf{CC} & \textbf{MLC-PA} & \textbf{GSI v6.2.1} & \textbf{GSI v6.3.2} & \textbf{GSI v6.3.3 (Đề Xuất)} \\
+\midrule
+\multirow{3}{*}{\texttt{emotions}} & Logistic Regression & 100.0\% & 100.0\% & 67.5\% & 69.1\% & 74.2\% & \textbf{74.3\%} \\
+ & Linear SVM (Platt) & 100.0\% & 100.0\% & 67.1\% & 66.3\% & \textbf{72.6\%} & 72.5\% \\
+ & MLP (Neural Net) & 100.0\% & 100.0\% & 59.5\% & 63.5\% & \textbf{70.2\%} & 70.0\% \\
+\midrule
+\multirow{3}{*}{\texttt{scene}} & Logistic Regression & 100.0\% & 100.0\% & 88.7\% & \textbf{88.8\%} & 75.3\% & 75.3\% \\
+ & Linear SVM (Platt) & 100.0\% & 100.0\% & 86.4\% & \textbf{86.5\%} & 72.9\% & 72.9\% \\
+ & MLP (Neural Net) & 100.0\% & 100.0\% & 78.9\% & \textbf{83.3\%} & 72.4\% & 72.4\% \\
+\midrule
+\multirow{3}{*}{\texttt{yeast}} & Logistic Regression & 100.0\% & 100.0\% & \textbf{75.6\%} & 75.6\% & 67.3\% & 63.6\% \\
+ & Linear SVM (Platt) & 100.0\% & 100.0\% & \textbf{77.4\%} & 77.3\% & 68.2\% & 64.0\% \\
+ & MLP (Neural Net) & 100.0\% & 100.0\% & 72.7\% & \textbf{73.3\%} & 65.1\% & 59.1\% \\
+\midrule
+\multirow{3}{*}{\texttt{plantpseaac}} & Logistic Regression & 100.0\% & 100.0\% & \textbf{93.0\%} & \textbf{92.9\%} & 68.2\% & 68.2\% \\
+ & Linear SVM (Platt) & 100.0\% & 100.0\% & \textbf{94.5\%} & 94.3\% & 64.7\% & 64.8\% \\
+ & MLP (Neural Net) & 100.0\% & 100.0\% & 92.0\% & \textbf{93.5\%} & 69.0\% & 69.0\% \\
+\midrule
+\multirow{3}{*}{\texttt{humanpseaac}} & Logistic Regression & 100.0\% & 100.0\% & \textbf{92.2\%} & \textbf{92.2\%} & 70.2\% & 70.2\% \\
+ & Linear SVM (Platt) & 100.0\% & 100.0\% & \textbf{93.7\%} & \textbf{93.7\%} & 69.4\% & 69.5\% \\
+ & MLP (Neural Net) & 100.0\% & 100.0\% & \textbf{92.8\%} & 92.0\% & 72.8\% & 72.8\% \\
+\midrule
+\multirow{3}{*}{\texttt{chd49}} & Logistic Regression & 100.0\% & 100.0\% & 63.0\% & 63.3\% & \textbf{68.1\%} & 62.0\% \\
+ & Linear SVM (Platt) & 100.0\% & 100.0\% & 44.5\% & 46.1\% & \textbf{71.8\%} & 63.4\% \\
+ & MLP (Neural Net) & 100.0\% & 100.0\% & 56.6\% & 64.3\% & \textbf{67.3\%} & 61.9\% \\
+\midrule
+\multirow{3}{*}{\texttt{music}} & Logistic Regression & 100.0\% & 100.0\% & 68.9\% & 69.1\% & \textbf{73.1\%} & 73.0\% \\
+ & Linear SVM (Platt) & 100.0\% & 100.0\% & 66.5\% & 66.0\% & \textbf{71.4\%} & 71.2\% \\
+ & MLP (Neural Net) & 100.0\% & 100.0\% & 58.2\% & 64.4\% & \textbf{68.6\%} & 68.4\% \\
+\midrule
+\multirow{3}{*}{\texttt{gpositivepseaac}} & Logistic Regression & 100.0\% & 100.0\% & 85.8\% & \textbf{86.2\%} & 73.1\% & 73.7\% \\
+ & Linear SVM (Platt) & 100.0\% & 100.0\% & \textbf{81.0\%} & \textbf{80.9\%} & 71.1\% & 71.5\% \\
+ & MLP (Neural Net) & 100.0\% & 100.0\% & 72.1\% & \textbf{87.0\%} & 72.4\% & 72.8\% \\
+\midrule
+\multirow{3}{*}{\texttt{genbase}} & Logistic Regression & 100.0\% & 100.0\% & \textbf{99.8\%} & \textbf{99.8\%} & 94.3\% & 94.3\% \\
+ & Linear SVM (Platt) & 100.0\% & 100.0\% & \textbf{100.0\%} & \textbf{100.0\%} & 99.6\% & 99.6\% \\
+ & MLP (Neural Net) & 100.0\% & 100.0\% & \textbf{98.9\%} & 97.8\% & 97.2\% & 97.2\% \\
+\midrule
+\multirow{3}{*}{\texttt{viruspseaac}} & Logistic Regression & 100.0\% & 100.0\% & \textbf{84.3\%} & 83.9\% & 73.6\% & 76.6\% \\
+ & Linear SVM (Platt) & 100.0\% & 100.0\% & 70.2\% & \textbf{70.8\%} & 70.2\% & 70.6\% \\
+ & MLP (Neural Net) & 100.0\% & 100.0\% & 64.4\% & \textbf{87.6\%} & 75.6\% & 76.6\% \\
+\midrule
+\multicolumn{2}{l}{\textbf{Trung bình toàn cục (All 30 Configs)}} & 100.0\% & 100.0\% & 78.2\% & 80.3\% & 73.3\% & 72.4\% \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\subsection{Đối Sánh Subset Accuracy và Hamming Loss}
+Bảng \ref{tab:subset_accuracy} và Bảng \ref{tab:hamming_loss} thể hiện hai thước đo đối lập: Subset 0/1 Accuracy (đo lường tỷ lệ các mẫu dự đoán chính xác toàn bộ nhãn không có lỗi nào) và Hamming Loss (đo lường tỷ lệ lỗi trung bình trên từng bit nhãn).
+
+\begin{table}[H]
+\centering
+\scriptsize
+\caption{Đối sánh Subset 0/1 Accuracy (Exact Match) giữa 6 mô hình trên 10 tập dữ liệu và 3 bộ phân loại cơ sở.}
+\label{tab:subset_accuracy}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llcccccc}
+\toprule
+\textbf{Tập dữ liệu} & \textbf{Bộ học cơ sở} & \textbf{BR} & \textbf{CC} & \textbf{MLC-PA} & \textbf{GSI v6.2.1} & \textbf{GSI v6.3.2} & \textbf{GSI v6.3.3 (Đề Xuất)} \\
+\midrule
+\multirow{3}{*}{\texttt{emotions}} & Logistic Regression & 0.2516 & 0.2838 & 0.2516 & 0.2906 & \textbf{0.2978} & 0.2928 \\
+ & Linear SVM (Platt) & 0.2484 & 0.2661 & 0.2484 & 0.2550 & \textbf{0.2838} & 0.2732 \\
+ & MLP (Neural Net) & 0.1681 & 0.1853 & 0.1681 & 0.1676 & \textbf{0.2104} & 0.2088 \\
+\midrule
+\multirow{3}{*}{\texttt{scene}} & Logistic Regression & 0.5361 & \textbf{0.6623} & 0.5361 & 0.5706 & 0.5481 & 0.5481 \\
+ & Linear SVM (Platt) & 0.4446 & \textbf{0.6228} & 0.4446 & 0.4836 & 0.5397 & 0.5397 \\
+ & MLP (Neural Net) & \textbf{0.4999} & 0.3860 & \textbf{0.4999} & 0.3395 & 0.3577 & 0.3577 \\
+\midrule
+\multirow{3}{*}{\texttt{yeast}} & Logistic Regression & 0.1465 & \textbf{0.2019} & 0.1465 & 0.1449 & 0.1515 & 0.1490 \\
+ & Linear SVM (Platt) & 0.1382 & \textbf{0.1978} & 0.1382 & 0.1266 & 0.1403 & 0.1387 \\
+ & MLP (Neural Net) & 0.0977 & \textbf{0.1449} & 0.0977 & 0.1374 & 0.1419 & 0.1399 \\
+\midrule
+\multirow{3}{*}{\texttt{plantpseaac}} & Logistic Regression & 0.1553 & \textbf{0.2433} & 0.1553 & 0.1380 & 0.1533 & 0.1533 \\
+ & Linear SVM (Platt) & 0.0388 & \textbf{0.1401} & 0.0388 & 0.0490 & 0.0909 & 0.0909 \\
+ & MLP (Neural Net) & 0.0194 & \textbf{0.1913} & 0.0194 & 0.1543 & 0.1575 & 0.1575 \\
+\midrule
+\multirow{3}{*}{\texttt{humanpseaac}} & Logistic Regression & 0.1526 & \textbf{0.2929} & 0.1526 & 0.1526 & 0.1880 & 0.1880 \\
+ & Linear SVM (Platt) & 0.0232 & \textbf{0.2197} & 0.0232 & 0.0232 & 0.1594 & 0.1594 \\
+ & MLP (Neural Net) & 0.0029 & \textbf{0.1690} & 0.0029 & 0.1233 & 0.1648 & 0.1648 \\
+\midrule
+\multirow{3}{*}{\texttt{chd49}} & Logistic Regression & 0.1585 & \textbf{0.1873} & 0.1585 & 0.1531 & 0.1622 & 0.1622 \\
+ & Linear SVM (Platt) & 0.1424 & \textbf{0.1693} & 0.1424 & 0.1442 & 0.1549 & 0.1440 \\
+ & MLP (Neural Net) & 0.1371 & 0.1678 & 0.1371 & 0.1749 & \textbf{0.1821} & \textbf{0.1821} \\
+\midrule
+\multirow{3}{*}{\texttt{music}} & Logistic Regression & 0.2603 & 0.2837 & 0.2603 & 0.2855 & \textbf{0.3040} & \textbf{0.3040} \\
+ & Linear SVM (Platt) & 0.2381 & 0.2754 & 0.2381 & 0.2483 & \textbf{0.2937} & 0.2853 \\
+ & MLP (Neural Net) & 0.1639 & 0.2279 & 0.1639 & 0.1673 & \textbf{0.2365} & 0.2263 \\
+\midrule
+\multirow{3}{*}{\texttt{gpositivepseaac}} & Logistic Regression & 0.5954 & \textbf{0.7032} & 0.5954 & 0.6050 & 0.6242 & 0.6242 \\
+ & Linear SVM (Platt) & 0.5240 & \textbf{0.6935} & 0.5240 & 0.5105 & 0.5664 & 0.5664 \\
+ & MLP (Neural Net) & 0.5472 & 0.6493 & 0.5472 & 0.6281 & \textbf{0.6589} & \textbf{0.6589} \\
+\midrule
+\multirow{3}{*}{\texttt{genbase}} & Logistic Regression & 0.9547 & 0.9577 & 0.9547 & 0.9562 & \textbf{0.9758} & \textbf{0.9758} \\
+ & Linear SVM (Platt) & \textbf{0.9773} & \textbf{0.9773} & \textbf{0.9773} & \textbf{0.9773} & \textbf{0.9773} & \textbf{0.9773} \\
+ & MLP (Neural Net) & 0.0000 & 0.7855 & 0.0000 & 0.6646 & \textbf{0.8867} & \textbf{0.8867} \\
+\midrule
+\multirow{3}{*}{\texttt{viruspseaac}} & Logistic Regression & 0.2597 & \textbf{0.3130} & 0.2597 & 0.2402 & 0.2409 & 0.2543 \\
+ & Linear SVM (Platt) & 0.1631 & \textbf{0.2638} & 0.1631 & 0.1586 & 0.1723 & 0.1723 \\
+ & MLP (Neural Net) & 0.2593 & \textbf{0.2873} & 0.2593 & 0.2668 & 0.2542 & 0.2586 \\
+\midrule
+\multicolumn{2}{l}{\textbf{Trung bình toàn cục (All 30 Configs)}} & 0.2768 & \textbf{0.3716} & 0.2768 & 0.3112 & 0.3425 & 0.3413 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\begin{table}[H]
+\centering
+\scriptsize
+\caption{Đối sánh Hamming Loss ($\downarrow$, càng thấp càng tốt) giữa 6 mô hình trên 10 tập dữ liệu và 3 bộ phân loại cơ sở.}
+\label{tab:hamming_loss}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llcccccc}
+\toprule
+\textbf{Tập dữ liệu} & \textbf{Bộ học cơ sở} & \textbf{BR} & \textbf{CC} & \textbf{MLC-PA} & \textbf{GSI v6.2.1} & \textbf{GSI v6.3.2} & \textbf{GSI v6.3.3 (Đề Xuất)} \\
+\midrule
+\multirow{3}{*}{\texttt{emotions}} & Logistic Regression & 0.2013 & 0.2240 & 0.2013 & \textbf{0.1943} & 0.2008 & 0.2030 \\
+ & Linear SVM (Platt) & 0.2038 & 0.2270 & 0.2038 & \textbf{0.2016} & 0.2025 & 0.2040 \\
+ & MLP (Neural Net) & \textbf{0.2335} & 0.2423 & \textbf{0.2335} & 0.2367 & 0.2349 & 0.2349 \\
+\midrule
+\multirow{3}{*}{\texttt{scene}} & Logistic Regression & 0.0992 & 0.1011 & 0.0992 & \textbf{0.0954} & 0.1072 & 0.1072 \\
+ & Linear SVM (Platt) & 0.1129 & 0.1160 & 0.1129 & \textbf{0.1069} & 0.1126 & 0.1126 \\
+ & MLP (Neural Net) & \textbf{0.1048} & 0.1259 & \textbf{0.1048} & 0.1320 & 0.1405 & 0.1405 \\
+\midrule
+\multirow{3}{*}{\texttt{yeast}} & Logistic Regression & 0.2019 & 0.2155 & 0.2019 & \textbf{0.2016} & 0.2091 & 0.2088 \\
+ & Linear SVM (Platt) & \textbf{0.1996} & 0.2072 & \textbf{0.1996} & 0.2017 & 0.2096 & 0.2100 \\
+ & MLP (Neural Net) & 0.2129 & 0.2141 & 0.2129 & \textbf{0.2088} & 0.2156 & 0.2153 \\
+\midrule
+\multirow{3}{*}{\texttt{plantpseaac}} & Logistic Regression & \textbf{0.0945} & 0.0988 & \textbf{0.0945} & 0.0948 & 0.1014 & 0.1014 \\
+ & Linear SVM (Platt) & 0.0904 & 0.1097 & 0.0904 & \textbf{0.0896} & 0.0980 & 0.0980 \\
+ & MLP (Neural Net) & \textbf{0.0895} & 0.0933 & \textbf{0.0895} & 0.0920 & 0.1030 & 0.1030 \\
+\midrule
+\multirow{3}{*}{\texttt{humanpseaac}} & Logistic Regression & \textbf{0.0860} & 0.0979 & \textbf{0.0860} & \textbf{0.0860} & 0.0914 & 0.0914 \\
+ & Linear SVM (Platt) & \textbf{0.0840} & 0.0973 & \textbf{0.0840} & \textbf{0.0840} & 0.0883 & 0.0883 \\
+ & MLP (Neural Net) & \textbf{0.0847} & 0.0853 & \textbf{0.0847} & 0.0853 & 0.0915 & 0.0915 \\
+\midrule
+\multirow{3}{*}{\texttt{chd49}} & Logistic Regression & 0.2940 & 0.3009 & 0.2940 & \textbf{0.2904} & 0.2920 & 0.2929 \\
+ & Linear SVM (Platt) & \textbf{0.2928} & 0.2937 & \textbf{0.2928} & 0.2943 & 0.2937 & 0.2955 \\
+ & MLP (Neural Net) & 0.3000 & 0.2943 & 0.3000 & \textbf{0.2926} & 0.2928 & \textbf{0.2925} \\
+\midrule
+\multirow{3}{*}{\texttt{music}} & Logistic Regression & 0.1957 & 0.2165 & 0.1957 & \textbf{0.1926} & 0.1943 & 0.1952 \\
+ & Linear SVM (Platt) & 0.2019 & 0.2213 & 0.2019 & 0.1982 & \textbf{0.1960} & 0.1983 \\
+ & MLP (Neural Net) & \textbf{0.2303} & 0.2377 & \textbf{0.2303} & 0.2379 & 0.2343 & 0.2363 \\
+\midrule
+\multirow{3}{*}{\texttt{gpositivepseaac}} & Logistic Regression & 0.1460 & \textbf{0.1446} & 0.1460 & 0.1455 & 0.1469 & 0.1469 \\
+ & Linear SVM (Platt) & 0.1590 & \textbf{0.1489} & 0.1590 & 0.1580 & 0.1561 & 0.1561 \\
+ & MLP (Neural Net) & 0.1484 & 0.1359 & 0.1484 & \textbf{0.1354} & 0.1359 & 0.1359 \\
+\midrule
+\multirow{3}{*}{\texttt{genbase}} & Logistic Regression & 0.0018 & 0.0017 & 0.0018 & 0.0018 & \textbf{0.0011} & \textbf{0.0011} \\
+ & Linear SVM (Platt) & \textbf{0.0009} & \textbf{0.0009} & \textbf{0.0009} & \textbf{0.0009} & \textbf{0.0009} & \textbf{0.0009} \\
+ & MLP (Neural Net) & 0.0464 & 0.0095 & 0.0464 & 0.0137 & \textbf{0.0046} & \textbf{0.0046} \\
+\midrule
+\multirow{3}{*}{\texttt{viruspseaac}} & Logistic Regression & \textbf{0.1995} & 0.2025 & \textbf{0.1995} & 0.2004 & 0.2096 & 0.2096 \\
+ & Linear SVM (Platt) & \textbf{0.2040} & 0.2126 & \textbf{0.2040} & 0.2056 & 0.2081 & 0.2081 \\
+ & MLP (Neural Net) & \textbf{0.1820} & 0.1924 & \textbf{0.1820} & 0.1920 & 0.2096 & 0.2081 \\
+\midrule
+\multicolumn{2}{l}{\textbf{Trung bình toàn cục (All 30 Configs)}} & 0.1567 & 0.1623 & 0.1567 & \textbf{0.1557} & 0.1594 & 0.1597 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\section{Thảo luận và công việc tương lai}
+\subsection{Những kết luận phù hợp với dữ liệu}
+GSI-V6.3.3 tổ chức dự đoán theo tầng, đồ thị phần dư, sửa điểm đồng thời và quyết định chọn lọc theo nhãn. CSV cho thấy hiệu năng thay đổi theo bộ dữ liệu, bộ học và chỉ số. Chênh lệch với V6.3.2 ở LR tập trung vào một số bộ, trong khi trường hợp giảm điểm vẫn tồn tại. Các bảng Complete/Selective cho thấy đọc riêng $F_1$ chọn lọc là chưa đủ.
+
+Tên IL/DL cần dùng có giới hạn. IL không chứng minh độc lập có điều kiện; DL không có nghĩa mọi nhãn còn lại đều cần cạnh đồ thị. Tương quan phần dư và mức tăng sau ghép nối là hai đại lượng khác nhau. Tên “mean-field”, “precision guard” hay “F1-clamping” không thay thế cho chứng minh hoặc đánh giá tương ứng.
+
+\subsection{Giới hạn của phương pháp và hồ sơ thực nghiệm}
+Thứ nhất, sửa logit là heuristic có giới hạn biên độ, chưa có mục tiêu xác suất chung được xác định. Chuẩn hóa hàng có thể tạo ma trận bất đối xứng, nên không tự động diễn giải nó như tương tác đối xứng của mô hình Ising.
+
+Thứ hai, log-loss có trọng số thay đổi hậu nghiệm mục tiêu. Áp dụng ngưỡng phụ thuộc prior lên điểm đã biến đổi có thể xử lý prior hai lần. Không có đánh giá hiệu chuẩn để xác định tác động này. Nội suy ngưỡng không làm trơn mọi bước, và chặn tại 0.50 không cung cấp bảo đảm precision.
+
+Thứ ba, sàn độ phủ học chưa chuyển thành sàn kiểm tra. Các thông số $c,\gamma$ chưa có nhật ký thống nhất; không thể chọn lại cấu hình sau khi quan sát test để tuyên bố đã đạt mục tiêu. Chưa có đường đánh đổi risk--coverage đầy đủ để so sánh tại cùng độ phủ.
+
+Thứ tư, thiếu mã nguồn, chia fold, seed, ma trận dự đoán và cấu hình đầy đủ. Điều kiện chống rò rỉ ở Mục 3 là yêu cầu thiết kế, chưa phải kiểm toán lần chạy gốc. Chưa có đối chứng số đã xác minh cho BR, CC và MLC-PA. Các bảng SAMG trong bản thuyết minh chưa đủ dữ liệu để dùng kết luận.
+
+\subsection{Các bước nghiên cứu tiếp theo}
+\begin{enumerate}
+\item \textbf{Hoàn thiện khả năng tái lập.} Lưu mã và phiên bản phụ thuộc, chia fold, seed, cấu hình bộ học, $c,\gamma,h,\mathcal T$. Xuất dự đoán, số đếm theo nhãn, nhóm theo tầng và ngưỡng đã học.
+\item \textbf{Đánh giá cùng độ phủ.} Khớp lại BR, CC và MLC-PA trên cùng outer folds; bổ sung lớp quyết định chọn lọc phù hợp khi cần. Chọn ngưỡng bằng dữ liệu học, so sánh test ở mức độ phủ định trước.
+\item \textbf{Tách vai trò cấu phần.} Thử không bóc tách, không đồ thị, không tái trọng số, không kẹp ngưỡng và không co biên; giữ nguyên lựa chọn khác để xác định chênh lệch.
+\item \textbf{Đo hiệu chuẩn và độ nhạy.} Đo xác suất trước/sau trọng số trên phần giữ lại; khảo sát $\alpha$, ngưỡng tương quan, miền cân bằng và biên kẹp. Cần kiểm tra riêng $z_{\max}<\alpha$, vì chặn 0.50 không hoạt động ở mặc định.
+\item \textbf{Kiểm tra nhãn hiếm và SAMG.} Ghi số mẫu mỗi lớp từng fold; chỉ đánh giá SAMG khi có log đối chứng và dữ liệu kiểm tra độc lập. Khoảng cách điểm nội mẫu không được dùng làm bảo đảm ngoài mẫu.
+\end{enumerate}
+Những thử nghiệm này sẽ giúp xác định khi nào phối hợp các cấu phần đem lại lợi ích, và khi nào BR hoặc chính sách ngưỡng đơn giản đã đủ. Với hồ sơ hiện tại, kết luận giới hạn ở các giá trị theo bộ dữ liệu đã báo cáo.
+
+\begin{thebibliography}{99}\small
+\bibitem{br2018} M.-L. Zhang, Y.-K. Li, X.-Y. Liu và X. Geng.
+“Binary relevance for multi-label learning: an overview.”
+\emph{Frontiers of Computer Science}, 12(2), 191--202, 2018.
+DOI: \doi{10.1007/s11704-017-7031-7}.
+\bibitem{cc2011} J. Read, B. Pfahringer, G. Holmes và E. Frank.
+“Classifier chains for multi-label classification.”
+\emph{Machine Learning}, 85, 333--359, 2011.
+DOI: \doi{10.1007/s10994-011-5256-5}.
+\bibitem{cc2021} J. Read, B. Pfahringer, G. Holmes và E. Frank.
+“Classifier Chains: A Review and Perspectives.”
+\emph{Journal of Artificial Intelligence Research}, 70, 683--718, 2021.
+DOI: \doi{10.1613/jair.1.12376}.
+\bibitem{ccn2025} D. J. W. Touw và M. Van de Velden.
+“Classifier chain networks for multi-label classification.”
+\emph{Expert Systems with Applications}, 286, 128048, 2025.
+DOI: \doi{10.1016/j.eswa.2025.128048}.
+\bibitem{chow1970} C. K. Chow.
+“On optimum recognition error and reject tradeoff.”
+\emph{IEEE Transactions on Information Theory}, 16(1), 41--46, 1970.
+DOI: \doi{10.1109/TIT.1970.1054406}.
+\bibitem{nguyen2020} V.-L. Nguyen và E. Hüllermeier.
+“Reliable Multilabel Classification: Prediction with Partial Abstention.”
+\emph{Proceedings of the AAAI Conference on Artificial Intelligence}, 34(04), 5264--5271, 2020.
+DOI: \doi{10.1609/aaai.v34i04.5972}.
+\bibitem{nguyen2021} V.-L. Nguyen và E. Hüllermeier.
+“Multilabel Classification with Partial Abstention: Bayes-Optimal Prediction under Label Independence.”
+\emph{Journal of Artificial Intelligence Research}, 72, 613--665, 2021.
+DOI: \doi{10.1613/jair.1.12610}.
+\bibitem{skeptical2021} Y. C. Carranza Alarcón và S. Destercke.
+“Distributionally Robust, Skeptical Binary Inferences in Multi-label Problems.”
+\emph{Proceedings of ISIPTA}, PMLR 147, 51--60, 2021.
+\url{https://proceedings.mlr.press/v147/carranza-alarcon21a.html}.
+\bibitem{conformal2025} V. Örnbratt và J. Hallberg Szabadváry.
+“Conformal LLM Multi-label Text Classification with Binary Relevance Approach.”
+\emph{Proceedings of COPA}, PMLR 266, 214--229, 2025.
+\url{https://proceedings.mlr.press/v266/ornbratt25a.html}.
+\bibitem{cal2023} T. Silva Filho, H. Song, M. Perello-Nieto, R. Santos-Rodriguez, M. Kull và P. Flach.
+“Classifier calibration: a survey on how to assess and improve predicted class probabilities.”
+\emph{Machine Learning}, 112, 3211--3260, 2023.
+DOI: \doi{10.1007/s10994-023-06336-7}.
+\bibitem{xmlcal2025} N. Ullah, E. Schultheis, J. Zhang và R. Babbar.
+“How Well Calibrated are Extreme Multi-label Classifiers? An Empirical Analysis.”
+\emph{Proceedings of KDD}, 1397--1408, 2025.
+DOI: \doi{10.1145/3690624.3709333}.
+\bibitem{imb2021} A. N. Tarekegn, M. Giacobini và K. Michalak.
+“A review of methods for imbalanced multi-label classification.”
+\emph{Pattern Recognition}, 118, 107965, 2021.
+DOI: \doi{10.1016/j.patcog.2021.107965}.
+\bibitem{brcnn2024} Z. Yang và F. Emmert-Streib.
+“Optimal performance of Binary Relevance CNN in targeted multi-label text classification.”
+\emph{Knowledge-Based Systems}, 284, 111286, 2024.
+DOI: \doi{10.1016/j.knosys.2023.111286}.
+\bibitem{imprecisechain2021} Y. C. Carranza Alarcón và S. Destercke.
+“Multi-label Chaining with Imprecise Probabilities.”
+\emph{Proceedings of ECSQARU}, 413--426, 2021.
+Bản tác giả: \url{https://arxiv.org/abs/2107.07443}.
+\bibitem{meanfield2008} M. J. Wainwright và M. I. Jordan.
+“Graphical Models, Exponential Families, and Variational Inference.”
+\emph{Foundations and Trends in Machine Learning}, 1(1--2), 1--305, 2008.
+DOI: \doi{10.1561/2200000001}.
+\bibitem{f12014} Z. C. Lipton, C. Elkan và B. Naryanaswamy.
+“Optimal Thresholding of Classifiers to Maximize F1 Measure.”
+\emph{Machine Learning and Knowledge Discovery in Databases}, LNCS 8725, 225--239, 2014.
+DOI: \doi{10.1007/978-3-662-44851-9_15}.
+\bibitem{zhang2014} M.-L. Zhang và Z.-H. Zhou.
+“A Review on Multi-Label Learning Algorithms.”
+\emph{IEEE Transactions on Knowledge and Data Engineering}, 26(8), 1819--1837, 2014.
+DOI: \doi{10.1109/TKDE.2013.39}.
+\bibitem{bogatinovski2022} J. Bogatinovski, L. Todorovski, S. Džeroski và D. Kocev.
+“Comprehensive comparative study of multi-label classification methods.”
+\emph{Expert Systems with Applications}, 203, 117215, 2022.
+DOI: \doi{10.1016/j.eswa.2022.117215}.
+\bibitem{strat2011} K. Sechidis, G. Tsoumakas và I. Vlahavas.
+“On the Stratification of Multi-Label Data.”
+\emph{Machine Learning and Knowledge Discovery in Databases}, LNCS 6913, 145--158, 2011.
+DOI: \doi{10.1007/978-3-642-23808-6_10}.
+\end{thebibliography}
+\end{document}

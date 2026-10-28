@@ -19,6 +19,110 @@ from typing import Any, Dict, Optional, Tuple, Union
 import numpy as np
 
 
+def _binary_f1(tp: int, fp: int, fn: int) -> float:
+    """Small dependency-free F1 helper used by the OOF threshold selector."""
+    denominator = 2 * tp + fp + fn
+    return float(2 * tp / denominator) if denominator else 0.0
+
+
+def _selective_threshold_metrics(
+    y_true: np.ndarray,
+    probs: np.ndarray,
+    tau_0: float,
+    tau_1: float,
+) -> Dict[str, float]:
+    """Return class-aware metrics for a two-threshold selective decision."""
+    y = np.asarray(y_true, dtype=np.int32).ravel()
+    p = np.asarray(probs, dtype=np.float64).ravel()
+    pred_zero = p <= float(tau_0)
+    pred_one = p >= float(tau_1)
+
+    tp = int(np.sum((y == 1) & pred_one))
+    fp = int(np.sum((y == 0) & pred_one))
+    fn = int(np.sum((y == 1) & pred_zero))
+    tn = int(np.sum((y == 0) & pred_zero))
+    n_pos = int(np.sum(y == 1))
+    n_neg = int(np.sum(y == 0))
+
+    return {
+        "f1_positive": _binary_f1(tp, fp, fn),
+        "f1_negative": _binary_f1(tn, fn, fp),
+        "precision_positive": float(tp / (tp + fp)) if tp + fp else 0.0,
+        "false_positive_rate": float(fp / n_neg) if n_neg else 0.0,
+        "positive_coverage": float((tp + fn) / n_pos) if n_pos else 0.0,
+    }
+
+
+def select_oof_constrained_tau_1(
+    y_true: np.ndarray,
+    probs: np.ndarray,
+    tau_0: float,
+    tau_1: float,
+    min_positive_support: int = 5,
+    min_f1_gain: float = 0.02,
+    max_f1_negative_drop: float = 0.01,
+) -> Tuple[float, bool, str, Dict[str, float]]:
+    """Select a safer rare-positive threshold from OOF probabilities.
+
+    The search is deliberately small: positive scores plus upper-tail negative
+    quantiles. A candidate must improve selective positive F1 while retaining
+    negative F1, minimum positive precision, and a bounded false-positive rate.
+    """
+    y = np.asarray(y_true, dtype=np.int32).ravel()
+    p = np.asarray(probs, dtype=np.float64).ravel()
+    n_pos = int(np.sum(y == 1))
+    n_neg = int(np.sum(y == 0))
+    baseline = _selective_threshold_metrics(y, p, tau_0, tau_1)
+
+    audit = {
+        "samg_baseline_f1_positive": baseline["f1_positive"],
+        "samg_selected_f1_positive": baseline["f1_positive"],
+        "samg_baseline_f1_negative": baseline["f1_negative"],
+        "samg_selected_f1_negative": baseline["f1_negative"],
+    }
+    if n_pos < int(min_positive_support):
+        return float(tau_1), False, "INSUFFICIENT_SUPPORT", audit
+    if n_neg == 0:
+        return float(tau_1), False, "NO_NEGATIVE_SUPPORT", audit
+
+    positive_scores = p[y == 1]
+    negative_scores = p[y == 0]
+    negative_tail = np.quantile(negative_scores, np.linspace(0.90, 1.0, 51))
+    candidates = np.unique(np.concatenate([positive_scores, negative_tail]))
+    candidates = candidates[
+        (candidates > float(tau_0) + 0.01) & (candidates < float(tau_1))
+    ]
+
+    best_tau = float(tau_1)
+    best_metrics = baseline
+    for candidate in candidates:
+        metrics = _selective_threshold_metrics(y, p, tau_0, float(candidate))
+        if metrics["f1_positive"] < baseline["f1_positive"] + min_f1_gain:
+            continue
+        if metrics["f1_negative"] < baseline["f1_negative"] - max_f1_negative_drop:
+            continue
+        if metrics["precision_positive"] < 0.20:
+            continue
+        if metrics["false_positive_rate"] > 0.05:
+            continue
+        if (
+            metrics["f1_positive"] > best_metrics["f1_positive"]
+            or (
+                metrics["f1_positive"] == best_metrics["f1_positive"]
+                and float(candidate) > best_tau
+            )
+        ):
+            best_tau = float(candidate)
+            best_metrics = metrics
+
+    if best_tau >= float(tau_1):
+        return float(tau_1), False, "NO_SAFE_OOF_IMPROVEMENT", audit
+
+    audit["samg_selected_f1_positive"] = best_metrics["f1_positive"]
+    audit["samg_selected_f1_negative"] = best_metrics["f1_negative"]
+    return best_tau, True, "ACTIVATED", audit
+
+
 def compute_label_balance_factor(prior: float) -> float:
     """
     Compute Label Balance Factor beta_l in [0, 1].
@@ -217,6 +321,10 @@ def compute_tri_regime_adaptive_thresholds_table(
     separation_aware: bool = True,
     sep_rare_threshold: float = 0.20,
     sep_percentile: float = 99.5,
+    samg_strategy: str = "legacy_margin",
+    samg_min_positive_support: int = 5,
+    samg_min_f1_gain: float = 0.02,
+    samg_max_f1_negative_drop: float = 0.01,
 ) -> Dict[int, Dict[str, Any]]:
     """
     Compute full Adaptive Tri-Regime decision table across all K labels with Dual F1 Clamping
@@ -251,6 +359,16 @@ def compute_tri_regime_adaptive_thresholds_table(
         }
     """
     Y = np.asarray(Y_train, dtype=np.int32)
+    if samg_strategy not in (
+        "legacy_margin",
+        "oof_constrained",
+        "oof_guarded_margin",
+    ):
+        raise ValueError(
+            "samg_strategy must be 'legacy_margin', 'oof_constrained', or "
+            "'oof_guarded_margin', "
+            f"got {samg_strategy!r}"
+        )
     n_samples, n_labels = Y.shape
     table: Dict[int, Dict[str, Any]] = {}
     min_t, max_t = clip_bounds
@@ -270,6 +388,9 @@ def compute_tri_regime_adaptive_thresholds_table(
             tau_0_floor=tau_0_floor,
         )
 
+        tau_0_before_coverage = float(t0)
+        tau_1_before_coverage = float(t1)
+
         guard_applied = False
         emp_cov = 1.0
 
@@ -285,9 +406,31 @@ def compute_tri_regime_adaptive_thresholds_table(
             )
             emp_cov = float(np.mean((p_j <= t0) | (p_j >= t1)))
 
+        tau_0_after_coverage = float(t0)
+        tau_1_after_coverage = float(t1)
+        samg_applied = False
+        samg_reason = "DISABLED" if not separation_aware else "NOT_ELIGIBLE"
+        samg_prob_source = "none"
+        neg_ceiling = np.nan
+        pos_floor = np.nan
+        samg_metric_audit = {
+            "samg_baseline_f1_positive": np.nan,
+            "samg_selected_f1_positive": np.nan,
+            "samg_baseline_f1_negative": np.nan,
+            "samg_selected_f1_negative": np.nan,
+        }
+
         # Separation-Aware Margin Guard for Extreme Imbalance (Regime 1 & Regime 3)
         if separation_aware:
-            prob_source = in_sample_probs if in_sample_probs is not None else OOF_probs
+            if samg_strategy == "oof_constrained":
+                prob_source = OOF_probs
+                samg_prob_source = "oof"
+            else:
+                prob_source = in_sample_probs if in_sample_probs is not None else OOF_probs
+                if samg_strategy == "oof_guarded_margin":
+                    samg_prob_source = "in_sample_candidate+oof_guard"
+                else:
+                    samg_prob_source = "in_sample" if in_sample_probs is not None else "oof"
             if prob_source is not None and prob_source.shape[1] > j:
                 p_col = prob_source[:, j]
                 pos_mask = (col_y == 1)
@@ -302,13 +445,65 @@ def compute_tri_regime_adaptive_thresholds_table(
                     neg_ceiling = float(np.percentile(p_neg, sep_percentile))
                     pos_floor = float(np.min(p_pos))
 
-                    if pos_floor > neg_ceiling:
+                    if samg_strategy == "oof_constrained":
+                        new_t1, samg_applied, samg_reason, samg_metric_audit = (
+                            select_oof_constrained_tau_1(
+                                y_true=col_y,
+                                probs=p_col,
+                                tau_0=t0,
+                                tau_1=t1,
+                                min_positive_support=samg_min_positive_support,
+                                min_f1_gain=samg_min_f1_gain,
+                                max_f1_negative_drop=samg_max_f1_negative_drop,
+                            )
+                        )
+                        if samg_applied:
+                            t1 = new_t1
+                            if t0 >= t1:
+                                t0 = max(min_t, t1 - 0.01)
+                    elif pos_floor > neg_ceiling:
                         # Clean separation margin exists! Place tau_1 in the margin gap
                         margin_t1 = float(0.5 * (neg_ceiling + pos_floor))
                         if margin_t1 < t1:
-                            t1 = margin_t1
-                            if t0 >= t1:
-                                t0 = max(min_t, t1 - 0.01)
+                            candidate_t0 = max(min_t, min(t0, margin_t1 - 0.01))
+                            if samg_strategy == "oof_guarded_margin":
+                                if OOF_probs is None or OOF_probs.shape[1] <= j:
+                                    samg_reason = "NO_OOF_GUARD_DATA"
+                                else:
+                                    baseline_metrics = _selective_threshold_metrics(
+                                        col_y, OOF_probs[:, j], t0, t1
+                                    )
+                                    candidate_metrics = _selective_threshold_metrics(
+                                        col_y, OOF_probs[:, j], candidate_t0, margin_t1
+                                    )
+                                    samg_metric_audit = {
+                                        "samg_baseline_f1_positive": baseline_metrics["f1_positive"],
+                                        "samg_selected_f1_positive": candidate_metrics["f1_positive"],
+                                        "samg_baseline_f1_negative": baseline_metrics["f1_negative"],
+                                        "samg_selected_f1_negative": candidate_metrics["f1_negative"],
+                                    }
+                                    if (
+                                        candidate_metrics["f1_positive"]
+                                        >= baseline_metrics["f1_positive"]
+                                        and candidate_metrics["f1_negative"]
+                                        >= baseline_metrics["f1_negative"]
+                                        - samg_max_f1_negative_drop
+                                    ):
+                                        t0 = candidate_t0
+                                        t1 = margin_t1
+                                        samg_applied = True
+                                        samg_reason = "ACTIVATED"
+                                    else:
+                                        samg_reason = "OOF_GUARD_REJECTED"
+                            else:
+                                t0 = candidate_t0
+                                t1 = margin_t1
+                                samg_applied = True
+                                samg_reason = "ACTIVATED"
+                        else:
+                            samg_reason = "NO_THRESHOLD_IMPROVEMENT"
+                    else:
+                        samg_reason = "OVERLAPPING_DISTRIBUTIONS"
 
                 elif prior_j >= (1.0 - sep_rare_threshold) and n_pos > 0 and n_neg > 0:
                     # Regime 3: Rare-Negative (1 is majority, 0 is rare minority)
@@ -322,8 +517,23 @@ def compute_tri_regime_adaptive_thresholds_table(
                         margin_t0 = float(0.5 * (neg_ceiling + pos_floor))
                         if margin_t0 > t0:
                             t0 = margin_t0
+                            samg_applied = True
+                            samg_reason = "ACTIVATED"
                             if t1 <= t0:
                                 t1 = min(max_t, t0 + 0.01)
+                        else:
+                            samg_reason = "NO_THRESHOLD_IMPROVEMENT"
+                    else:
+                        samg_reason = "OVERLAPPING_DISTRIBUTIONS"
+                elif prior_j <= sep_rare_threshold and n_pos == 0:
+                    samg_reason = "NO_POSITIVE_SUPPORT"
+                elif prior_j >= (1.0 - sep_rare_threshold) and n_neg == 0:
+                    samg_reason = "NO_NEGATIVE_SUPPORT"
+
+        # Coverage metadata must describe the final thresholds, including SAMG.
+        if OOF_probs is not None and OOF_probs.shape[1] > j:
+            p_j = OOF_probs[:, j]
+            emp_cov = float(np.mean((p_j <= t0) | (p_j >= t1)))
 
         table[j] = {
             "tau_0": float(t0),
@@ -334,6 +544,17 @@ def compute_tri_regime_adaptive_thresholds_table(
             "blend_weight": float(blend_w),
             "coverage_guard": bool(guard_applied),
             "empirical_coverage": float(emp_cov),
+            "tau_0_before_coverage": tau_0_before_coverage,
+            "tau_1_before_coverage": tau_1_before_coverage,
+            "tau_0_after_coverage": tau_0_after_coverage,
+            "tau_1_after_coverage": tau_1_after_coverage,
+            "samg_strategy": samg_strategy,
+            "samg_applied": bool(samg_applied),
+            "samg_reason": samg_reason,
+            "samg_probability_source": samg_prob_source,
+            "samg_neg_ceiling": float(neg_ceiling),
+            "samg_pos_floor": float(pos_floor),
+            **samg_metric_audit,
         }
 
     return table

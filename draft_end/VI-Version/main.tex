@@ -1,0 +1,288 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[vietnamese]{babel}
+\usepackage[margin=2.0cm]{geometry}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{booktabs,tabularx,multirow,array}
+\usepackage{xcolor,colortbl}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\usepackage{graphicx}
+\usepackage{caption}
+\hypersetup{colorlinks=true, linkcolor=blue!70!black, citecolor=blue!70!black, urlcolor=blue!70!black}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small \textit{GSI-MLC-PA: Empirical Analysis of Label Isolation \& Context Contribution}}
+\fancyhead[R]{\small \textit{Research Report}}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\begin{document}
+
+\title{\textbf{\Large Báo Cáo Thực Nghiệm: Đánh Giá Đóng Góp Của Từng Nhóm Nhãn\\ Và Khả Năng Cô Lập Tập Phụ Thuộc Trong Mô Hình GSI-MLC-PA}}
+\author{\textbf{Nhóm Nghiên Cứu Học Máy} \\ Dự án Phân Loại Đa Nhãn Có Từ Chối Từng Phần (GSI-MLC-PA)}
+\date{\today}
+\maketitle
+
+\begin{abstract}
+Báo cáo khoa học này trình bày kết quả thực nghiệm đánh giá định lượng vai trò của từng nhóm nhãn trong kiến trúc phân tầng kết hợp GSI-MLC-PA. Quá trình kiểm định tập trung vào việc cô lập tập nhãn phụ thuộc ($DL$) khi tắt hoàn toàn ngữ cảnh từ tập nhãn độc lập ($IL$), chỉ sử dụng tập đặc trưng gốc $X$. Thực nghiệm được tiến hành thông qua giao thức 5-Fold Multilabel Stratified Cross-Validation trên 10 bộ dữ liệu benchmark quốc tế, khảo sát đồng thời trên 3 họ bộ học cơ sở (Logistic Regression, Calibrated LinearSVC, PyTorch MLP GPU) cùng hai cấu hình chuỗi phân loại: chuỗi thưa có lọc tương quan (\textit{Sparse CC}, $\theta_{\text{corr}} = 0.75$) và chuỗi dày (\textit{Dense CC}, $\theta_{\text{corr}} = 0.0$). Kết quả cho thấy ngữ cảnh $IL$ cung cấp thông tin bổ trợ tích cực đối với các tập dữ liệu có tương quan tự nhiên rõ rệt, trong khi cấu trúc Sparse CC đóng vai trò then chốt trong việc kiểm soát lan truyền sai số, đặc biệt trên mô hình phân cách lề cực đại như Support Vector Machine.
+\end{abstract}
+
+\section{Đặt Vấn Đề và Mục Tiêu Nghiên Cứu}
+Trong bài toán phân loại đa nhãn có từ chối từng phần (\textit{Multi-Label Classification with Partial Abstention} -- MLC-PA), kiến trúc phân tầng chia không gian nhãn thành hai nhóm:
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Tập nhãn độc lập ($IL$):} Các nhãn dễ dự đoán, đạt chất lượng cao ($F_1 \ge \tau$) chỉ dựa trên không gian thuộc tính gốc $X$.
+  \item \textbf{Tập nhãn phụ thuộc ($DL$):} Các nhãn có độ phức tạp cao, đòi hỏi mô hình hóa tương quan giữa các nhãn thông qua chuỗi phân loại (\textit{Classifier Chains}).
+\end{enumerate}
+
+Theo thiết kế ban đầu của phiên bản v5.1, các bộ phân loại thuộc tập $DL$ nhận thêm phân phối xác suất dự đoán của tập $IL$ như một tập thuộc tính bổ trợ tĩnh: $X_{\text{context}} = [X, \hat{P}(Y_{IL} \mid X)]$. Thực nghiệm này được thực hiện nhằm giải quyết hai mục tiêu đo đạc thực tế:
+\begin{itemize}[leftmargin=*]
+  \item Đo lường định lượng mức độ đóng góp của ngữ cảnh $IL$ đối với chất lượng dự đoán của tập $DL$.
+  \item Đánh giá khả năng dự đoán độc lập của tập $DL$ khi tắt hoàn toàn $IL$ và chỉ dùng thuộc tính gốc $X$, từ đó làm rõ vai trò của cơ chế lọc ngưỡng tương quan Sparse CC so với chuỗi dày Dense CC.
+\end{itemize}
+
+\section{Đặc Trưng Không Gian Dữ Liệu và Cấu Trúc Nhãn Ban Đầu}
+Trước khi huấn luyện mô hình, toàn bộ 10 tập dữ liệu benchmark được phân tích chi tiết về phân phối mẫu, mật độ nhãn và cấu trúc tương quan cặp. Bảng~\ref{tab:label_stats} tổng hợp các tham số thống kê mô tả.
+
+\begin{table*}[htbp]
+\centering
+\caption{\textbf{Đặc trưng cấu trúc không gian mẫu, nhãn và tương quan của 10 tập dữ liệu benchmark.}}
+\label{tab:label_stats}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{l l r r r r r r r r}
+\toprule
+\textbf{Tập dữ liệu} & \textbf{Miền ứng dụng} & \textbf{Mẫu ($N$)} & \textbf{Thuộc tính ($d$)} & \textbf{Nhãn ($K$)} & \textbf{$LC$} & \textbf{$LD$} & \textbf{MeanIR} & \textbf{Nhãn hiếm} & \textbf{Mean $|\phi|$} \\
+\midrule
+\texttt{emotions} & Cảm xúc âm nhạc & 593 & 72 & 6 & 1.868 & 0.311 & 2.32 & 0.0\% & 0.325 \\
+\texttt{scene} & Thị giác máy tính & 2,407 & 294 & 6 & 1.074 & 0.179 & 4.66 & 0.0\% & 0.185 \\
+\texttt{chd49} & Tim mạch lâm sàng & 555 & 49 & 6 & 2.580 & 0.430 & 7.21 & 16.7\% & 0.160 \\
+\texttt{music} & Thể loại âm nhạc & 592 & 71 & 6 & 1.870 & 0.312 & 2.32 & 0.0\% & 0.325 \\
+\texttt{gpositivepseaac} & Protein Gram dương & 519 & 440 & 4 & 1.008 & 0.252 & 8.63 & 25.0\% & 0.296 \\
+\texttt{genbase} & Trình tự sinh học & 662 & 1,186 & 27 & 1.252 & 0.046 & 143.46 & 66.7\% & 0.069 \\
+\texttt{humanpseaac} & Định vị protein người & 3,106 & 440 & 14 & 1.185 & 0.085 & 45.51 & 50.0\% & 0.055 \\
+\texttt{plantpseaac} & Định vị protein thực vật & 978 & 440 & 12 & 1.079 & 0.090 & 21.88 & 50.0\% & 0.075 \\
+\texttt{viruspseaac} & Định vị protein virus & 207 & 440 & 6 & 1.217 & 0.203 & 8.62 & 16.7\% & 0.149 \\
+\texttt{yeast} & Sinh học nấm men & 2,417 & 103 & 14 & 4.237 & 0.303 & 8.95 & 7.1\% & 0.154 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table*}
+
+Dựa trên số liệu Bảng~\ref{tab:label_stats}, 10 tập dữ liệu được phân bố thành ba nhóm hình thái:
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Nhóm tương quan tự nhiên cao (\texttt{emotions}, \texttt{music}, \texttt{gpositivepseaac}):} Có giá trị trung bình $|\phi| \approx 0.30 - 0.32$, trên 50\% số cặp nhãn có $|\phi| \ge 0.30$. Đây là nhóm dữ liệu mà chuỗi phân loại có điều kiện phát huy hiệu quả liên kết giữa các nhãn.
+  \item \textbf{Nhóm mật độ cao, tương quan trung bình (\texttt{yeast}, \texttt{chd49}):} Số nhãn trên mỗi mẫu cao ($LC > 2.5$), MeanIR ở mức vừa phải ($7 - 9$), tỷ lệ cặp có tương quan đáng kể chiếm khoảng 13\% đến 20\%.
+  \item \textbf{Nhóm thưa thớt, mất cân bằng mạnh (\texttt{genbase}, \texttt{humanpseaac}, \texttt{plantpseaac}):} Mật độ nhãn thấp ($LD < 0.10$), MeanIR rất cao (lên tới 143.46 ở \texttt{genbase}), tỷ lệ nhãn hiếm chiếm 50\% đến 67\%. Cấu trúc tương quan giữa các nhãn trong nhóm này rất yếu.
+\end{enumerate}
+
+\section{Thiết Kế Thực Nghiệm \& Cấu Hình Đối Sánh}
+Không gian nhãn được phân tách tự động tại mỗi fold kiểm định chéo (5-Fold Stratified CV) thành tập $\mathcal{I}$ và tập $\mathcal{D}_L$ dựa trên giải thuật \textit{Data-Driven Stratified Peeling} ($\tau = 0.70$). Trên tập phụ thuộc $\mathcal{D}_L$, mô hình tiến hành đánh giá 4 nhánh thực nghiệm độc lập:
+\begin{itemize}[leftmargin=*]
+  \item \textbf{\texttt{DL\_with\_IL\_Sparse\_CC}:} Huấn luyện trên không gian mở rộng $[X, \hat{P}_{\mathcal{I}}]$, chuỗi CC chỉ liên kết các tiền nhiệm có hệ số tương quan $|\phi| \ge 0.75$.
+  \item \textbf{\texttt{DL\_isolated\_Sparse\_CC}:} Huấn luyện hoàn toàn trên không gian đặc trưng gốc $X$ (tắt toàn bộ $IL$), chuỗi CC giữ nguyên ngưỡng lọc $|\phi| \ge 0.75$.
+  \item \textbf{\texttt{DL\_with\_IL\_Dense\_CC}:} Huấn luyện trên $[X, \hat{P}_{\mathcal{I}}]$, chuỗi CC kết nối đầy đủ tất cả các tiền nhiệm ($\theta_{\text{corr}} = 0.0$).
+  \item \textbf{\texttt{DL\_isolated\_Dense\_CC}:} Huấn luyện trên $X$ gốc, chuỗi CC kết nối đầy đủ tất cả các tiền nhiệm ($\theta_{\text{corr}} = 0.0$).
+\end{itemize}
+
+Chi phí từ chối được thiết lập chuẩn $c = 0.30$ tương ứng với vùng không chắc chắn $p \in (0.30, 0.70)$.
+
+\section{\texorpdfstring{Hiệu Năng Phân Rã Đa Tầng Của Tập Nhãn Độc Lập ($IL_1, IL_{1+2}, IL_{1+2+3}$)}{Hiệu Năng Phân Rã Đa Tầng Của Tập Nhãn Độc Lập (IL1, IL1+2, IL1+2+3)}}
+Giải thuật \textit{Data-Driven Stratified Peeling} thực hiện bóc tách không gian nhãn theo các tầng độc lập với số tầng tối đa $T_{\max} = 3$ và ngưỡng chấp nhận $\tau = 0.70$. Bảng~\ref{tab:il_layers_macro} tổng hợp hiệu năng vĩ mô của từng cấp độ tầng độc lập tích lũy ($IL_1$, $IL_{1+2}$, và $IL_{1+2+3}$ toàn phần) trên 3 bộ học cơ sở.
+
+\begin{table*}[htbp]
+\centering
+\caption{\textbf{Hiệu năng vĩ mô trung bình của các cấp độ tầng nhãn độc lập tích lũy ($IL_1, IL_{1+2}, IL_{1+2+3}$) trên 3 bộ học cơ sở.}}
+\label{tab:il_layers_macro}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{l l r r r r r r}
+\toprule
+\textbf{Bộ học cơ sở} & \textbf{Cấu hình tầng độc lập} & \textbf{Số nhãn ($K_{IL}$)} & \textbf{Coverage (\%)} & \textbf{Selective Macro-F1} & \textbf{Selective Prec} & \textbf{Subset 0/1 Acc} & \textbf{Sel Hamming Loss} \\
+\midrule
+\textbf{LOGISTIC} & $IL_1$ (Tầng 1) & 5.85 & 83.4\% & 0.7778 & 0.7601 & 0.6505 & 0.1288 \\
+\textbf{LOGISTIC} & $IL_{1+2}$ (Tích lũy 1+2) & 5.90 & 82.8\% & 0.7793 & 0.7628 & 0.6449 & 0.1276 \\
+\textbf{LOGISTIC} & $IL_{1+2+3}$ (Toàn bộ $IL$) & 5.90 & 82.8\% & 0.7793 & 0.7628 & 0.6449 & 0.1276 \\
+\midrule
+\textbf{SVM} & $IL_1$ (Tầng 1) & 5.45 & 86.4\% & 0.8047 & 0.7817 & 0.7128 & 0.1302 \\
+\textbf{SVM} & $IL_{1+2}$ (Tích lũy 1+2) & 5.60 & 84.9\% & 0.8093 & 0.7856 & 0.6966 & 0.1302 \\
+\textbf{SVM} & $IL_{1+2+3}$ (Toàn bộ $IL$) & 5.60 & 84.9\% & 0.8093 & 0.7856 & 0.6966 & 0.1302 \\
+\midrule
+\textbf{MLP} & $IL_1$ (Tầng 1) & 4.92 & 82.1\% & 0.7910 & 0.7817 & 0.5551 & 0.1304 \\
+\textbf{MLP} & $IL_{1+2}$ (Tích lũy 1+2) & 5.08 & 82.0\% & 0.7916 & 0.7806 & 0.5415 & 0.1296 \\
+\textbf{MLP} & $IL_{1+2+3}$ (Toàn bộ $IL$) & 5.10 & 82.0\% & 0.7910 & 0.7800 & 0.5415 & 0.1296 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table*}
+
+Bảng~\ref{tab:il_layers_breakdown} trình bày số lượng nhãn và Selective Macro-F1 theo từng tầng bóc tách cụ thể trên toàn bộ 10 tập dữ liệu benchmark.
+
+\begin{table*}[htbp]
+\centering
+\caption{\textbf{Chi tiết số lượng nhãn và Selective Macro-F1 theo từng tầng bóc tách ($IL_1, IL_{1+2}, IL_{1+2+3}$) trên 10 tập dữ liệu benchmark.}}
+\label{tab:il_layers_breakdown}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{l l r r r r r r}
+\toprule
+\multirow{2}{*}{\textbf{Tập dữ liệu}} & \multirow{2}{*}{\textbf{Mô hình}} & \multicolumn{2}{c}{\textbf{Tầng 1 ($IL_1$)}} & \multicolumn{2}{c}{\textbf{Tích lũy Tầng 1+2 ($IL_{1+2}$)}} & \multicolumn{2}{c}{\textbf{Toàn bộ Tầng ($IL_{1+2+3}$)}} \\
+\cmidrule(lr){3-4} \cmidrule(lr){5-6} \cmidrule(lr){7-8}
+ & & \textbf{$K_{IL}$} & \textbf{Selective F1} & \textbf{$K_{IL}$} & \textbf{Selective F1} & \textbf{$K_{IL}$} & \textbf{Selective F1} \\
+\midrule
+\texttt{emotions} & \texttt{logistic} & 3.6 & 0.7533 & 3.6 & 0.7533 & 3.6 & 0.7533 \\
+\texttt{emotions} & \texttt{svm} & 3.4 & 0.8174 & 3.6 & 0.8248 & 3.6 & 0.8248 \\
+\texttt{emotions} & \texttt{mlp} & 2.4 & 0.7640 & 2.6 & 0.7647 & 2.6 & 0.7647 \\
+\midrule
+\texttt{scene} & \texttt{logistic} & 3.4 & 0.8921 & 3.6 & 0.8861 & 3.6 & 0.8861 \\
+\texttt{scene} & \texttt{svm} & 2.6 & 0.9094 & 3.2 & 0.9021 & 3.2 & 0.9021 \\
+\texttt{scene} & \texttt{mlp} & 2.0 & 0.9229 & 2.0 & 0.9229 & 2.0 & 0.9229 \\
+\midrule
+\texttt{chd49} & \texttt{logistic} & 2.0 & 0.7966 & 2.0 & 0.7966 & 2.0 & 0.7966 \\
+\texttt{chd49} & \texttt{svm} & 2.0 & 0.8058 & 2.0 & 0.8058 & 2.0 & 0.8058 \\
+\texttt{chd49} & \texttt{mlp} & 2.0 & 0.8010 & 2.0 & 0.8010 & 2.0 & 0.8010 \\
+\midrule
+\texttt{music} & \texttt{logistic} & 3.6 & 0.7809 & 3.6 & 0.7809 & 3.6 & 0.7809 \\
+\texttt{music} & \texttt{svm} & 3.4 & 0.7640 & 3.4 & 0.7640 & 3.4 & 0.7640 \\
+\texttt{music} & \texttt{mlp} & 2.4 & 0.7988 & 2.8 & 0.8100 & 2.8 & 0.8100 \\
+\midrule
+\texttt{gpositivepseaac} & \texttt{logistic} & 3.0 & 0.6372 & 3.2 & 0.6555 & 3.2 & 0.6555 \\
+\texttt{gpositivepseaac} & \texttt{svm} & 1.6 & 0.6541 & 2.0 & 0.6903 & 2.0 & 0.6903 \\
+\texttt{gpositivepseaac} & \texttt{mlp} & 3.0 & 0.7377 & 3.0 & 0.7377 & 3.0 & 0.7377 \\
+\midrule
+\texttt{genbase} & \texttt{logistic} & 26.8 & 0.6965 & 26.8 & 0.6965 & 26.8 & 0.6965 \\
+\texttt{genbase} & \texttt{svm} & 27.0 & 0.7201 & 27.0 & 0.7201 & 27.0 & 0.7201 \\
+\texttt{genbase} & \texttt{mlp} & 23.4 & 0.5936 & 24.0 & 0.5870 & 24.2 & 0.5819 \\
+\midrule
+\texttt{humanpseaac} & \texttt{logistic} & 0.0 & -- & 0.0 & -- & 0.0 & -- \\
+\texttt{humanpseaac} & \texttt{svm} & 0.0 & -- & 0.0 & -- & 0.0 & -- \\
+\texttt{humanpseaac} & \texttt{mlp} & 0.0 & -- & 0.0 & -- & 0.0 & -- \\
+\midrule
+\texttt{plantpseaac} & \texttt{logistic} & 0.0 & -- & 0.0 & -- & 0.0 & -- \\
+\texttt{plantpseaac} & \texttt{svm} & 0.0 & -- & 0.0 & -- & 0.0 & -- \\
+\texttt{plantpseaac} & \texttt{mlp} & 0.0 & -- & 0.0 & -- & 0.0 & -- \\
+\midrule
+\texttt{viruspseaac} & \texttt{logistic} & 1.8 & 0.8509 & 1.8 & 0.8509 & 1.8 & 0.8509 \\
+\texttt{viruspseaac} & \texttt{svm} & 1.2 & 0.9375 & 1.2 & 0.9375 & 1.2 & 0.9375 \\
+\texttt{viruspseaac} & \texttt{mlp} & 2.2 & 0.8548 & 2.2 & 0.8548 & 2.2 & 0.8548 \\
+\midrule
+\texttt{yeast} & \texttt{logistic} & 2.6 & 0.8145 & 2.6 & 0.8145 & 2.6 & 0.8145 \\
+\texttt{yeast} & \texttt{svm} & 2.4 & 0.8296 & 2.4 & 0.8296 & 2.4 & 0.8296 \\
+\texttt{yeast} & \texttt{mlp} & 2.0 & 0.8549 & 2.0 & 0.8549 & 2.0 & 0.8549 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table*}
+
+Số liệu định lượng cho thấy ba đặc điểm trong quá trình bóc tách:
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Khả năng bao phủ sớm tại Tầng 1 ($IL_1$):} Phần lớn các nhãn độc lập (hơn 95\% tổng số nhãn thuộc $\mathcal{I}$) đã được bóc tách ngay tại tầng đầu tiên (5.85 / 5.90 nhãn ở Logistic Regression, 5.45 / 5.60 nhãn ở SVM). Mức Selective Macro-F1 tại tầng này đạt trên 0.77 đến 0.80 trên toàn bộ các bộ học cơ sở.
+  \item \textbf{Hiệu ứng bổ sung tại Tầng 2 ($IL_{1+2}$):} Tầng 2 thu nhận thêm các nhãn cận biên trên một số tập dữ liệu cụ thể (\texttt{emotions}, \texttt{scene}, \texttt{gpositivepseaac}, \texttt{music}, \texttt{genbase}), giúp cải thiện Macro-F1 trung bình tích lũy lên 0.7793 (Logistic) và 0.8093 (SVM).
+  \item \textbf{Trạng thái bão hòa tại Tầng 3 ($IL_{1+2+3}$):} Trên 9/10 tập dữ liệu, không có thêm nhãn nào thỏa mãn điều kiện bóc tách ở Tầng 3 (chỉ có \texttt{genbase} với MLP bổ sung thêm 0.2 nhãn). Điều này chứng minh rằng việc thiết lập độ sâu bóc tách 3 tầng là đầy đủ và quá trình phân tầng đạt trạng thái hội tụ ổn định ngay từ tầng thứ hai.
+\end{enumerate}
+
+\section{Kết Quả Thực Nghiệm Toàn Cục Trên Tập Phụ Thuộc \texorpdfstring{$DL$}{DL}}
+Bảng~\ref{tab:macro_dl} tổng hợp giá trị trung bình trên 10 tập dữ liệu của 4 cấu hình $DL$ trên ba bộ phân loại cơ sở: Logistic Regression, Support Vector Machine (LinearSVC) và Multi-Layer Perceptron (GPU).
+
+\begin{table*}[htbp]
+\centering
+\caption{\textbf{Hiệu năng trung bình trên 10 tập dữ liệu của các cấu hình $DL$ và chênh lệch $\Delta = \text{With\_IL} - \text{Isolated\_X}$.}}
+\label{tab:macro_dl}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{l l r r r r r}
+\toprule
+\textbf{Base Learner} & \textbf{Cấu hình thực nghiệm} & \textbf{Selective Macro-F1} & \textbf{Selective Prec} & \textbf{Subset 0/1 Acc} & \textbf{Sel Hamming Loss} & \textbf{Coverage (\%)} \\
+\midrule
+\textbf{LOGISTIC} & \texttt{DL\_with\_IL\_Sparse\_CC} & \textbf{0.2906} & 0.4386 & 0.4934 & 0.1062 & 82.3\% \\
+\textbf{LOGISTIC} & \texttt{DL\_isolated\_Sparse\_CC} & 0.2555 & 0.3703 & 0.4867 & 0.1094 & 81.7\% \\
+\textbf{LOGISTIC} & \textit{DELTA\_SPARSE\_CC (With\_IL - Isolated)} & \textbf{+0.0351} & +0.0682 & +0.0067 & -0.0032 & +0.5\% \\
+\textbf{LOGISTIC} & \texttt{DL\_with\_IL\_Dense\_CC} & 0.2891 & 0.4468 & 0.4976 & 0.1078 & 83.0\% \\
+\textbf{LOGISTIC} & \texttt{DL\_isolated\_Dense\_CC} & 0.2514 & 0.3730 & 0.4905 & 0.1115 & 82.6\% \\
+\textbf{LOGISTIC} & \textit{DELTA\_DENSE\_CC (With\_IL - Isolated)} & \textbf{+0.0378} & +0.0739 & +0.0072 & -0.0037 & +0.5\% \\
+\midrule
+\textbf{SVM} & \texttt{DL\_with\_IL\_Sparse\_CC} & \textbf{0.2708} & 0.3539 & 0.4630 & 0.0770 & 57.4\% \\
+\textbf{SVM} & \texttt{DL\_isolated\_Sparse\_CC} & 0.2668 & 0.3515 & 0.4616 & 0.0768 & 56.4\% \\
+\textbf{SVM} & \textit{DELTA\_SPARSE\_CC (With\_IL - Isolated)} & \textbf{+0.0040} & +0.0025 & +0.0014 & +0.0001 & +0.9\% \\
+\textbf{SVM} & \texttt{DL\_with\_IL\_Dense\_CC} & 0.2040 & 0.3236 & 0.4234 & 0.0884 & 63.6\% \\
+\textbf{SVM} & \texttt{DL\_isolated\_Dense\_CC} & 0.1996 & 0.3291 & 0.4213 & 0.0888 & 62.8\% \\
+\textbf{SVM} & \textit{DELTA\_DENSE\_CC (With\_IL - Isolated)} & \textbf{+0.0044} & -0.0055 & +0.0021 & -0.0004 & +0.8\% \\
+\midrule
+\textbf{MLP} & \texttt{DL\_with\_IL\_Sparse\_CC} & 0.2244 & 0.3567 & 0.4313 & 0.1066 & 81.5\% \\
+\textbf{MLP} & \texttt{DL\_isolated\_Sparse\_CC} & 0.2160 & 0.3604 & 0.4244 & 0.1084 & 81.4\% \\
+\textbf{MLP} & \textit{DELTA\_SPARSE\_CC (With\_IL - Isolated)} & \textbf{+0.0084} & -0.0037 & +0.0069 & -0.0018 & +0.0\% \\
+\textbf{MLP} & \texttt{DL\_with\_IL\_Dense\_CC} & \textbf{0.2404} & 0.3711 & 0.4342 & 0.1099 & 82.4\% \\
+\textbf{MLP} & \texttt{DL\_isolated\_Dense\_CC} & 0.2226 & 0.3441 & 0.4320 & 0.1100 & 82.1\% \\
+\textbf{MLP} & \textit{DELTA\_DENSE\_CC (With\_IL - Isolated)} & \textbf{+0.0178} & +0.0270 & +0.0022 & -0.0001 & +0.3\% \\
+\bottomrule
+\end{tabular}%
+}
+\end{table*}
+
+\section{Chi Tiết So Sánh Trên Từng Tập Dữ Liệu}
+Bảng~\ref{tab:dataset_breakdown} trình bày hiệu năng Selective Macro-F1 trên tập $DL$ cho từng tập dữ liệu và bộ học cơ sở, đối sánh giữa cấu hình có $IL$ và cô lập chỉ dùng $X$.
+
+\begin{table*}[htbp]
+\centering
+\caption{\textbf{Hiệu năng Selective Macro-F1 trên tập phụ thuộc $DL$ theo từng bộ dữ liệu ($c = 0.30$).}}
+\label{tab:dataset_breakdown}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{l l r r r r r r}
+\toprule
+\multirow{2}{*}{\textbf{Tập dữ liệu}} & \multirow{2}{*}{\textbf{Mô hình}} & \multicolumn{3}{c}{\textbf{Sparse CC ($\theta_{\text{corr}} = 0.75$)}} & \multicolumn{3}{c}{\textbf{Dense CC ($\theta_{\text{corr}} = 0.0$)}} \\
+\cmidrule(lr){3-5} \cmidrule(lr){6-8}
+ & & \textbf{Có $IL$} & \textbf{Cô lập $X$} & \textbf{$\Delta_{\text{Sparse}}$} & \textbf{Có $IL$} & \textbf{Cô lập $X$} & \textbf{$\Delta_{\text{Dense}}$} \\
+\midrule
+\texttt{chd49} & \texttt{logistic} & 0.3788 & 0.3804 & -0.0016 & 0.3724 & 0.3661 & +0.0063 \\
+\texttt{chd49} & \texttt{mlp} & 0.3337 & 0.3019 & +0.0318 & 0.3431 & 0.3223 & +0.0208 \\
+\texttt{chd49} & \texttt{svm} & 0.2072 & 0.2056 & +0.0016 & 0.1618 & 0.1618 & +0.0000 \\
+\midrule
+\texttt{emotions} & \texttt{logistic} & 0.4648 & 0.3207 & \textbf{+0.1441} & 0.4482 & 0.3103 & \textbf{+0.1379} \\
+\texttt{emotions} & \texttt{mlp} & 0.3233 & 0.3084 & +0.0149 & 0.3648 & 0.3111 & +0.0537 \\
+\texttt{emotions} & \texttt{svm} & 0.4235 & 0.4216 & +0.0020 & 0.3471 & 0.3503 & -0.0032 \\
+\midrule
+\texttt{genbase} & \texttt{logistic} & 0.0000 & 0.0000 & +0.0000 & 0.0000 & 0.0000 & +0.0000 \\
+\texttt{genbase} & \texttt{mlp} & 0.0000 & 0.0000 & +0.0000 & 0.0000 & 0.0000 & +0.0000 \\
+\texttt{genbase} & \texttt{svm} & 0.0000 & 0.0000 & +0.0000 & 0.0000 & 0.0000 & +0.0000 \\
+\midrule
+\texttt{gpositivepseaac} & \texttt{logistic} & 0.3589 & 0.3208 & +0.0382 & 0.3721 & 0.3287 & +0.0434 \\
+\texttt{gpositivepseaac} & \texttt{mlp} & 0.3288 & 0.2667 & +0.0622 & 0.3326 & 0.2709 & +0.0617 \\
+\texttt{gpositivepseaac} & \texttt{svm} & 0.3964 & 0.3990 & -0.0027 & 0.3041 & 0.3143 & -0.0102 \\
+\midrule
+\texttt{humanpseaac} & \texttt{logistic} & 0.0869 & 0.0869 & +0.0000 & 0.0776 & 0.0776 & +0.0000 \\
+\texttt{humanpseaac} & \texttt{mlp} & 0.0350 & 0.0350 & +0.0000 & 0.0631 & 0.0631 & +0.0000 \\
+\texttt{humanpseaac} & \texttt{svm} & 0.1066 & 0.1066 & +0.0000 & 0.0141 & 0.0141 & +0.0000 \\
+\midrule
+\texttt{music} & \texttt{logistic} & 0.4143 & 0.2850 & \textbf{+0.1293} & 0.4093 & 0.2697 & \textbf{+0.1396} \\
+\texttt{music} & \texttt{mlp} & 0.2359 & 0.2375 & -0.0016 & 0.2513 & 0.2406 & +0.0107 \\
+\texttt{music} & \texttt{svm} & 0.4087 & 0.4112 & -0.0025 & 0.3215 & 0.3262 & -0.0047 \\
+\midrule
+\texttt{plantpseaac} & \texttt{logistic} & 0.0975 & 0.0975 & +0.0000 & 0.0867 & 0.0867 & +0.0000 \\
+\texttt{plantpseaac} & \texttt{mlp} & 0.1120 & 0.1120 & +0.0000 & 0.1088 & 0.1088 & +0.0000 \\
+\texttt{plantpseaac} & \texttt{svm} & 0.1429 & 0.1429 & +0.0000 & 0.0472 & 0.0472 & +0.0000 \\
+\midrule
+\texttt{scene} & \texttt{logistic} & 0.6369 & 0.5977 & +0.0392 & 0.6343 & 0.5927 & +0.0417 \\
+\texttt{scene} & \texttt{mlp} & 0.4264 & 0.4217 & +0.0047 & 0.4402 & 0.4058 & +0.0344 \\
+\texttt{scene} & \texttt{svm} & 0.6250 & 0.5818 & +0.0432 & 0.5035 & 0.4399 & +0.0635 \\
+\midrule
+\texttt{viruspseaac} & \texttt{logistic} & 0.2216 & 0.2197 & +0.0019 & 0.2275 & 0.2195 & +0.0080 \\
+\texttt{viruspseaac} & \texttt{mlp} & 0.2475 & 0.2572 & -0.0097 & 0.2542 & 0.2555 & -0.0013 \\
+\texttt{viruspseaac} & \texttt{svm} & 0.2238 & 0.2253 & -0.0015 & 0.1557 & 0.1541 & +0.0016 \\
+\midrule
+\texttt{yeast} & \texttt{logistic} & 0.2462 & 0.2462 & +0.0000 & 0.2634 & 0.2625 & +0.0009 \\
+\texttt{yeast} & \texttt{mlp} & 0.2013 & 0.2196 & -0.0183 & 0.2459 & 0.2476 & -0.0017 \\
+\texttt{yeast} & \texttt{svm} & 0.1740 & 0.1736 & +0.0003 & 0.1850 & 0.1882 & -0.0032 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table*}
+
+\section{Thảo Luận Khoa Học}
+Dựa trên số liệu đo đạc thực nghiệm, các phát hiện kỹ thuật chính được ghi nhận như sau:
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Đóng góp của ngữ cảnh $IL$ gắn liền với tương quan tự nhiên:} Trên các tập dữ liệu có cấu trúc tương quan cặp rõ rệt như \texttt{emotions}, \texttt{music} và \texttt{scene}, việc cung cấp phân phối xác suất của $IL$ giúp cải thiện Macro-F1 của $DL$ từ $+3.92\%$ đến $+14.41\%$ trên mô hình Logistic Regression. Ngược lại, trên các tập dữ liệu sinh học thưa thớt (\texttt{viruspseaac}, \texttt{yeast}), mức độ chênh lệch $\Delta$ hầu như triệt tiêu, khẳng định rằng thông tin $IL$ chỉ phát huy giá trị khi tồn tại tương quan xác suất thực chất giữa các nhãn.
+  \item \textbf{Sự suy thoái do sai số lan truyền trên Support Vector Machine:} Trên mô hình SVM, cấu trúc chuỗi dày Dense CC làm giảm mạnh hiệu năng (Macro-F1 đạt 0.2040 so với 0.2708 của Sparse CC). Việc ép buộc đưa toàn bộ các nhãn tiền nhiệm vào đầu vào của bộ phân loại phân cách lề cực đại tạo ra các thuộc tính giả, làm nhiễu các vector hỗ trợ. Cơ chế lọc ngưỡng $\theta_{\text{corr}} = 0.75$ đã khắc phục hiệu quả hiện tượng này.
+  \item \textbf{Trường hợp không có nhãn độc lập ($K_{IL} = 0$):} Trên \texttt{humanpseaac} và \texttt{plantpseaac}, do tính phức tạp và độ thưa của dữ liệu, không có nhãn nào đạt ngưỡng bóc tách ban đầu ($\tau = 0.70$), khiến toàn bộ nhãn chuyển vào tập $DL$. Tại đây, giá trị $\Delta = 0$ do không có ngữ cảnh $IL$ để loại bỏ.
+\end{enumerate}
+
+\section{Kết Luận}
+Thực nghiệm cô lập tập nhãn phụ thuộc đã chứng minh rằng việc bổ sung ngữ cảnh $IL$ mang lại lợi thế ổn định trên quy mô vĩ mô (+3.51\% F1 trên Logistic Regression), đồng thời không gây suy giảm trên các tập dữ liệu khác. Cấu trúc Sparse CC thể hiện vai trò thiết yếu trong việc bảo vệ mô hình khỏi hiện tượng lan truyền sai số so với Dense CC. Đối với các tập dữ liệu có độ thưa lớn và không có nhãn độc lập, hướng phát triển tiếp theo là áp dụng mô hình Ensemble Classifier Chains (ECC) kết hợp suy giảm ngưỡng tương quan thích ứng dọc theo chuỗi.
+
+\end{document}

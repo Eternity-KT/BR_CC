@@ -56,18 +56,35 @@ MLP PyTorch và calibrated SVM qua shared registry; xem mục 8 để chạy ma 
 
 ## 3. Danh Sách 10 Tập Dữ Liệu Benchmark
 
+Danh sách dưới đây dành cho benchmark v6.3.3. Registry đầy đủ trong loader vẫn
+hỗ trợ các dataset của thực nghiệm cũ. Chi tiết nguồn dữ liệu, đường dẫn và các
+quy tắc xử lý nằm trong [data/README.md](data/README.md); checksum từng file nằm
+trong [configs/datasets_v6_3_3.json](configs/datasets_v6_3_3.json), cùng bảng
+tổng hợp [data/dataset_manifest.csv](data/dataset_manifest.csv).
+
+Kiểm tra toàn bộ 10 dataset, checksum và tính nhất quán giữa hai manifest:
+
+```powershell
+python scripts/validate_v6_3_3_datasets.py
+```
+
 | # | Dataset | Domain | Samples | Features ($d$) | Labels ($q$) | Label Cardinality | Format / Vị trí nhãn |
 |---|---|---|---|---|---|---|---|
 | 1 | **Emotions** | Music | 593 | 72 | 6 | 1.87 | MULAN (XML + ARFF, nhãn ở cuối) |
-| 2 | **Music** | Music | 592 | 71 | 6 | 1.87 | ARFF (6 nhãn ở đầu) |
-| 3 | **Scene** | Image | 2,407 | 294 | 6 | 1.07 | ARFF (6 nhãn ở đầu) |
-| 4 | **Yeast** | Biology | 2,417 | 103 | 14 | 4.24 | ARFF (14 nhãn ở đầu) |
-| 5 | **CAL500** | Music | 502 | 68 | 174 | 26.04 | ARFF (174 nhãn ở cuối) |
-| 6 | **Bibtex** | Text | 7,395 | 1,836 | 159 | 2.40 | MULAN (XML + ARFF, nhãn ở cuối) |
-| 7 | **Enron** | Text | 1,702 | 1,001 | 53 | 3.38 | MULAN (XML + ARFF, nhãn ở cuối) |
-| 8 | **Genbase** | Biology | 662 | 1,186 | 27 | 1.25 | MULAN (XML + ARFF, nhãn ở cuối) |
-| 9 | **Medical** | Text | 978 | 1,449 | 45 | 1.25 | MULAN (XML + ARFF, nhãn ở cuối) |
-| 10 | **REUTERS-K500** | Text | 6,000 | 500 | 103 | 1.46 | ARFF (103 nhãn ở đầu) |
+| 2 | **Scene** | Image | 2,407 | 294 | 6 | 1.07 | ARFF (6 nhãn ở đầu) |
+| 3 | **Yeast** | Biology | 2,417 | 103 | 14 | 4.24 | ARFF (14 nhãn ở đầu) |
+| 4 | **CHD49** | Medicine | 555 | 49 | 6 | 2.58 | MAT (`data`, `targets`) |
+| 5 | **Music** | Music | 592 | 71 | 6 | 1.87 | ARFF (6 nhãn ở đầu) |
+| 6 | **GpositivePseAAC** | Biology | 519 | 440 | 4 | 1.01 | Sparse text (train + test) |
+| 7 | **Genbase** | Biology | 662 | 1,185 | 27 | 1.25 | MULAN (bỏ cột ID `protein`) |
+| 8 | **VirusPseAAC** | Biology | 207 | 440 | 6 | 1.22 | Sparse text (train + test) |
+| 9 | **PlantPseAAC** | Biology | 978 | 440 | 12 | 1.08 | Sparse text (train + test) |
+| 10 | **HumanPseAAC** | Biology | 3,106 | 440 | 14 | 1.19 | Sparse text (train + test) |
+
+Genbase hiện loại cột định danh `protein`, giảm từ 1.186 xuống 1.185 feature.
+Kết quả Genbase cũ có sử dụng cột này cần chạy lại trước khi dùng với loader mới.
+Các hàng trùng được giữ nguyên: Scene có 7, Genbase có 455 sau khi bỏ ID và
+VirusPseAAC có 1. Validator hiển thị chúng dưới dạng warning đã biết.
 
 ---
 

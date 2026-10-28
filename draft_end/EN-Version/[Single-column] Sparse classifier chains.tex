@@ -1,0 +1,342 @@
+%% 
+%% Copyright 2019-2024 Elsevier Ltd
+%% 
+%% This file is part of the 'CAS Bundle'.
+%% --------------------------------------
+%% 
+%% It may be distributed under the conditions of the LaTeX Project Public
+%% License, either version 1.3c of this license or (at your option) any
+%% later version.  The latest version of this license is in
+%%    http://www.latex-project.org/lppl.txt
+%% and version 1.3c or later is part of all distributions of LaTeX
+%% version 1999/12/01 or later.
+%% 
+%% The list of all files belonging to the 'CAS Bundle' is
+%% given in the file `manifest.txt'.
+%% 
+%% Template article for cas-sc documentclass for 
+%% double column output.
+
+\documentclass[a4paper,fleqn]{cas-sc}
+
+% If the frontmatter runs over more than one page
+% use the longmktitle option.
+
+%\documentclass[a4paper,fleqn,longmktitle]{cas-sc}
+
+%\usepackage[numbers]{natbib}
+%\usepackage[authoryear]{natbib}
+\usepackage[authoryear,longnamesfirst]{natbib}
+%add
+\usepackage{xcolor}
+\usepackage{cleveref}
+
+%%%Author macros
+\def\tsc#1{\csdef{#1}{\textsc{\lowercase{#1}}\xspace}}
+\tsc{WGM}
+\tsc{QE}
+%%%
+
+% Uncomment and use as if needed
+%\newtheorem{theorem}{Theorem}
+%\newtheorem{lemma}[theorem]{Lemma}
+%\newdefinition{rmk}{Remark}
+%\newproof{pf}{Proof}
+%\newproof{pot}{Proof of Theorem \ref{thm}}
+
+\begin{document}
+\let\WriteBookmarks\relax
+\def\floatpagepagefraction{1}
+\def\textpagefraction{.001}
+
+% Short title
+\shorttitle{Sparse classifier chains for robust multi-label classification}    
+
+% Short author
+\shortauthors{}  
+
+% Main title of the paper
+\title [mode = title]{Sparse classifier chains for robust multi-label classification}  
+
+% Title footnote mark
+% eg: \tnotemark[1]
+\tnotemark[1] 
+
+% Title footnote 1.
+% eg: \tnotetext[1]{Title footnote text}
+\tnotetext[1]{} 
+
+% First author
+%
+% Options: Use if required
+% eg: \author[1,3]{Author Name}[type=editor,
+%       style=chinese,
+%       auid=000,
+%       bioid=1,
+%       prefix=Sir,
+%       orcid=0000-0000-0000-0000,
+%       facebook=<facebook id>,
+%       twitter=<twitter id>,
+%       linkedin=<linkedin id>,
+%       gplus=<gplus id>]
+
+\author[1]{}%[<options>]
+
+% Corresponding author indication
+\cormark[1]
+
+% Footnote of the first author
+\fnmark[1]
+
+% Email id of the first author
+% \ead{}
+
+% URL of the first author
+% \ead[url]{}
+
+% Credit authorship
+% eg: \credit{Conceptualization of this study, Methodology, Software}
+\credit{}
+
+% Address/affiliation
+\affiliation[1]{organization={},
+            addressline={}, 
+            city={},
+%          citysep={}, % Uncomment if no comma needed between city and postcode
+            postcode={}, 
+            state={},
+            country={}}
+
+\author[2]{}%[]
+
+% Footnote of the second author
+\fnmark[2]
+
+% Email id of the second author
+% \ead{}
+
+% URL of the second author
+% \ead[url]{}
+
+% Credit authorship
+\credit{}
+
+% Address/affiliation
+\affiliation[2]{organization={},
+            addressline={}, 
+            city={},
+%          citysep={}, % Uncomment if no comma needed between city and postcode
+            postcode={}, 
+            state={},
+            country={}}
+
+% Corresponding author text
+\cortext[1]{Corresponding author}
+
+% Footnote text
+\fntext[1]{}
+
+% For a title note without a number/mark
+%\nonumnote{}
+
+% Here goes the abstract
+\begin{abstract}
+%Here goes the abstract \nocite{*}
+Classifier chains and their ensembles have been shown to be accurate in multi-label classification (MLC). This paper is an attempt to improve the interpretability and robustness of classifier chains by allowing sparse structures, instead of the dense structures enforced by the standard classifier chains. Technically, we propose a heuristic algorithm for finding sparse classifier chains targeting any given evaluation metric. We then conduct an extensive empirical study to demonstrate the potential advantages of our proposal in the standard MLC setting and MLC with partial abstention, where the classifiers are allowed to abstain from making precise predictions on uncertain labels.
+%% Remove this line from your manuscript.
+\end{abstract}
+
+% Use if graphical abstract is present
+%\begin{graphicalabstract}
+%\includegraphics{}
+%\end{graphicalabstract}
+
+% Research highlights
+\begin{highlights}
+\item We improve the interpretability and robustness of classifier chains (CCs) by allowing sparse structures.
+\item We propose a heuristic algorithm for finding sparse CCs targeting any given evaluation metric.
+\item We demonstrate the advantages of our proposal via an extensive empirical study.
+\end{highlights}
+
+
+% Keywords
+% Each keyword is seperated by \sep
+\begin{keywords}
+Sparse classifier chains\sep Multi-label classification \sep Structure learning \sep Predictions with partial abstention 
+\end{keywords}
+
+\maketitle
+
+% Main text
+\section{Introduction}\label{sec:Introduction}
+
+Multi-label classification (MLC), where each instance can be associated with none, one, or multiple labels simultaneously, has been receiving increasing attention \citep{garcia2024thorough,madjarov2012extensive,nguyen2026probabilistic,nguyen2026robust,tsoumakas2010random,zhang2013review}. One of the main challenges is to deal with multiple evaluation metrics, which reflect different ways to assess the multi-label classifiers \citep{garcia2024thorough,nguyen2021multilabel,zhang2013review}. A common practice in constructing MLC methods is to follow the statistical learning theory (SLT) \citep{vapnik1999overview}: Once the evaluation metric is specified, the empirical risk minimization principle is adopted to find an optimal classifier that optimizes the empirical risk functional constructed based on the training set.
+
+A specific family of such methods is the so-called discriminative chain rule-based classifiers, which essentially seek good estimates of the joint conditional probability distributions over the label variables by optimizing (surrogates of) 0/1 loss \citep{gerych2021recurrent,gonccalves2015simpler,liu2015optimality,nguyen2023probabilistic,nguyen2026probabilistic}. The optimization of multiple instance-based MLC losses is then done at the prediction phase by predicting Bayes-optimal predictions (BOPs) following the Bayesian inference principle \citep{dembczynski2012label,nguyen2026probabilistic,waegeman2014bayes}. While being theoretically sound and interpretable (thanks to the compact representation of the dependencies encoded by the directed acyclic graphs (DAGs) over the label variables), this family often comes with computationally expensive prediction phases \citep{nguyen2023probabilistic,nguyen2026probabilistic}. Classifier chains \citep{read2011classifier,read2021classifier} are among the most popular multi-label classifiers within this family, where the dependencies are encoded by fully connected DAGs. 
+
+A common practice to mitigate the computational burden is to proceed with the label independence assumption \citep{dembczynski2012label,nguyen2021multilabel}, which results in the use of the so-called binary relevance (BR) classifiers in the training phase and allows polynomial prediction algorithms for BOP computation of various MLC evaluation metrics \citep{nguyen2021multilabel}. However, this clearly comes with the cost of interpretability, especially when one wishes to see which label dependencies may benefit the optimization of the evaluation metrics.   
+
+There is another family of multi-label classifiers targeting the given specific population-based MLC evaluation metric \citep{pillai2017designing, zhang2018binary}. Notable attempts in this family are constructed based on BR classifiers and mainly differ in the thresholds used to make the final predictions \citep{pillai2017designing, zhang2018binary}. Often, the thresholds are defined at the population level, which then results in low prediction costs.  While being scalable and rather accurate, they again come with the cost of interpretability, especially when one wishes to see which label dependencies may benefit the optimization of the evaluation metrics.      
+
+This paper is an attempt to combine the advantages of the two mentioned families of multi-label classifiers. More precisely, we propose to learn sparse classifier chains targeting the given specific population-based MLC evaluation metrics. This allows low prediction costs and, at the same time, suggests information on dependencies which may benefit the optimization of the evaluation MLC metric. Clearly, the problem of finding the most sparse classifier chain that optimizes a given specific population-based MLC evaluation metric is challenging due to the exponential number of possible DAGs over the label variables. Therefore, we propose a greedy approach to find approximate solutions. Through an extensive empirical study, we demonstrate the potential advantages of our proposal in the standard MLC setting and MLC with partial abstention, where the classifiers are allowed to abstain from making precise predictions on uncertain labels \citep{nguyen2021multilabel,nguyen2026robust}. 
+
+The remainder of this paper is organized as follows. \Cref{sec:Classifier chains} contains an overview of classifier chains. In \Cref{sec:Sparse classifier chains}, we present Sparse Classifier Chains alongside the training and prediction procedures of our proposed method. To compare our approach with other multi-label classification methods, a series of experiments was conducted in \Cref{sec:Experiments}.
+
+\section{Classifier chains}\label{sec:Classifier chains}
+
+\subsection{Generalities}\label{subsec:cc-generalities}
+
+Let $\mathcal{X}\subseteq\mathbb{R}^{d}$ denote the instance space and let
+$\mathcal{Y}=\{0,1\}^{L}$ be the output space associated with a set of labels
+$\mathcal{L}=\{1,\ldots,L\}$. A multi-label example is a pair
+$(\boldsymbol{x},\boldsymbol{y})\in\mathcal{X}\times\mathcal{Y}$, where
+$y_{\ell}=1$ indicates the relevance of label $\ell$ and $y_{\ell}=0$ its
+irrelevance. Given a training sample
+$\mathcal{D}=\{(\boldsymbol{x}_{i},\boldsymbol{y}_{i})\}_{i=1}^{n}$ drawn
+independently from an unknown distribution $P(\boldsymbol{X},\boldsymbol{Y})$,
+the conventional MLC task is to learn a predictor
+$h:\mathcal{X}\rightarrow\mathcal{Y}$. Its output
+$\widehat{\boldsymbol{y}}=h(\boldsymbol{x})$ is evaluated by an MLC metric,
+which may aggregate prediction outcomes across labels, instances, or both
+\citep{dembczynski2012label,zhang2013review}. In the partial-abstention setting,
+the prediction space is extended to $\{0,1,\bot\}^{L}$, where $\bot$ denotes
+that no precise prediction is issued for the corresponding label
+\citep{nguyen2021multilabel}.
+
+Classifier chains (CCs) transform the MLC problem into $L$ binary
+classification problems and connect them according to a label order
+$\boldsymbol{\pi}=(\pi_{1},\ldots,\pi_{L})$, which is a permutation of
+$\mathcal{L}$ \citep{read2011classifier,read2021classifier}. By the probability
+chain rule, the conditional distribution of the label vector can be factorized
+for any such order as
+\begin{equation}
+P(\boldsymbol{y}\mid\boldsymbol{x})
+=\prod_{j=1}^{L}
+P\!\left(y_{\pi_{j}}\mid
+\boldsymbol{x},y_{\pi_{1}},\ldots,y_{\pi_{j-1}}\right).
+\label{eq:cc-chain-rule}
+\end{equation}
+A probabilistic CC approximates each factor in \cref{eq:cc-chain-rule} by a
+binary conditional model $q_{\pi_j}$. Thus, the classifier for label $\pi_j$
+uses the original features together with the labels preceding it in
+$\boldsymbol{\pi}$, whereas the first classifier only uses
+$\boldsymbol{x}$.
+
+Equivalently, a standard CC can be represented by a directed acyclic graph
+(DAG) whose vertices are the $L$ labels and whose edges are
+$(\pi_r,\pi_j)$ for every $r<j$. This is a complete DAG relative to the chosen
+order and therefore contains $L(L-1)/2$ label-to-label edges. An edge in this
+graph expresses a predictive conditioning relation and should not, in general,
+be interpreted as a causal relation. In contrast, binary relevance corresponds
+to the empty label graph, since every label is predicted solely from
+$\boldsymbol{x}$. These two structures delimit the central trade-off considered
+in this work: a dense CC makes all preceding labels available to every local
+classifier, whereas a sparse chain retains only selected conditioning
+relations. The learning and prediction procedures for the standard dense CC
+are described next.
+
+\subsection{Learning phase}
+
+\subsection{Prediction phase}
+
+\subsection{Disadvantages}
+
+\section{Sparse classifier chains}\label{sec:Sparse classifier chains}
+
+\subsection{Generalities}
+
+\subsection{Learning phase}
+
+\subsection{Prediction phase}
+
+\section{Experiments}\label{sec:Experiments}
+
+\subsection{Experimental setting}
+
+\subsection{Results}
+
+\section{Conclusion}\label{sec:Conclusion}
+
+% Numbered list
+% Use the style of numbering in square brackets.
+% If nothing is used, default style will be taken.
+%\begin{enumerate}[a)]
+%\item 
+%\item 
+%\item 
+%\end{enumerate}  
+
+% Unnumbered list
+%\begin{itemize}
+%\item 
+%\item 
+%\item 
+%\end{itemize}  
+
+% Description list
+%\begin{description}
+%\item[]
+%\item[] 
+%\item[] 
+%\end{description}  
+
+\clearpage %%Remove this from your manuscript
+
+
+% Figure
+\begin{figure}%[]
+  \centering
+%    \includegraphics{}
+    \caption{}\label{fig1}
+\end{figure}
+
+
+\begin{table}%[]
+\caption{}\label{tbl1}
+\begin{tabular*}{\tblwidth}{@{}LL@{}}
+\toprule
+  &  \\ % Table header row
+\midrule
+ & \\
+ & \\
+ & \\
+ & \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+% Uncomment and use as the case may be
+%\begin{theorem} 
+%\end{theorem}
+
+% Uncomment and use as the case may be
+%\begin{lemma} 
+%\end{lemma}
+
+%% The Appendices part is started with the command \appendix;
+%% appendix sections are then done as normal sections
+%% \appendix
+
+\section{}\label{}
+
+% To print the credit authorship contribution details
+\printcredits
+
+%% Loading bibliography style file
+%\bibliographystyle{model1-num-names}
+\bibliographystyle{cas-model2-names}
+
+% Loading bibliography database
+\bibliography{cas-refs}
+
+% Biography
+%\bio{}
+% Here goes the biography details.
+%\endbio
+
+%\bio{pic1}
+% Here goes the biography details.
+%\endbio
+
+\end{document}
+

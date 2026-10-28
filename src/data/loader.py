@@ -10,6 +10,31 @@ import numpy as np
 import pandas as pd
 
 
+V6_3_3_DATASETS = (
+    "emotions",
+    "scene",
+    "yeast",
+    "chd49",
+    "music",
+    "gpositivepseaac",
+    "genbase",
+    "viruspseaac",
+    "plantpseaac",
+    "humanpseaac",
+)
+
+
+DATASET_ALIASES = {
+    "chd_49": "chd49",
+    "gpositive_pseaac": "gpositivepseaac",
+    "grampositivepseaac": "gpositivepseaac",
+    "gram_positive_pseaac": "gpositivepseaac",
+    "human_pseaac": "humanpseaac",
+    "plant_pseaac": "plantpseaac",
+    "virus_pseaac": "viruspseaac",
+}
+
+
 DATASET_CONFIG = {
     "emotions": {
         "arff_path": "data/emotions/emotions.arff",
@@ -65,6 +90,10 @@ DATASET_CONFIG = {
         "xml_path": "data/genbase/genbase.xml",
         "label_location": "end",
         "num_labels": 27,
+        # The raw Mulan ARFF contains a nominal ``protein`` column with one
+        # unique identifier per sample.  It is not a predictive motif/profile
+        # and must not be ordinal-encoded for sklearn estimators.
+        "ignored_feature_names": ["protein"],
         "description": "Genomic sequence classification (27 labels, 662 samples)"
     },
     "medical": {
@@ -136,6 +165,14 @@ DATASET_CONFIG = {
         "description": "Virus protein subcellular localization (6 labels, 207 samples)"
     }
 }
+
+
+def canonicalize_dataset_name(dataset_name):
+    """Return the canonical lowercase registry key for a dataset name."""
+    if not isinstance(dataset_name, str) or not dataset_name.strip():
+        raise ValueError("dataset_name must be a non-empty string")
+    normalized = dataset_name.strip().casefold()
+    return DATASET_ALIASES.get(normalized, normalized)
 
 
 def _parse_xml_labels(xml_path):
@@ -272,6 +309,7 @@ def load_dataset(dataset_name, base_dir="."):
         feature_names (list): List of feature attribute names
         label_names (list): List of label attribute names
     """
+    dataset_name = canonicalize_dataset_name(dataset_name)
     if dataset_name not in DATASET_CONFIG:
         raise ValueError(f"Unknown dataset: {dataset_name}. Available: {list(DATASET_CONFIG.keys())}")
 
@@ -314,7 +352,17 @@ def load_dataset(dataset_name, base_dir="."):
         else:
             label_cols = attr_names[-num_labels:]
 
-    feature_cols = [c for c in attr_names if c not in label_cols]
+    ignored_feature_names = set(config.get("ignored_feature_names", []))
+    missing_ignored_features = ignored_feature_names.difference(attr_names)
+    if missing_ignored_features:
+        raise ValueError(
+            f"Configured ignored features are absent from {dataset_name}: "
+            f"{sorted(missing_ignored_features)}"
+        )
+    feature_cols = [
+        c for c in attr_names
+        if c not in label_cols and c not in ignored_feature_names
+    ]
 
     # Process X (features)
     df_features = df[feature_cols]
@@ -346,5 +394,24 @@ def load_all_datasets(base_dir="."):
             "n_labels": Y.shape[1],
             "cardinality": float(Y.sum(axis=1).mean()),
             "density": float(Y.mean())
+        }
+    return data_dict
+
+
+def load_v6_3_3_datasets(base_dir="."):
+    """Load the frozen ten-dataset collection used by v6.3.3."""
+    data_dict = {}
+    for name in V6_3_3_DATASETS:
+        X, Y, feature_names, label_names = load_dataset(name, base_dir=base_dir)
+        data_dict[name] = {
+            "X": X,
+            "Y": Y,
+            "feature_names": feature_names,
+            "label_names": label_names,
+            "n_samples": X.shape[0],
+            "n_features": X.shape[1],
+            "n_labels": Y.shape[1],
+            "cardinality": float(Y.sum(axis=1).mean()),
+            "density": float(Y.mean()),
         }
     return data_dict
