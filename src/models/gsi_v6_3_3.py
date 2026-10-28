@@ -5,16 +5,17 @@ Reference:
     - spec/spec_v6_3_3.md
 
 Enhancements over v6.3.2:
-1. Tri-Regime Partitioning:
-   - Regime 1 (Rare-Negative, pi_l < 0.20): Bayes Likelihood Ratio + Balanced-Root Platt + Precision Guard.
-   - Regime 2 (Symmetric, 0.20 <= pi_l <= 0.80): Symmetric Chow Rule [c, 1-c], raw base probabilities preserved.
-   - Regime 3 (Rare-Positive, pi_l > 0.80): Inverted Bayes LR + Inverted Balanced-Root Platt + Negative Precision Guard.
+1. Tri-Regime Partitioning (tau_balance=0.85):
+   - Negative-majority (pi_l < 0.425): Bayes likelihood ratio and root-weighted calibration.
+   - Symmetric (0.425 <= pi_l <= 0.575): identity calibration.
+   - Positive-majority (pi_l > 0.575): inverted likelihood ratio and calibration.
 2. Smooth Boundary Blending (blend_kappa = 20.0):
    - Eliminates discontinuity cliffs between CV folds by smoothly interpolating decision thresholds via sigmoid weighting.
 3. Scale-Aligned One-Step Normalized Mean-Field Coupling (OS-NMF):
    - Inherits v6.3.2 spin-centering, degree normalization, and bounded logit shifts.
-4. Zero Regression & Component Isolation:
-   - Preserves all v6.2 and v6.3.2 baseline metrics while recovering optimal performance on CHD49 and VirusPseAAC.
+4. Frozen paper configuration:
+   - SAMG is disabled by default; it remains an explicit experimental option.
+   - Reference config: configs/v6_3_3_final.json.
 """
 
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
@@ -75,7 +76,7 @@ class GSIMLCPAv6_3_3Classifier(GSIMLCPAv6_3_2Classifier):
         blend_kappa: float = 20.0,
         tau_1_cap: float = 0.55,
         tau_0_floor: float = 0.45,
-        separation_aware: bool = True,
+        separation_aware: bool = False,
     ):
         super().__init__(
             base_learner=base_learner,

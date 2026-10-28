@@ -205,16 +205,16 @@ def apply_dual_coverage_guard(
 def compute_tri_regime_adaptive_thresholds_table(
     Y_train: np.ndarray,
     OOF_probs: Optional[np.ndarray] = None,
-    cost: float = 0.35,
+    cost: float = 0.30,
     tau_balance: float = 0.85,
     blend_kappa: float = 20.0,
-    gamma_min: float = 0.78,
+    gamma_min: float = 0.70,
     clip_bounds: Tuple[float, float] = (0.005, 0.995),
     precision_guard: bool = True,
     tau_1_cap: float = 0.55,
     tau_0_floor: float = 0.45,
     in_sample_probs: Optional[np.ndarray] = None,
-    separation_aware: bool = True,
+    separation_aware: bool = False,
     sep_rare_threshold: float = 0.20,
     sep_percentile: float = 99.5,
 ) -> Dict[int, Dict[str, Any]]:
@@ -225,10 +225,10 @@ def compute_tri_regime_adaptive_thresholds_table(
     Parameters:
         Y_train: In-fold binary training targets (N, K).
         OOF_probs: Optional continuous Out-Of-Fold probabilities (N, K).
-        cost: Rejection cost c. Default 0.35.
+        cost: Rejection cost c. Default 0.30.
         tau_balance: Balance cutoff for beta. Default 0.85.
         blend_kappa: Sigmoid blend slope. Default 20.0.
-        gamma_min: Coverage guard floor. Default 0.78.
+        gamma_min: OOF training coverage target. Default 0.70; not a test guarantee.
         clip_bounds: Threshold bounding tuple.
         precision_guard: Whether to enforce directional precision floors.
         tau_1_cap: Upper clamp on tau_1 for minority positive labels. Default 0.55.
