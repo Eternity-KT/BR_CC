@@ -11,6 +11,9 @@ setup scripts and documentation preserve those source files and result bytes.
 Earlier v6.3.4/v6.3.5 work and paper drafts are preserved on
 `archive/pre-final-v6_3_4-v6_3_5-20261028`.
 
+If starting from the final ZIP, initialize its local Git history as described
+in the packaging section before running tests or experiments.
+
 ## Set up the final environment
 
 The tested environment is **Windows x64, Python 3.13.14 and PyTorch
@@ -42,8 +45,9 @@ the environment's interpreter directly, so activation is optional.
 ## Validate the datasets
 
 Raw dataset files must be present under `data/` at the paths listed in
-[configs/datasets_v6_3_3.json](configs/datasets_v6_3_3.json). They are excluded
-from Git. Obtain the original bundles using the source and citation notes in
+[configs/datasets_v6_3_3.json](configs/datasets_v6_3_3.json). The complete final
+ZIP includes them; they are excluded from Git. For a source checkout, obtain
+the original bundles using the source and citation notes in
 [data/README.md](data/README.md), and preserve their original bytes.
 
 ```powershell
@@ -199,6 +203,59 @@ F1 together with coverage. Fold means are computed within each dataset first;
 overall summaries weight datasets equally. The 70% training coverage target
 is not a test-set guarantee.
 
+## Package the final project
+
+Create the complete local package, including the 16 raw input files for the
+10 final datasets and their upstream README files:
+
+```powershell
+.\.venv-final\Scripts\python.exe scripts/package_final.py
+```
+
+The output is an unpacked project at `dist/BR_CC-v6.3.3-final/`, a ZIP at
+`dist/BR_CC-v6.3.3-final.zip` and its `.zip.sha256` sidecar. The package
+contains only the frozen source/configuration, final workflow scripts and
+tests, final dataset inputs/metadata, the 900-fit result set and this README.
+It omits historical results, experimental reports, paper drafts, reference
+PDFs, unrelated datasets, caches, `.git` and the virtual environment.
+
+All 78 source/configuration files listed in the benchmark manifest are kept
+byte-for-byte, including earlier modules/configurations captured by that
+snapshot. This preserves the existing provenance and verification contract.
+`PACKAGE_MANIFEST.json` records the packaging commit, original benchmark
+commit, run ID and inventory counts. `PACKAGE_CHECKSUMS.sha256` covers every
+other packaged file. ZIP entries use fixed timestamps, a stable order and
+fixed compression settings; rebuilding the same committed inputs in the
+same environment produces identical ZIP bytes.
+
+Export requires a clean working tree and the original frozen source bytes.
+An existing output is preserved; choose `--output-root dist/rebuild` for
+another build. To omit raw datasets, use `--without-data` with a separate
+output root. Dataset source/citation conditions remain those of the original
+bundles. A root `LICENSE` is included if present; this repository currently
+does not specify a code license.
+
+Verify a ZIP or an untouched unpacked folder with the standard library only:
+
+```powershell
+python scripts/package_final.py --verify dist/BR_CC-v6.3.3-final.zip
+```
+
+After extracting the ZIP, open PowerShell inside `BR_CC-v6.3.3-final/`.
+Initialize a local repository so the benchmark runner can record provenance
+for new runs (Git needs your usual local author configuration):
+
+```powershell
+git init -b paper/v6.3.3-final
+git add .
+git commit -m "Initialize final artifact snapshot"
+```
+
+Then follow the environment setup and final check commands above. Existing
+benchmark manifests retain their original source commit. New experiments
+record the local snapshot commit. Verify the package inventory before setup
+or execution, which creates extra local files such as caches and Git metadata.
+
 ## Repository entry points
 
 | Path | Purpose |
@@ -210,6 +267,7 @@ is not a test-set guarantee.
 | [scripts/setup_final_env.ps1](scripts/setup_final_env.ps1) | Isolated pinned environment setup |
 | [scripts/check_final.py](scripts/check_final.py) | Environment, tests, smoke/resume and artifact checks |
 | [scripts/run_v6_3_3_final.py](scripts/run_v6_3_3_final.py) | Frozen benchmark runner |
+| [scripts/package_final.py](scripts/package_final.py) | Final package export and inventory verification |
 | [tests](tests) | Regression tests selected by `pytest-final.ini` |
 | [data/README.md](data/README.md) | Dataset normalization, provenance and citations |
 
