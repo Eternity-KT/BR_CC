@@ -1,480 +1,217 @@
-# Multi-Label Classification: BR, CC, MLC-PA, and GSI-MLC-PA
+# GSI-MLC-PA v6.3.3
 
-## v6.3.3 final: source and reproducible benchmark
+Multi-label classification with partial abstention. This repository contains
+the final source, dataset manifests and saved experimental results for the
+standard **v6.3.3 configuration with SAMG disabled**.
 
-The frozen configuration is [configs/v6_3_3_final.json](configs/v6_3_3_final.json).
-It uses standard v6.3.3 with SAMG disabled, rejection cost `0.30`, OOF training
-coverage target `0.70`, and five outer folds with seeds `42..46`. The target is
-not a lower bound on test coverage. The release source is tagged `v6.3.3-final`.
-Work on v6.3.4/v6.3.5 and draft documents is preserved on branch
+Use branch `paper/v6.3.3-final` for the setup and verification workflow below.
+The benchmark source is frozen at tag `v6.3.3-final` (commit `0384c39`), and
+the completed results at tag `v6.3.3-final-results` (commit `43d033d`). Later
+setup scripts and documentation preserve those source files and result bytes.
+Earlier v6.3.4/v6.3.5 work and paper drafts are preserved on
 `archive/pre-final-v6_3_4-v6_3_5-20261028`.
 
-Run from the project root using the versions in `requirements-final.lock.txt`
-(Python 3.13.14; CUDA is required by the frozen MLP configuration):
+## Set up the final environment
+
+The tested environment is **Windows x64, Python 3.13.14 and PyTorch
+2.6.0+cu124**. The full benchmark requires CUDA for its MLP learner; the
+reference GPU is an NVIDIA GeForce RTX 4060 Laptop GPU. Logistic and SVM
+experiments, artifact verification and the default smoke test can run without
+a GPU. Git must be available for source provenance checks.
+
+Run every command below from the repository root in PowerShell:
 
 ```powershell
-python scripts/validate_v6_3_3_datasets.py
-python scripts/run_v6_3_3_final.py
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup_final_env.ps1
 ```
 
-The benchmark fits 6 models on 10 datasets, 3 base learners and 5 folds: **900
-fits**. BR, CC, MLC-PA and the three GSI variants share the same binary base
-estimator parameters. In particular, MLP uses the same per-label 64-unit
-network for every family, instead of mixing the previous multi-output BR MLP
-with per-label GSI MLPs. SVM uses nested sigmoid calibration for every family.
-The `GSI_v6_2_1` comparator is `GSIMLCPAv6_2Classifier` with decaying peeling.
+If `python` points to a different version, select the Python 3.13.14 executable:
 
-Every model uses identical saved outer folds and a MaxAbsScaler fitted only
-on the outer training set. Internal peeling, calibration and thresholds use
-only that training set. Dataset normalization excludes Genbase's `protein`
-identifier; these results therefore replace the earlier Genbase numbers.
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup_final_env.ps1 -Python "C:\path\to\Python313\python.exe"
+```
 
-Results are written under `results/v6_3_3_final/run_<hash>/`. The hash includes
-source, configuration, data manifest, environment and experiment selection.
-Repeating the command resumes matching checkpoints; changes create another
-run directory. Completed prediction files are hash-checked before reuse.
+Setup creates `.venv-final`, installs pinned build tools and the 29 package
+versions in [requirements-final-env.lock.txt](requirements-final-env.lock.txt),
+and runs `pip check`. The dependency closure includes the immutable benchmark
+runtime lock, [requirements-final.lock.txt](requirements-final.lock.txt).
+Build temporary files and the package cache stay inside `.venv-final` on the
+same volume. The CUDA wheel download is approximately 2.5 GB. Commands use
+the environment's interpreter directly, so activation is optional.
 
-| Artifact | Contents |
+## Validate the datasets
+
+Raw dataset files must be present under `data/` at the paths listed in
+[configs/datasets_v6_3_3.json](configs/datasets_v6_3_3.json). They are excluded
+from Git. Obtain the original bundles using the source and citation notes in
+[data/README.md](data/README.md), and preserve their original bytes.
+
+```powershell
+.\.venv-final\Scripts\python.exe scripts/validate_v6_3_3_datasets.py
+```
+
+The validator checks file sizes, SHA256 hashes, loaded matrices and agreement
+between the JSON manifest and [data/dataset_manifest.csv](data/dataset_manifest.csv).
+Exit code `0` indicates success, including the documented dataset warnings.
+
+| Dataset key | Samples | Features | Labels |
+|---|---:|---:|---:|
+| `emotions` | 593 | 72 | 6 |
+| `scene` | 2,407 | 294 | 6 |
+| `yeast` | 2,417 | 103 | 14 |
+| `chd49` | 555 | 49 | 6 |
+| `music` | 592 | 71 | 6 |
+| `gpositivepseaac` | 519 | 440 | 4 |
+| `genbase` | 662 | 1,185 | 27 |
+| `viruspseaac` | 207 | 440 | 6 |
+| `plantpseaac` | 978 | 440 | 12 |
+| `humanpseaac` | 3,106 | 440 | 14 |
+
+Loaders return finite `float32` features and binary `int32` labels. Genbase's
+unique `protein` identifier is excluded. PseAAC train/test files are joined
+before creating the benchmark folds. Exact duplicate rows are retained:
+Scene has 7, Genbase has 455 after identifier removal, and VirusPseAAC has 1.
+The folds do not group duplicates. Music and Emotions are related audio
+benchmark variants. These choices matter when interpreting generalization
+and statistical comparisons; details and upstream citation requirements are
+in the dataset README.
+
+## Run the final checks
+
+```powershell
+.\.venv-final\Scripts\python.exe scripts/check_final.py
+```
+
+This checks the isolated environment and dependency versions, runs the final
+regression suite, fits all six models on VirusPseAAC with Logistic on fold 1,
+checks checkpoint resume, compares predictions with the frozen reference and
+verifies all 900 saved benchmark cells. Smoke outputs go to the ignored
+`scratch/final_checks/smoke/` directory.
+
+Include SVM and CUDA MLP in the smoke test for **18 fits**:
+
+```powershell
+.\.venv-final\Scripts\python.exe scripts/check_final.py --gpu-smoke
+```
+
+Individual stages are available through `--stage environment`,
+`--stage tests`, `--stage smoke` and `--stage verify`. Each subprocess has a
+600-second deadline, adjustable with `--timeout`. The controller disables
+external pytest plugin autoloading and user-site packages for its children.
+[pytest-final.ini](pytest-final.ini) selects the v6.3.3 path and its shared
+dependencies, including dataset, metric, calibration, peeling and checkpoint
+regressions. The legacy scikit-learn MLP test can emit convergence warnings;
+the final MLP benchmark uses PyTorch.
+
+## Reproduce experiments
+
+[configs/v6_3_3_final.json](configs/v6_3_3_final.json) defines the frozen
+protocol. Binary estimator parameters come from
+[configs/experiment.json](configs/experiment.json).
+
+| Setting | Final protocol |
 |---|---|
-| `detailed_folds.csv` | One metric row per dataset/learner/model/fold |
-| `dataset_summary.csv` | Mean and sample standard deviation over folds |
-| `overall_summary.csv` | Equal-dataset means for each learner/model |
-| `per_label_folds.csv` | Class support, confusion counts, coverage and F1 |
-| `thresholds_audit.csv`, `partitions_audit.csv` | Learned thresholds and IL/DL membership |
-| `fold_indices.json` | Original row indices of all train/test folds |
-| `predictions/*.npz` | Test row indices, truth, probabilities, both predictions and scaler state |
-| `cells/*.json` | Resumable per-fit checkpoints and captured warnings |
-| `run_manifest.json`, `*_snapshot.json`, `checksums.sha256` | Git SHA, environment, immutable inputs and artifact integrity |
+| Models | `BR`, `CC`, `MLC_PA`, `GSI_v6_2_1`, `GSI_v6_3_2`, `GSI_v6_3_3` |
+| Base learners | `logistic`, `svm_calibrated`, `mlp` |
+| Outer evaluation | 5 shuffled multilabel-stratified folds, split seed 42 |
+| Model seeds | `42 + fold - 1`, shared across model families |
+| Preprocessing | MaxAbsScaler fitted only on the outer training fold |
+| GSI inner folds | 5; peeling, calibration and threshold selection use training data only |
+| Rejection cost | `0.30`, linear penalty, abstention encoded as `-1` |
+| v6.3.3 variant | Standard; `separation_aware=false` (SAMG off) |
+| Coverage target | `0.70` on OOF training predictions; test coverage can be lower |
+| Execution | One Torch/BLAS thread, deterministic Torch, TF32 disabled |
 
-Verify the completed run by recomputing metrics from the saved predictions:
+All six families share the same binary estimator settings. MLP uses a
+per-label 64-unit PyTorch network for every family. SVM uses nested sigmoid
+calibration within the current training fold. `GSI_v6_2_1` names the
+`GSIMLCPAv6_2Classifier` comparator with decaying peeling.
 
-```powershell
-python scripts/verify_v6_3_3_results.py results/v6_3_3_final/run_<hash>
-```
-
-For a quick smoke run using all six models and all three learners:
-
-```powershell
-python scripts/run_v6_3_3_final.py --datasets viruspseaac --folds 1 --output-root results/v6_3_3_smoke
-```
-
-Tests (disable external pytest plugins if their automatic loading hangs):
+For a smaller CPU experiment, run all six models on Emotions with Logistic
+across five folds (**30 fits**):
 
 ```powershell
-$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD = "1"
-python -m pytest tests/test_dataset_standardization.py tests/test_v6_3_3_core.py tests/test_v6_3_3_final_runner.py -q
+.\.venv-final\Scripts\python.exe scripts/run_v6_3_3_final.py --datasets emotions --base-learners logistic --output-root scratch/final_checks/emotions
 ```
 
-The sections below describe the older experiment interfaces and model history.
-
-Dự án triển khai và đánh giá thực nghiệm so sánh các thuật toán phân loại đa nhãn (Multi-Label Classification) kinh điển: **Binary Relevance (BR)** (LinearSVC & Logistic Regression) và **Classifier Chains (CC)** trên **10 tập dữ liệu benchmark** với quy trình **5-Fold Stratified Cross-Validation**, tuân thủ nghiêm ngặt các chuẩn được công bố trong các bài báo gốc.
-
----
-
-## 1. Tài Liệu Tham Khảo (References)
-
-1. **Binary Relevance (BR)**:
-   - *Zhang, M.-L., Li, Y.-K., Liu, X.-Y., & Geng, X. (2018).* **Binary relevance for multi-label learning: an overview.** *Frontiers of Computer Science*, 12(2), 191–202. (`TaiLieuThamKhao/FCS'17.pdf`)
-2. **Classifier Chains (CC)**:
-   - *Read, J., Pfahringer, B., Holmes, G., & Frank, E. (2011).* **Classifier chains for multi-label classification.** *Machine Learning*, 85(3), 333–359. (`TaiLieuThamKhao/s10994-011-5256-5.pdf`)
-
----
-
-## 2. Chi Tiết Cấu Hình Mô Hình (Model Configurations)
-
-### 2.1. Cấu Hình Chung & Base Classifiers
-
-Schema v2/legacy hỗ trợ trực tiếp các classifier bên dưới. Schema v3 bổ sung
-MLP PyTorch và calibrated SVM qua shared registry; xem mục 8 để chạy ma trận
-12 baseline có cấu hình khớp nhau.
-
-| Base Classifier | Cấu hình siêu tham số | Loss Function | Đặc điểm & Ưu thế |
-|---|---|---|---|
-| **Support Vector Machine (`LinearSVC`)** | `C=1.0`, `dual="auto"`, `max_iter=10000`, `random_state=42` | Hinge Loss: $\max(0, 1 - y \cdot f(x))$ | Tối đa hóa lề (Max-margin), cực kỳ mạnh mẽ trên không gian đặc trưng số chiều lớn. |
-| **Hồi Quy Logistic (`LogisticRegression`)** | `solver="liblinear"`, `C=1.0`, `max_iter=1000`, `random_state=42` | Log Loss: $-\log P(y \mid x)$ | Đầu ra xác suất chuẩn xác $P(Y_j = 1 \mid X) \in [0, 1]$ qua hàm Sigmoid, tối ưu mượt mà. |
-
-> **Xử lý nhãn đơn (Degenerate Cases):** Lớp `_ConstantClassifier` tự động xử lý khi một nhãn trong fold chỉ xuất hiện 1 lớp (toàn 0 hoặc toàn 1), hỗ trợ đầy đủ `predict()`, `predict_proba()`, và `decision_function()`.
-
----
-
-### 2.2. Cấu Hình Binary Relevance (BR)
-
-- **Module:** `src/models/binary_relevance.py`
-- **Các lớp được cung cấp:**
-  - `BinaryRelevanceClassifier(base_estimator=None, random_state=42)`: Mặc định sử dụng LinearSVC (hoặc truyền `'logistic'` / `'svm'` / estimator instance).
-  - `BinaryRelevanceLogisticRegression(C=1.0, solver="liblinear", max_iter=1000, random_state=42)`: Phiên bản chuyên biệt sử dụng Hồi quy Logistic.
-- **Nguyên lý:** Phân rã bài toán đa nhãn thành $q$ bài toán phân loại nhị phân độc lập ($q$ là số lượng nhãn).
-- **Không gian thuộc tính mỗi bộ phân loại:** $X \in \mathbb{R}^{d}$ (giữ nguyên không gian $d$ chiều ban đầu).
-- **Hàm dự đoán xác suất:** `predict_proba(X)` trả về ma trận $P(Y_j = 1 \mid X) \in [0, 1]^{n \times q}$.
-- **Đặc trưng:** Đơn giản, tính toán song song độc lập, tối ưu tự nhiên cho các chỉ số macro-average.
-
----
-
-### 2.3. Cấu Hình Classifier Chains (CC)
-
-- **Module:** `src/models/classifier_chain.py`
-- **Nguyên lý:** Xâu chuỗi $q$ bộ phân loại nhị phân theo thứ tự, truyền nhãn trước đó làm đặc trưng bổ sung để mô hình hóa quan hệ phụ thuộc giữa các nhãn.
-- **Thứ tự chuỗi (Chain Order):** **Thứ tự mặc định (Natural/Default Order)** $[0, 1, \dots, q-1]$ theo đúng thiết lập chuẩn trong Read et al. (2011).
-- **Training Phase:** Classifier thứ $j$ nhận đầu vào mở rộng $x_i^{(j)} = [x_i, y_i^1, \dots, y_i^{j-1}] \in \mathbb{R}^{d + (j - 1)}$ với ground-truth labels.
-- **Inference Phase:** Greedy propagation với dự đoán nhị phân $\hat{y} \in \{0, 1\}$.
-- **Đặc trưng:** Nắm bắt tương quan nhãn, cải thiện mạnh trên các chỉ số toàn cục như Subset Accuracy & Macro-F1.
-
----
-
-## 3. Danh Sách 10 Tập Dữ Liệu Benchmark
-
-Danh sách dưới đây dành cho benchmark v6.3.3. Registry đầy đủ trong loader vẫn
-hỗ trợ các dataset của thực nghiệm cũ. Chi tiết nguồn dữ liệu, đường dẫn và các
-quy tắc xử lý nằm trong [data/README.md](data/README.md); checksum từng file nằm
-trong [configs/datasets_v6_3_3.json](configs/datasets_v6_3_3.json), cùng bảng
-tổng hợp [data/dataset_manifest.csv](data/dataset_manifest.csv).
-
-Kiểm tra toàn bộ 10 dataset, checksum và tính nhất quán giữa hai manifest:
+Run the complete matrix (**10 datasets × 3 learners × 5 folds × 6 models =
+900 fits**) into a separate reproduction directory:
 
 ```powershell
-python scripts/validate_v6_3_3_datasets.py
+.\.venv-final\Scripts\python.exe scripts/run_v6_3_3_final.py --output-root results/v6_3_3_reproductions
 ```
 
-| # | Dataset | Domain | Samples | Features ($d$) | Labels ($q$) | Label Cardinality | Format / Vị trí nhãn |
-|---|---|---|---|---|---|---|---|
-| 1 | **Emotions** | Music | 593 | 72 | 6 | 1.87 | MULAN (XML + ARFF, nhãn ở cuối) |
-| 2 | **Scene** | Image | 2,407 | 294 | 6 | 1.07 | ARFF (6 nhãn ở đầu) |
-| 3 | **Yeast** | Biology | 2,417 | 103 | 14 | 4.24 | ARFF (14 nhãn ở đầu) |
-| 4 | **CHD49** | Medicine | 555 | 49 | 6 | 2.58 | MAT (`data`, `targets`) |
-| 5 | **Music** | Music | 592 | 71 | 6 | 1.87 | ARFF (6 nhãn ở đầu) |
-| 6 | **GpositivePseAAC** | Biology | 519 | 440 | 4 | 1.01 | Sparse text (train + test) |
-| 7 | **Genbase** | Biology | 662 | 1,185 | 27 | 1.25 | MULAN (bỏ cột ID `protein`) |
-| 8 | **VirusPseAAC** | Biology | 207 | 440 | 6 | 1.22 | Sparse text (train + test) |
-| 9 | **PlantPseAAC** | Biology | 978 | 440 | 12 | 1.08 | Sparse text (train + test) |
-| 10 | **HumanPseAAC** | Biology | 3,106 | 440 | 14 | 1.19 | Sparse text (train + test) |
+Keep the source and configuration committed before running. The runner
+prints `RUN_DIR=...`; that directory contains the new run. The run hash
+captures source bytes, configuration, data manifest, environment and selected
+datasets/learners/folds. Repeating the identical command resumes completed
+cells after checking prediction hashes. A changed identity creates a different
+run directory; a corrupt prediction stops resume. LF/CRLF conversion or a
+different platform/GPU can change the run hash.
 
-Genbase hiện loại cột định danh `protein`, giảm từ 1.186 xuống 1.185 feature.
-Kết quả Genbase cũ có sử dụng cột này cần chạy lại trước khi dùng với loader mới.
-Các hàng trùng được giữ nguyên: Scene có 7, Genbase có 455 sau khi bỏ ID và
-VirusPseAAC có 1. Validator hiển thị chúng dưới dạng warning đã biết.
+Use the explicit output roots above to keep the frozen reference intact.
+The original runner's default output root is `results/v6_3_3_final`; rerunning
+there can refresh manifest timestamps and aggregate files even when fits are
+reused.
 
----
+## Use and verify the saved results
 
-## 4. Bộ Chỉ Số Đánh Giá (Evaluation Metrics)
+The complete reference is
+[results/v6_3_3_final/run_eb0b08cd254f4f0e](results/v6_3_3_final/run_eb0b08cd254f4f0e).
+Verification reads saved artifacts and recomputes metrics without refitting:
 
-Schema v2 lưu 5 chỉ số dự đoán đầy đủ tương thích ngược:
-
-1. **Macro-F1 (⭐ Bắt buộc):** Trung bình điểm F1 trên từng nhãn ($F1_{macro} = \frac{1}{q}\sum_{j=1}^q F1_j$).
-2. **Micro-F1:** Tính F1 gộp toàn bộ các cặp instance-label.
-3. **Hamming Loss (↓ thấp = tốt):** Tỷ lệ dự đoán sai nhãn trên toàn bộ nhãn ($HL = \frac{1}{n \cdot q}\sum_{i=1}^n \sum_{j=1}^q \mathbb{I}(y_{ij} \neq \hat{y}_{ij})$).
-4. **Subset Accuracy (Exact Match):** Tỷ lệ mẫu có vector nhãn dự đoán khớp hoàn toàn 100% với ground truth.
-5. **Example-based F1:** F1 tính trung bình trên từng mẫu dữ liệu.
-
----
-
-## 5. Cấu Trúc Mã Nguồn
-
-```
-BR_CC/
-├── specify.md                          # Tài liệu đặc tả kỹ thuật chi tiết
-├── README.md                           # Hướng dẫn & cấu hình BR/CC
-├── requirements.txt                    # Thư viện phụ thuộc
-├── main.py                             # File thực thi pipeline chính (hỗ trợ CLI)
-├── tests_unit.py                       # Unit tests kiểm tra tính đúng đắn mô hình
-├── TaiLieuThamKhao/
-│   ├── FCS'17.pdf                      # Bài báo tổng quan Binary Relevance
-│   └── s10994-011-5256-5.pdf           # Bài báo Classifier Chains
-├── data/                               # 10 tập dữ liệu ARFF/XML
-├── src/
-│   ├── data/
-│   │   └── loader.py                   # Bộ nạp dữ liệu chuẩn hóa 10 datasets
-│   ├── models/
-│   │   ├── __init__.py                 # Export BR, BR_Logistic, CC
-│   │   ├── binary_relevance.py         # Cài đặt BR (LinearSVC + Logistic Regression)
-│   │   └── classifier_chain.py         # Cài đặt CC
-│   ├── evaluation/
-│   │   ├── cv.py                       # 5-fold Multilabel Stratified CV
-│   │   └── metrics.py                  # Bộ 7 metrics đánh giá
-│   └── visualization/
-│       └── plots.py                    # Xuất biểu đồ đa mô hình 300 DPI và bảng kết quả
-└── results/                            # Thư mục chứa kết quả sau khi chạy
-    ├── tables/
-    │   ├── summary_results.csv         # Bảng Mean ± Std cho tất cả metrics
-    │   └── raw_results.json            # Chi tiết điểm từng fold
-    └── figures/                        # 12+ biểu đồ trực quan hóa
-        ├── macro_f1_comparison.png
-        ├── micro_f1_comparison.png
-        ├── hamming_loss_comparison.png
-        ├── subset_accuracy_comparison.png
-        ├── example_f1_comparison.png
-        ├── macro_precision_comparison.png
-        ├── macro_recall_comparison.png
-        ├── radar_overall.png
-        ├── heatmap_br.png
-        ├── heatmap_br_logistic.png
-        ├── heatmap_cc.png
-        └── summary_table.png
+```powershell
+.\.venv-final\Scripts\python.exe scripts/check_final.py --stage verify
 ```
 
----
+To verify a reproduction, substitute its actual run directory:
 
-## 6. Hướng Dẫn Cài Đặt & Thực Thi Trên Terminal
-
-### 6.1. Cài Đặt Thư Viện
-
-```bash
-pip install -r requirements.txt
+```powershell
+.\.venv-final\Scripts\python.exe scripts/check_final.py --stage verify --run-dir "results/v6_3_3_reproductions/run_<hash>"
 ```
 
-`requirements.txt` installs the PyTorch CUDA 13.0 wheel used by the MLP
-backend. Verify the installation and GPU access with:
+The check covers source consistency, artifact hashes and inventory, fold
+indices, prediction validity, recomputed metrics and dataset summaries.
+LF/CRLF differences in source files are accepted only after comparison with
+the recorded Git commit; other source changes fail. Artifact hashes remain
+byte-exact. The original verifier remains available at
+[scripts/verify_v6_3_3_results.py](scripts/verify_v6_3_3_results.py).
 
-```bash
-python -c "import torch; print(torch.__version__, torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU')"
-```
+| Artifact | Contents in the complete reference |
+|---|---|
+| `detailed_folds.csv` | 900 metric rows, one per dataset/learner/model/fold |
+| `dataset_summary.csv` | 180 rows with fold means and sample standard deviations (`ddof=1`) |
+| `overall_summary.csv` | 18 learner/model rows, equally weighted dataset means |
+| `per_label_folds.csv` | 9,090 rows with support, confusion counts, coverage and F1 |
+| `thresholds_audit.csv` | Per-label thresholds and SAMG state |
+| `partitions_audit.csv` | Per-label independent/dependent group membership |
+| `predictions/*.npz` | 900 files: test indices, truth, probabilities, full/partial predictions and scaler state |
+| `cells/*.json` | 900 resumable checkpoints with metrics and captured warnings |
+| `fold_indices.json` | Original train/test row indices for every outer fold |
+| `run_manifest.json`, `*_snapshot.json` | Source commit, environment, selection and captured input configuration |
+| `checksums.sha256` | Artifact integrity inventory |
 
-### 6.2. Chạy Unit Tests
+`Full_Macro_F1` evaluates binary predictions for every position.
+`Selective_Macro_F1` evaluates decided positions per label, then averages
+across labels; a label with no decided positions receives F1 zero.
+`Coverage` is the fraction of decided sample-label positions. Read selective
+F1 together with coverage. Fold means are computed within each dataset first;
+overall summaries weight datasets equally. The 70% training coverage target
+is not a test-set guarantee.
 
-```bash
-python tests_unit.py
-```
+## Repository entry points
 
-### 6.3. Chạy thực nghiệm resumable trên toàn bộ dataset
+| Path | Purpose |
+|---|---|
+| [src/models/gsi_v6_3_3.py](src/models/gsi_v6_3_3.py) | Final GSI model |
+| [src/models](src/models), [src/selection](src/selection), [src/calibration](src/calibration) | Estimators, peeling/selection and calibration |
+| [src/data](src/data) | Dataset loaders and validation |
+| [src/evaluation](src/evaluation) | Metric implementations and contracts |
+| [scripts/setup_final_env.ps1](scripts/setup_final_env.ps1) | Isolated pinned environment setup |
+| [scripts/check_final.py](scripts/check_final.py) | Environment, tests, smoke/resume and artifact checks |
+| [scripts/run_v6_3_3_final.py](scripts/run_v6_3_3_final.py) | Frozen benchmark runner |
+| [tests](tests) | Regression tests selected by `pytest-final.ini` |
+| [data/README.md](data/README.md) | Dataset normalization, provenance and citations |
 
-Chạy lệnh sau trên terminal:
-
-```bash
-python main.py
-```
-
-### 6.4. Tùy Chọn Tham Số Dòng Lệnh (CLI Arguments)
-
-```bash
-# Chạy một số dataset cụ thể với cả 3 mô hình:
-python main.py --datasets emotions music scene --models BR BR_Logistic CC
-
-# Chỉ so sánh Binary Relevance LinearSVC vs Logistic Regression:
-python main.py --datasets emotions yeast --models BR BR_Logistic
-
-# Tùy chỉnh số folds và thư mục lưu kết quả:
-python main.py --datasets emotions --n_splits 5 --output_dir results_experiment
-```
-
-### 6.5. Sử Dụng Trực Tiếp Trong Mã Python
-
-```python
-from src.data.loader import load_dataset
-from src.models import BinaryRelevanceLogisticRegression, BinaryRelevanceClassifier
-
-# Load dữ liệu
-X, Y, _, _ = load_dataset('emotions')
-
-# Khởi tạo và huấn luyện BR Logistic Regression
-clf = BinaryRelevanceLogisticRegression(C=1.0, max_iter=1000)
-clf.fit(X, Y)
-
-# Dự đoán nhãn nhị phân và xác suất
-y_pred = clf.predict(X)
-y_proba = clf.predict_proba(X)  # P(Y_j = 1 | X)
-```
-
----
-
-## 7. Resumable CV and MLC-PA
-
-The benchmark now checkpoints each model independently in
-`results_pa/tables/<MODEL>.json` (for example, `MLC_PA.json`). Before loading a
-dataset, the runner checks every requested model/dataset pair:
-
-- completed pairs are read from their model cache;
-- missing BR/CC-style caches are imported from the existing
-  `raw_results.json` when available (including `BR_MLP` and `CC_MLP`);
-- only missing pairs enter k-fold CV;
-- plots and CSV tables are rebuilt from cached plus newly computed results.
-
-`MLC_PA.json` also records the number of folds, random seed, base probability
-estimator, the complete rejection-cost grid, reporting cost, and penalty. A
-cache with different decision-loss settings is not reused because its partial
-predictions are not comparable. One fitted probability model is reused across
-all rejection costs.
-
-`MLCPartialAbstentionClassifier` implements the Bayes-optimal generalized
-Hamming-loss rules from Nguyen and Huellermeier (JAIR 2021). It is a decision
-layer over marginal label probabilities:
-
-- SEP / linear penalty: `g(a) = a*c`; decide label `k` exactly when
-  `min(p_k, 1-p_k) <= c`;
-- PAR / concave penalty: `g(a) = a*K*c/(K+a)`; sort marginal decision risks
-  and choose the globally risk-minimizing number of decided labels;
-- `predict()` returns `{0, -1, 1}`, where `-1` means abstain;
-- `predict_full()` returns the corresponding complete binary prediction.
-
-Partial predictions are reported with Generalized Loss, Selective Hamming
-Loss, Selective Macro-F1, Selective Micro-F1, coverage, ABS (fraction of samples
-with at least one abstention), and AABS (fraction of all label positions that
-are abstained). Selective metrics discard abstained (`-1`) positions. Complete
-Macro-F1 and Micro-F1 are retained separately and always come from
-`predict_full()`; partial metrics never overwrite them.
-
-In each selective-model JSON cache, the full metrics are stored under
-`datasets.<dataset>.full`, while the rejection-dependent metrics are stored
-separately for every operating cost under
-`datasets.<dataset>.costs.<cost>.mean/std/raw_folds`. Therefore Selective
-Macro-F1 and Selective Micro-F1 appear in `MLC_PA.json` and `GSI_MLC_PA.json`,
-but not in the rejection-free BR/CC caches.
-
-```bash
-# Default: reuse cached BR_MLP/CC_MLP and run only missing selective models
-python main.py
-
-# SEP with BR-MLP marginal probabilities
-python main.py --models BR_MLP CC_MLP MLC_PA \
-  --abstention_penalty linear \
-  --abstention_costs 0.2 0.25 0.3 0.35 0.4 --mlc_pa_base mlp
-
-# PAR with logistic marginal probabilities
-python main.py --models MLC_PA \
-  --abstention_penalty concave \
-  --abstention_costs 0.2 0.25 0.3 0.35 0.4 --mlc_pa_base logistic
-```
-
-### 7.1. GSI-MLC-PA
-
-`GSI_MLC_PA` uses the same MLP mechanisms as `BR_MLP` and `CC_MLP`. Training,
-IL/DL selection, and correlation are independent of the rejection cost:
-
-1. Each outer CV training fold is split internally into selection-train and
-   validation subsets. The outer test fold is not used during selection.
-2. BR-MLP predicts direct marginal probabilities for every label without
-   abstention. CC-MLP learns each label from the original features plus its
-   ground-truth predecessors on selection-train.
-3. A one-parent DL probability uses exact two-state marginalization:
-   `(1-p_parent)*P(y=1|parent=0) + p_parent*P(y=1|parent=1)`.
-4. Multiple parents use a factorized mean-field approximation by replacing
-   their binary values with their already-finalized soft probabilities under
-   the candidate IL/DL configuration.
-5. Starting with `IL={}` and `DL=all labels`, labels are tested sequentially.
-   A label remains in IL only when complete validation Macro-F1 (threshold
-   `0.5`, no abstention) strictly increases; otherwise it remains in DL.
-6. Only after IL/DL is frozen, Phi/Pearson label correlation is computed from
-   outer-training labels and used to derive the final correlation chain order.
-7. Both probability models are refit on the complete outer-training fold. The
-   test probabilities are computed once.
-8. BOP is then applied at each requested decision-time cost. For linear SEP,
-   `p<=c -> 0`, `c<p<1-c -> abstain`, and `p>=1-c -> 1`.
-
-The cache is `results_pa/tables/GSI_MLC_PA.json` and includes the internal
-validation fraction and selection/marginalization settings. A mismatched cache
-is recomputed rather than silently reused.
-
-```bash
-python main.py --models BR_MLP CC_MLP MLC_PA GSI_MLC_PA \
-  --abstention_costs 0.2 0.25 0.3 0.35 0.4 \
-  --report_cost 0.3 --gsi_validation_size 0.2
-```
-
-The four requested figures are written to `results_pa/plots_pa/`:
-
-- `rejection_cost_comparison.png`;
-- `selective_macro_f1_comparison.png`;
-- `selective_micro_f1_comparison.png`;
-- `generalized_loss_comparison.png`.
-
----
-
-## 8. Schema v3: matched baselines, deployment audit và resumable folds
-
-Schema v3 là pipeline dùng cho thí nghiệm mới; schema v2 vẫn là mặc định để
-không đọc/ghi nhầm cache cũ. Mọi lệnh v3 phải truyền `--result_schema 3` và một
-output directory riêng.
-
-### 8.1. Ma trận 12 baseline chính
-
-| Family | Logistic | PyTorch MLP | Calibrated SVM |
-|---|---|---|---|
-| BR | `BR_Logistic` | `BR_MLP` | `BR_SVM` |
-| CC | `CC_Logistic` | `CC_MLP` | `CC_SVM` |
-| MLC-PA | `MLC_PA_Logistic` | `MLC_PA_MLP` | `MLC_PA_SVM` |
-| GSI-MLC-PA | `GSI_MLC_PA_Logistic` | `GSI_MLC_PA_MLP` | `GSI_MLC_PA_SVM` |
-
-`BR_SVM`/`CC_SVM` và các selective SVM dùng nested sigmoid/Platt calibration
-chỉ trong outer-training fold. Các alias `BR`/`CC` cũ vẫn là raw LinearSVC và
-không thuộc ma trận primary comparison.
-
-Schema v3 tách riêng các scope `Full`, `Selective`, `Rejected`, `Optimistic`
-và `Deployment`. Ngoài complete metrics, output có coverage, risk-at-coverage,
-AURC, ABS/AABS, error capture, optimistic gain, per-label/IL-DL metrics,
-calibration và reviewer scenarios. Optimistic metrics là upper bound giả định
-reviewer đúng 100%, không phải chất lượng tự động của model.
-
-### 8.2. Smoke benchmark tái lập và audit tự động
-
-Từ repository root, chạy:
-
-```bash
-python -m unittest discover -s tests -v
-python tests_unit.py
-
-python main.py --datasets emotions \
-  --models BR_Logistic BR_MLP CC_Logistic CC_MLP MLC_PA_Logistic MLC_PA_MLP GSI_MLC_PA_Logistic GSI_MLC_PA_MLP BR_SVM CC_SVM MLC_PA_SVM GSI_MLC_PA_SVM \
-  --n_splits 2 --random_state 42 \
-  --abstention_costs 0.3 0.5 --report_cost 0.3 \
-  --result_schema 3 --output_dir results_pa_v3_smoke \
-  --label_policy_path configs/label_policy.json \
-  --operating_point_rule min_generalized_loss
-
-python scripts/audit_v3_results.py results_pa_v3_smoke \
-  --datasets emotions --expect-primary-models --folds 2 --costs 0.3 0.5
-```
-
-Smoke chuẩn Q11 có config hash `2a8c08daeccbf1b4`. Audit kiểm tra strict JSON,
-run/checkpoint hashes, đủ folds/model matrix, `Hamming Accuracy + Hamming Loss =
-1`, sanity point `c=0.5`, chín CSV và bảy figures. Chạy lại cùng lệnh sẽ dùng
-checkpoint hoàn thành thay vì fit lại fold.
-
-Artifacts nằm dưới directory có config hash:
-
-```text
-results_pa_v3_smoke/
-├── checkpoints/<MODEL>/emotions.<pair_hash>.json
-├── tables/2a8c08daeccbf1b4/results_v3.json
-├── tables/2a8c08daeccbf1b4/*.csv
-└── figures/2a8c08daeccbf1b4/*.png
-```
-
-### 8.3. Label policy và chọn operating point
-
-`configs/label_policy.json` chứa critical labels, weights, FP/FN cost, review
-cost và reviewer accuracies theo dataset. File mặc định cố ý rỗng; khi domain
-policy chưa được khai báo, critical metrics/utility trả `N/A` và pipeline không
-suy importance từ test prevalence.
-
-Ba rule được hỗ trợ:
-
-- `min_generalized_loss`;
-- `max_utility_at_coverage` với `--operating_coverage_gamma`;
-- `max_coverage_at_risk` với `--operating_risk_epsilon`.
-
-Cost chỉ được chọn trên inner-validation của outer-training fold. Outer-test
-chỉ dùng để báo cáo sau khi operating point đã freeze.
-
-### 8.4. Full run đã freeze và chạy theo quota
-
-Primary config nằm ở `configs/full_run.json`, SHA-256:
-
-```text
-4036af255fcdc462f9d5307b924cc0d1a1004b02309f749ac66826a9bc61fd1e
-```
-
-Kiểm tra config mà chưa chạy model:
-
-```bash
-python scripts/run_frozen_experiment.py --config configs/full_run.json --dry-run
-```
-
-Chạy/resume theo quota bằng fold checkpoint (ví dụ tối đa 20 fold mới trong
-một phiên):
-
-```bash
-python scripts/run_frozen_experiment.py \
-  --config configs/full_run.json --max-new-folds 20
-```
-
-Không sửa `configs/full_run.json` sau khi bắt đầu primary run. Mọi thay đổi
-scientific setting phải tạo config/checksum mới và output directory mới; tham
-số `--max-new-folds` chỉ là giới hạn vận hành, không thay đổi scientific hash.
+Historical runners and configurations serve earlier experiments. Use the
+entry points above for the final v6.3.3 workflow.
