@@ -1,10 +1,26 @@
 import json
+import subprocess
 import zipfile
 from pathlib import Path
 
 import pytest
 
 from scripts import package_final as package
+
+
+@pytest.mark.parametrize("autocrlf", ["true", "false"])
+def test_git_checkout_preserves_frozen_source_bytes(tmp_path, autocrlf):
+    """A fresh Windows or LF checkout must reproduce the P0 byte hashes."""
+    manifest = json.loads((package.ROOT / package.RELEASE / "run_manifest.json").read_text(encoding="utf-8"))
+    frozen = manifest["identity"]["source_files"]
+    checkout = tmp_path / "checkout"
+    subprocess.run(
+        ["git", "-c", f"core.autocrlf={autocrlf}", "checkout-index", "--prefix=" + checkout.as_posix() + "/", "-z", "--stdin"],
+        input=("\0".join(frozen) + "\0").encode("utf-8"), cwd=package.ROOT, check=True,
+        capture_output=True,
+    )
+    for name, expected in frozen.items():
+        assert package.sha256((checkout / name).read_bytes()) == expected, name
 
 
 def test_final_inventory_contains_only_required_sources_data_and_results():

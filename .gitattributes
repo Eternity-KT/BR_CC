@@ -1,2 +1,15 @@
 # Preserve exact artifact bytes so checksums remain valid after checkout.
 results/v6_3_3_final/** -text
+
+# Preserve the source bytes recorded by the frozen benchmark as well.
+# These inputs intentionally contain LF, CRLF and mixed line endings.
+src/** -text whitespace=cr-at-eol
+configs/*.json -text whitespace=cr-at-eol
+scripts/run_v6_3_3_final.py -text whitespace=cr-at-eol
+scripts/verify_v6_3_3_results.py -text whitespace=cr-at-eol
+scripts/validate_v6_3_3_datasets.py -text whitespace=cr-at-eol
+requirements-final.lock.txt -text whitespace=cr-at-eol
+
+# These original trailing blanks are also part of the frozen byte hashes.
+src/data/loader.py whitespace=-blank-at-eol,cr-at-eol
+src/models/binary_relevance.py whitespace=-blank-at-eol,cr-at-eol

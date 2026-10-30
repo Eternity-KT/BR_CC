@@ -4,10 +4,12 @@ Multi-label classification with partial abstention. This repository contains
 the final source, dataset manifests and saved experimental results for the
 standard **v6.3.3 configuration with SAMG disabled**.
 
-Use branch `paper/v6.3.3-final` for the setup and verification workflow below.
+Use `main` or branch `paper/v6.3.3-final` for the workflow below.
 The benchmark source is frozen at tag `v6.3.3-final` (commit `0384c39`), and
 the completed results at tag `v6.3.3-final-results` (commit `43d033d`). Later
 setup scripts and documentation preserve those source files and result bytes.
+Git attributes preserve the exact frozen source bytes on checkout, including
+their original line endings, so a fresh clone can pass the package checks.
 Earlier v6.3.4/v6.3.5 work and paper drafts are preserved on
 `archive/pre-final-v6_3_4-v6_3_5-20261028`.
 
@@ -273,3 +275,11 @@ or execution, which creates extra local files such as caches and Git metadata.
 
 Historical runners and configurations serve earlier experiments. Use the
 entry points above for the final v6.3.3 workflow.
+
+The legacy schema-v3 runner has a known metadata limitation:
+`_evaluation_policy_config` records `gsi_penalty` for MLC-PA even when
+`abstention_penalty` differs. Its complete cache identity still includes both
+penalties, but the nested policy description can be inaccurate. The regression
+is retained as an expected failure in the broader legacy suite. The frozen
+final runner uses the linear penalty directly and does not call this helper;
+the original P0 source bytes are preserved.

@@ -35,11 +35,20 @@ class PartitionProviderTests(unittest.TestCase):
                 "all_dl",
                 "fixed",
                 "random_matched",
+                "stratified_peeling",
+                "cv_stratified_peeling",
             ),
         )
-        self.assertEqual(FINAL_ORDER_STRATEGIES, ("correlation", "selection", "natural"))
+        self.assertEqual(
+            FINAL_ORDER_STRATEGIES,
+            ("correlation", "ascending_correlation", "descending_correlation", "selection", "natural"),
+        )
         self.assertEqual(canonical_partition_mode("ALL-IL"), "all_il")
         self.assertEqual(canonical_partition_mode("random"), "random_matched")
+        self.assertEqual(canonical_partition_mode("stratified"), "stratified_peeling")
+        self.assertEqual(canonical_partition_mode("v6"), "cv_stratified_peeling")
+        self.assertEqual(canonical_final_order_strategy("ascending"), "ascending_correlation")
+        self.assertEqual(canonical_final_order_strategy("descending"), "descending_correlation")
         self.assertEqual(canonical_final_order_strategy("natural"), "natural")
         with self.assertRaises(ValueError):
             canonical_partition_mode("outer_test_selected")
