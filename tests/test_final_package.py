@@ -31,6 +31,9 @@ def test_final_inventory_contains_only_required_sources_data_and_results():
     assert "data/CHD_49/readme.txt" in records
     assert "data/HumanPseAAC/HumanPseAAC3106-ReadMe.txt" in records
     assert "scripts/package_final.py" in records
+    assert "scripts/run_experiments.py" in records
+    assert "scripts/validate_datasets.py" in records
+    assert "scripts/verify_results.py" in records
     assert "tests/test_final_package.py" in records
     for name in records:
         assert not name.startswith(("papers/", "draft_end/", "docs/", "spec/", "scratch/", ".venv", "TaiLieuThamKhao/", "results_v", "results_pa_"))

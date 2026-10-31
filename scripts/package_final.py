@@ -24,6 +24,8 @@ SUPPORT = (
     "data/README.md", "data/dataset_manifest.csv", "scripts/__init__.py",
     "scripts/setup_final_env.ps1", "scripts/check_final.py",
     "scripts/package_final.py", "tests/__init__.py",
+    "scripts/run_experiments.py", "scripts/validate_datasets.py",
+    "scripts/verify_results.py",
     "tests/fixtures/__init__.py", "tests/fixtures/metric_cases.py",
 )
 

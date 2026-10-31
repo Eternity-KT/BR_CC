@@ -1,269 +1,218 @@
-# GSI-MLC-PA
+# GSI-MLC-PA: Experimental Code
 
-Official release: **v6.3.3**.
+This repository contains the experimental code for research on multi-label
+classification with partial abstention. It provides the GSI-MLC-PA method,
+reference baselines, dataset loaders, cross-validation procedures, evaluation
+metrics and saved predictions used in the experiments.
 
-GSI-MLC-PA is a multi-label classification method with partial abstention.
-It identifies independent labels through out-of-fold evaluation, models
-dependent labels using residual correlations, and applies calibrated
-probability thresholds to decide which predictions to accept or abstain from.
+GSI-MLC-PA identifies independent labels through out-of-fold evaluation,
+models dependent labels using residual correlations, and applies calibrated
+probability thresholds to accept or abstain from individual label decisions.
+Each prediction is positive, negative or abstained.
 
-This repository provides the source code, dataset manifests, regression tests
-and saved benchmark results. Use the `main` branch for the commands below.
-Each experiment records its source commit, configuration, environment and
-checksums so its results can be verified and reproduced.
+The repository supports reproducing the benchmark and checking reported
+metrics directly against saved out-of-sample predictions.
 
-If starting from the final ZIP, initialize its local Git history as described
-in the packaging section before running tests or experiments.
+## Repository structure
 
-## Set up the final environment
+| Path | Contents |
+|---|---|
+| [src/models/](src/models) | GSI-MLC-PA and reference estimators |
+| [src/selection/](src/selection) | Label partitioning and selection |
+| [src/calibration/](src/calibration) | Probability calibration |
+| [src/data/](src/data) | Dataset loading and normalization |
+| [src/evaluation/](src/evaluation) | Prediction metrics and evaluation contracts |
+| [configs/](configs) | Experimental settings and dataset manifests |
+| [scripts/](scripts) | Experiment, validation and verification commands |
+| [tests/](tests) | Regression tests |
+| [data/](data) | Dataset metadata and local raw inputs |
+| [results/](results) | Saved benchmark outputs |
 
-The tested environment is **Windows x64, Python 3.13.14 and PyTorch
-2.6.0+cu124**. The full benchmark requires CUDA for its MLP learner; the
-reference GPU is an NVIDIA GeForce RTX 4060 Laptop GPU. Logistic and SVM
-experiments, artifact verification and the default smoke test can run without
-a GPU. Git must be available for source provenance checks.
+## Environment
 
-Run every command below from the repository root in PowerShell:
+The experiments were run on Windows x64 with Python 3.13.14 and PyTorch
+2.6.0+cu124. The MLP benchmark requires CUDA; the reference GPU is an NVIDIA
+GeForce RTX 4060 Laptop GPU. Logistic Regression and calibrated SVM can run
+on the CPU. Git is required to record source provenance.
+
+From the repository root in PowerShell, create the pinned environment:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup_final_env.ps1
 ```
 
-If `python` points to a different version, select the Python 3.13.14 executable:
+If needed, select the Python executable explicitly:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup_final_env.ps1 -Python "C:\path\to\Python313\python.exe"
 ```
 
-Setup creates `.venv-final`, installs pinned build tools and the 29 package
-versions in [requirements-final-env.lock.txt](requirements-final-env.lock.txt),
-and runs `pip check`. The dependency closure includes the immutable benchmark
-runtime lock, [requirements-final.lock.txt](requirements-final.lock.txt).
-Build temporary files and the package cache stay inside `.venv-final` on the
-same volume. The CUDA wheel download is approximately 2.5 GB. Commands use
-the environment's interpreter directly, so activation is optional.
+The installer creates `.venv-final` and checks dependency consistency with
+`pip check`. Runtime and test dependencies are pinned in
+[requirements-final-env.lock.txt](requirements-final-env.lock.txt), which
+includes [requirements-final.lock.txt](requirements-final.lock.txt).
+The commands below use the environment's interpreter directly.
 
-## Validate the datasets
+## Datasets
 
-Raw dataset files must be present under `data/` at the paths listed in
-[configs/datasets_v6_3_3.json](configs/datasets_v6_3_3.json). The complete final
-ZIP includes them; they are excluded from Git. For a source checkout, obtain
-the original bundles using the source and citation notes in
-[data/README.md](data/README.md), and preserve their original bytes.
+The benchmark uses ten multi-label datasets:
 
-```powershell
-.\.venv-final\Scripts\python.exe scripts/validate_v6_3_3_datasets.py
-```
-
-The validator checks file sizes, SHA256 hashes, loaded matrices and agreement
-between the JSON manifest and [data/dataset_manifest.csv](data/dataset_manifest.csv).
-Exit code `0` indicates success, including the documented dataset warnings.
-
-| Dataset key | Samples | Features | Labels |
+| Dataset | Samples | Features | Labels |
 |---|---:|---:|---:|
-| `emotions` | 593 | 72 | 6 |
-| `scene` | 2,407 | 294 | 6 |
-| `yeast` | 2,417 | 103 | 14 |
-| `chd49` | 555 | 49 | 6 |
-| `music` | 592 | 71 | 6 |
-| `gpositivepseaac` | 519 | 440 | 4 |
-| `genbase` | 662 | 1,185 | 27 |
-| `viruspseaac` | 207 | 440 | 6 |
-| `plantpseaac` | 978 | 440 | 12 |
-| `humanpseaac` | 3,106 | 440 | 14 |
+| Emotions | 593 | 72 | 6 |
+| Scene | 2,407 | 294 | 6 |
+| Yeast | 2,417 | 103 | 14 |
+| CHD49 | 555 | 49 | 6 |
+| Music | 592 | 71 | 6 |
+| GpositivePseAAC | 519 | 440 | 4 |
+| Genbase | 662 | 1,185 | 27 |
+| VirusPseAAC | 207 | 440 | 6 |
+| PlantPseAAC | 978 | 440 | 12 |
+| HumanPseAAC | 3,106 | 440 | 14 |
 
-Loaders return finite `float32` features and binary `int32` labels. Genbase's
-unique `protein` identifier is excluded. PseAAC train/test files are joined
-before creating the benchmark folds. Exact duplicate rows are retained:
-Scene has 7, Genbase has 455 after identifier removal, and VirusPseAAC has 1.
-The folds do not group duplicates. Music and Emotions are related audio
-benchmark variants. These choices matter when interpreting generalization
-and statistical comparisons; details and upstream citation requirements are
-in the dataset README.
+Raw inputs are stored locally under `data/` and excluded from Git. Dataset
+sources, file layout, citation requirements and normalization rules are
+documented in [data/README.md](data/README.md). The compact collection summary
+is [data/dataset_manifest.csv](data/dataset_manifest.csv).
 
-## Run the final checks
+Validate the inputs before running experiments:
 
 ```powershell
-.\.venv-final\Scripts\python.exe scripts/check_final.py
+.\.venv-final\Scripts\python.exe scripts/validate_datasets.py
 ```
 
-This checks the isolated environment and dependency versions, runs the final
-regression suite, fits all six models on VirusPseAAC with Logistic on fold 1,
-checks checkpoint resume, compares predictions with the frozen reference and
-verifies all 900 saved benchmark cells. Smoke outputs go to the ignored
-`scratch/final_checks/smoke/` directory.
-
-Include SVM and CUDA MLP in the smoke test for **18 fits**:
+Validation checks SHA-256 hashes, file sizes, matrix dimensions, finite
+features and binary labels. A subset can be checked with `--datasets`:
 
 ```powershell
-.\.venv-final\Scripts\python.exe scripts/check_final.py --gpu-smoke
+.\.venv-final\Scripts\python.exe scripts/validate_datasets.py --datasets emotions scene
 ```
 
-Individual stages are available through `--stage environment`,
-`--stage tests`, `--stage smoke` and `--stage verify`. Each subprocess has a
-600-second deadline, adjustable with `--timeout`. The controller disables
-external pytest plugin autoloading and user-site packages for its children.
-[pytest-final.ini](pytest-final.ini) selects the regression suite for the
-official workflow, covering datasets, metrics, calibration, label selection,
-checkpoint resume and packaging.
+Genbase's unique `protein` identifier is excluded. PseAAC train/test files are
+joined before generating cross-validation folds. Exact duplicate rows are
+retained: Scene has 7, Genbase has 455 after identifier removal, and
+VirusPseAAC has 1. The folds do not group duplicates. Music and Emotions are
+related audio benchmark variants. These properties should be considered
+when interpreting generalization and statistical comparisons.
 
-## Reproduce experiments
+## Experimental protocol
 
-[configs/v6_3_3_final.json](configs/v6_3_3_final.json) defines the frozen
-protocol. Binary estimator parameters come from
-[configs/experiment.json](configs/experiment.json).
+The benchmark evaluates six configured models across ten datasets, three
+base learners and five outer folds, for a total of **900 fitted models**.
+Reference baselines include Binary Relevance (BR), Classifier Chains (CC)
+and MLC-PA. Exact model settings are captured with each experiment.
 
-| Setting | Final protocol |
+| Setting | Protocol |
 |---|---|
-| Method | GSI-MLC-PA |
-| Benchmark models | Six models, with exact identifiers and settings listed in the configuration |
-| Reference baselines | Binary Relevance (BR), Classifier Chains (CC), MLC-PA |
-| Base learners | `logistic`, `svm_calibrated`, `mlp` |
-| Outer evaluation | 5 shuffled multilabel-stratified folds, split seed 42 |
-| Model seeds | `42 + fold - 1`, shared across model families |
-| Preprocessing | MaxAbsScaler fitted only on the outer training fold |
-| GSI inner folds | 5; peeling, calibration and threshold selection use training data only |
-| Rejection cost | `0.30`, linear penalty, abstention encoded as `-1` |
-| Coverage target | `0.70` on OOF training predictions; test coverage can be lower |
-| Execution | One Torch/BLAS thread, deterministic Torch, TF32 disabled |
+| Base learners | Logistic Regression, calibrated SVM, PyTorch MLP |
+| Outer evaluation | Five shuffled multilabel-stratified folds, split seed 42 |
+| Model seeds | `42 + fold - 1`, shared across methods |
+| Preprocessing | MaxAbsScaler fitted on the outer training fold |
+| Internal evaluation | Five folds for GSI label selection and calibration |
+| Abstention cost | `0.30`, linear penalty |
+| Abstention encoding | `-1` |
+| Training coverage target | `0.70` on out-of-fold training predictions |
+| Aggregation | Fold means within each dataset, then equal dataset weights |
 
-All six families share the same binary estimator settings. MLP uses a
-per-label 64-unit PyTorch network for every family. SVM uses nested sigmoid
-calibration within the current training fold.
+Calibration, label selection and threshold estimation use training data only.
+The training coverage target is not a lower bound on test coverage.
 
-For a smaller CPU experiment, run all six models on Emotions with Logistic
-across five folds (**30 fits**):
+All methods share the same binary estimator settings. MLP uses a per-label
+64-unit network; SVM uses nested sigmoid calibration. Base estimator
+hyperparameters are specified in [configs/experiment.json](configs/experiment.json).
+Execution uses one Torch/BLAS thread, deterministic Torch operations and
+disabled TF32.
 
-```powershell
-.\.venv-final\Scripts\python.exe scripts/run_v6_3_3_final.py --datasets emotions --base-learners logistic --output-root scratch/final_checks/emotions
-```
+## Run experiments
 
-Run the complete matrix (**10 datasets × 3 learners × 5 folds × 6 models =
-900 fits**) into a separate reproduction directory:
+Run the benchmark models on Emotions with Logistic Regression across five
+folds (**30 fits**):
 
 ```powershell
-.\.venv-final\Scripts\python.exe scripts/run_v6_3_3_final.py --output-root results/v6_3_3_reproductions
+.\.venv-final\Scripts\python.exe scripts/run_experiments.py --datasets emotions --base-learners logistic
 ```
 
-Keep the source and configuration committed before running. The runner
-prints `RUN_DIR=...`; that directory contains the new run. The run hash
-captures source bytes, configuration, data manifest, environment and selected
-datasets/learners/folds. Repeating the identical command resumes completed
-cells after checking prediction hashes. A changed identity creates a different
-run directory; a corrupt prediction stops resume. A different platform or
-GPU can also change the run hash.
-
-Use the explicit output roots above to keep the frozen reference intact.
-The runner's default output root is `results/v6_3_3_final`; rerunning
-there can refresh manifest timestamps and aggregate files even when fits are
-reused.
-
-## Use and verify the saved results
-
-The complete reference is
-[results/v6_3_3_final/run_eb0b08cd254f4f0e](results/v6_3_3_final/run_eb0b08cd254f4f0e).
-Verification reads saved artifacts and recomputes metrics without refitting:
+Run the complete benchmark:
 
 ```powershell
-.\.venv-final\Scripts\python.exe scripts/check_final.py --stage verify
+.\.venv-final\Scripts\python.exe scripts/run_experiments.py
 ```
 
-To verify a reproduction, substitute its actual run directory:
+New runs are written to `results/reproductions/run_<hash>/`. The command prints
+the actual run directory. Dataset, learner and fold subsets can be selected:
 
 ```powershell
-.\.venv-final\Scripts\python.exe scripts/check_final.py --stage verify --run-dir "results/v6_3_3_reproductions/run_<hash>"
+.\.venv-final\Scripts\python.exe scripts/run_experiments.py --datasets viruspseaac --base-learners logistic --folds 1
 ```
 
-The check covers source consistency, artifact hashes and inventory, fold
-indices, prediction validity, recomputed metrics and dataset summaries.
-LF/CRLF differences in source files are accepted only after comparison with
-the recorded Git commit; other source changes fail. Artifact hashes remain
-byte-exact. The standalone verifier is available at
-[scripts/verify_v6_3_3_results.py](scripts/verify_v6_3_3_results.py).
+Use `--output-root` to choose another output directory, or `--config` to supply
+an experimental configuration. Commit source and configuration changes before
+running experiments so the recorded Git commit identifies the tested code.
 
-| Artifact | Contents in the complete reference |
+The run identity includes source, configuration, dataset manifest, environment
+and selected datasets, learners and folds. Repeating the same command resumes
+completed fits after checking their prediction hashes. Changes to the run
+identity create a separate directory. A corrupted checkpoint stops resume.
+
+## Tests and smoke runs
+
+Run the regression suite:
+
+```powershell
+.\.venv-final\Scripts\python.exe scripts/check_final.py --stage tests
+```
+
+Run all six models on one VirusPseAAC fold with Logistic Regression, check
+checkpoint resume and compare predictions against the saved reference:
+
+```powershell
+.\.venv-final\Scripts\python.exe scripts/check_final.py --stage smoke
+```
+
+Add `--gpu-smoke` to exercise all three learners, including CUDA MLP
+(**18 fits**). Smoke outputs are stored under `scratch/final_checks/`.
+[pytest-final.ini](pytest-final.ini) selects the experiment regression suite,
+covering data loading, metrics, calibration, label selection, checkpoints
+and packaging.
+
+## Saved results and verification
+
+The saved benchmark is available under [results/](results). Each run includes
+predictions, fold assignments, fitted thresholds, label partitions and a
+manifest recording the source commit, configuration and environment.
+
+Verify the saved benchmark without retraining:
+
+```powershell
+.\.venv-final\Scripts\python.exe scripts/verify_results.py
+```
+
+To verify a reproduced run, provide its actual directory:
+
+```powershell
+.\.venv-final\Scripts\python.exe scripts/verify_results.py "results/reproductions/run_<hash>"
+```
+
+Verification checks source consistency, artifact checksums, fold indices,
+prediction validity and metrics recomputed from the saved predictions.
+
+| Artifact | Contents |
 |---|---|
-| `detailed_folds.csv` | 900 metric rows, one per dataset/learner/model/fold |
-| `dataset_summary.csv` | 180 rows with fold means and sample standard deviations (`ddof=1`) |
-| `overall_summary.csv` | 18 learner/model rows, equally weighted dataset means |
-| `per_label_folds.csv` | 9,090 rows with support, confusion counts, coverage and F1 |
+| `detailed_folds.csv` | One metric row per dataset, learner, model and fold |
+| `dataset_summary.csv` | Fold means and sample standard deviations (`ddof=1`) |
+| `overall_summary.csv` | Equally weighted dataset means for each learner/model pair |
+| `per_label_folds.csv` | Label support, confusion counts, coverage and F1 |
 | `thresholds_audit.csv` | Per-label acceptance and rejection thresholds |
-| `partitions_audit.csv` | Per-label independent/dependent group membership |
-| `predictions/*.npz` | 900 files: test indices, truth, probabilities, full/partial predictions and scaler state |
-| `cells/*.json` | 900 resumable checkpoints with metrics and captured warnings |
-| `fold_indices.json` | Original train/test row indices for every outer fold |
-| `run_manifest.json`, `*_snapshot.json` | Source commit, environment, selection and captured input configuration |
+| `partitions_audit.csv` | Independent/dependent label membership |
+| `predictions/*.npz` | Test indices, truth, probabilities, predictions and scaler state |
+| `cells/*.json` | Per-fit checkpoints, metrics and recorded warnings |
+| `fold_indices.json` | Original training/test row indices |
+| `run_manifest.json`, `*_snapshot.json` | Source provenance and experiment settings |
 | `checksums.sha256` | Artifact integrity inventory |
 
-`Full_Macro_F1` evaluates binary predictions for every position.
-`Selective_Macro_F1` evaluates decided positions per label, then averages
-across labels; a label with no decided positions receives F1 zero.
-`Coverage` is the fraction of decided sample-label positions. Read selective
-F1 together with coverage. Fold means are computed within each dataset first;
-overall summaries weight datasets equally. The 70% training coverage target
-is not a test-set guarantee.
-
-## Package the final project
-
-Create the complete local package, including the 16 raw input files for the
-10 final datasets and their upstream README files:
-
-```powershell
-.\.venv-final\Scripts\python.exe scripts/package_final.py
-```
-
-The output is an unpacked project at `dist/BR_CC-v6.3.3-final/`, a ZIP at
-`dist/BR_CC-v6.3.3-final.zip` and its `.zip.sha256` sidecar. The package
-contains only the frozen source/configuration, final workflow scripts and
-tests, final dataset inputs/metadata, the 900-fit result set and this README.
-
-All 78 source/configuration files listed in the benchmark manifest are kept
-byte-for-byte to preserve the recorded source snapshot.
-`PACKAGE_MANIFEST.json` records the packaging commit, original benchmark
-commit, run ID and inventory counts. `PACKAGE_CHECKSUMS.sha256` covers every
-other packaged file. ZIP entries use fixed timestamps, a stable order and
-fixed compression settings; rebuilding the same committed inputs in the
-same environment produces identical ZIP bytes.
-
-Export requires a clean working tree and the original frozen source bytes.
-An existing output is preserved; choose `--output-root dist/rebuild` for
-another build. To omit raw datasets, use `--without-data` with a separate
-output root. Dataset source/citation conditions remain those of the original
-bundles. A root `LICENSE` is included if present; this repository currently
-does not specify a code license.
-
-Verify a ZIP or an untouched unpacked folder with the standard library only:
-
-```powershell
-python scripts/package_final.py --verify dist/BR_CC-v6.3.3-final.zip
-```
-
-After extracting the ZIP, open PowerShell inside `BR_CC-v6.3.3-final/`.
-Initialize a local repository so the benchmark runner can record provenance
-for new runs (Git needs your usual local author configuration):
-
-```powershell
-git init -b main
-git add .
-git commit -m "Initialize final artifact snapshot"
-```
-
-Then follow the environment setup and final check commands above. Existing
-benchmark manifests retain their original source commit. New experiments
-record the local snapshot commit. Verify the package inventory before setup
-or execution, which creates extra local files such as caches and Git metadata.
-
-## Repository entry points
-
-| Path | Purpose |
-|---|---|
-| [src/models/gsi_v6_3_3.py](src/models/gsi_v6_3_3.py) | Final GSI model |
-| [src/models](src/models), [src/selection](src/selection), [src/calibration](src/calibration) | Estimators, peeling/selection and calibration |
-| [src/data](src/data) | Dataset loaders and validation |
-| [src/evaluation](src/evaluation) | Metric implementations and contracts |
-| [scripts/setup_final_env.ps1](scripts/setup_final_env.ps1) | Isolated pinned environment setup |
-| [scripts/check_final.py](scripts/check_final.py) | Environment, tests, smoke/resume and artifact checks |
-| [scripts/run_v6_3_3_final.py](scripts/run_v6_3_3_final.py) | Frozen benchmark runner |
-| [scripts/package_final.py](scripts/package_final.py) | Final package export and inventory verification |
-| [tests](tests) | Regression tests selected by `pytest-final.ini` |
-| [data/README.md](data/README.md) | Dataset normalization, provenance and citations |
+`Full_Macro_F1` evaluates predictions at every sample-label position.
+`Selective_Macro_F1` computes F1 on decided positions for each label and then
+averages across labels; a label with no decided positions receives zero.
+`Coverage` is the fraction of decided sample-label positions. Interpret
+selective F1 together with coverage, and use dataset-level means for
+comparisons across datasets.

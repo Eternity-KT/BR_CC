@@ -1,8 +1,8 @@
-# Datasets used by GSI-MLC-PA v6.3.3
+# Benchmark datasets
 
-This directory contains the raw inputs for the frozen ten-dataset benchmark.
+This directory contains the raw inputs for the ten-dataset benchmark.
 Raw files are never rewritten by the project. Their expected byte sizes and
-SHA256 hashes are recorded in `configs/datasets_v6_3_3.json`.
+SHA256 hashes are recorded in the dataset manifest under `configs/`.
 `dataset_manifest.csv` is the compact summary; the validator also checks that
 its shapes, statistics, sizes, and source-set checksums match the JSON.
 
@@ -12,19 +12,19 @@ The CSV `source_set_sha256` hashes the UTF-8 concatenation of
 Run the complete integrity and loader check from the repository root:
 
 ```powershell
-python scripts/validate_v6_3_3_datasets.py
+python scripts/validate_datasets.py
 ```
 
 For a faster structural check without hashing every source file:
 
 ```powershell
-python scripts/validate_v6_3_3_datasets.py --skip-checksums
+python scripts/validate_datasets.py --skip-checksums
 ```
 
 To check a subset, use canonical names or aliases:
 
 ```powershell
-python scripts/validate_v6_3_3_datasets.py --datasets CHD_49 genbase
+python scripts/validate_datasets.py --datasets CHD_49 genbase
 ```
 
 Exit code 0 means all selected datasets pass (including documented warnings).
@@ -55,12 +55,10 @@ summary is checked for the whole collection even when a subset is selected.
 - No global scaling is performed by the dataset loader. Feature scaling must
   be fitted inside each outer training fold.
 - The raw Genbase ARFF contains 1,186 non-label attributes, including a
-  nominal `protein` field with one identifier per sample. The final loader
+  nominal `protein` field with one identifier per sample. The loader
   excludes that identifier and exposes 1,185 predictive motif/profile
   attributes. This avoids converting sample identity into an ordinal numeric
   feature.
-  Previous Genbase experiment results that included `protein` must be rerun
-  before comparison with this normalized input.
 - The PseAAC train/test files are retained byte-for-byte. The benchmark joins
   them and creates fresh multilabel-stratified folds; the original split is not
   used as an external test set.
