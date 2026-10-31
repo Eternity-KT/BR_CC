@@ -1,17 +1,16 @@
-# GSI-MLC-PA v6.3.3
+# GSI-MLC-PA
 
-Multi-label classification with partial abstention. This repository contains
-the final source, dataset manifests and saved experimental results for the
-standard **v6.3.3 configuration with SAMG disabled**.
+Official release: **v6.3.3**.
 
-Use `main` or branch `paper/v6.3.3-final` for the workflow below.
-The benchmark source is frozen at tag `v6.3.3-final` (commit `0384c39`), and
-the completed results at tag `v6.3.3-final-results` (commit `43d033d`). Later
-setup scripts and documentation preserve those source files and result bytes.
-Git attributes preserve the exact frozen source bytes on checkout, including
-their original line endings, so a fresh clone can pass the package checks.
-Earlier v6.3.4/v6.3.5 work and paper drafts are preserved on
-`archive/pre-final-v6_3_4-v6_3_5-20261028`.
+GSI-MLC-PA is a multi-label classification method with partial abstention.
+It identifies independent labels through out-of-fold evaluation, models
+dependent labels using residual correlations, and applies calibrated
+probability thresholds to decide which predictions to accept or abstain from.
+
+This repository provides the source code, dataset manifests, regression tests
+and saved benchmark results. Use the `main` branch for the commands below.
+Each experiment records its source commit, configuration, environment and
+checksums so its results can be verified and reproduced.
 
 If starting from the final ZIP, initialize its local Git history as described
 in the packaging section before running tests or experiments.
@@ -104,10 +103,9 @@ Individual stages are available through `--stage environment`,
 `--stage tests`, `--stage smoke` and `--stage verify`. Each subprocess has a
 600-second deadline, adjustable with `--timeout`. The controller disables
 external pytest plugin autoloading and user-site packages for its children.
-[pytest-final.ini](pytest-final.ini) selects the v6.3.3 path and its shared
-dependencies, including dataset, metric, calibration, peeling and checkpoint
-regressions. The legacy scikit-learn MLP test can emit convergence warnings;
-the final MLP benchmark uses PyTorch.
+[pytest-final.ini](pytest-final.ini) selects the regression suite for the
+official workflow, covering datasets, metrics, calibration, label selection,
+checkpoint resume and packaging.
 
 ## Reproduce experiments
 
@@ -117,21 +115,21 @@ protocol. Binary estimator parameters come from
 
 | Setting | Final protocol |
 |---|---|
-| Models | `BR`, `CC`, `MLC_PA`, `GSI_v6_2_1`, `GSI_v6_3_2`, `GSI_v6_3_3` |
+| Method | GSI-MLC-PA |
+| Benchmark models | Six models, with exact identifiers and settings listed in the configuration |
+| Reference baselines | Binary Relevance (BR), Classifier Chains (CC), MLC-PA |
 | Base learners | `logistic`, `svm_calibrated`, `mlp` |
 | Outer evaluation | 5 shuffled multilabel-stratified folds, split seed 42 |
 | Model seeds | `42 + fold - 1`, shared across model families |
 | Preprocessing | MaxAbsScaler fitted only on the outer training fold |
 | GSI inner folds | 5; peeling, calibration and threshold selection use training data only |
 | Rejection cost | `0.30`, linear penalty, abstention encoded as `-1` |
-| v6.3.3 variant | Standard; `separation_aware=false` (SAMG off) |
 | Coverage target | `0.70` on OOF training predictions; test coverage can be lower |
 | Execution | One Torch/BLAS thread, deterministic Torch, TF32 disabled |
 
 All six families share the same binary estimator settings. MLP uses a
 per-label 64-unit PyTorch network for every family. SVM uses nested sigmoid
-calibration within the current training fold. `GSI_v6_2_1` names the
-`GSIMLCPAv6_2Classifier` comparator with decaying peeling.
+calibration within the current training fold.
 
 For a smaller CPU experiment, run all six models on Emotions with Logistic
 across five folds (**30 fits**):
@@ -152,11 +150,11 @@ prints `RUN_DIR=...`; that directory contains the new run. The run hash
 captures source bytes, configuration, data manifest, environment and selected
 datasets/learners/folds. Repeating the identical command resumes completed
 cells after checking prediction hashes. A changed identity creates a different
-run directory; a corrupt prediction stops resume. LF/CRLF conversion or a
-different platform/GPU can change the run hash.
+run directory; a corrupt prediction stops resume. A different platform or
+GPU can also change the run hash.
 
 Use the explicit output roots above to keep the frozen reference intact.
-The original runner's default output root is `results/v6_3_3_final`; rerunning
+The runner's default output root is `results/v6_3_3_final`; rerunning
 there can refresh manifest timestamps and aggregate files even when fits are
 reused.
 
@@ -180,7 +178,7 @@ The check covers source consistency, artifact hashes and inventory, fold
 indices, prediction validity, recomputed metrics and dataset summaries.
 LF/CRLF differences in source files are accepted only after comparison with
 the recorded Git commit; other source changes fail. Artifact hashes remain
-byte-exact. The original verifier remains available at
+byte-exact. The standalone verifier is available at
 [scripts/verify_v6_3_3_results.py](scripts/verify_v6_3_3_results.py).
 
 | Artifact | Contents in the complete reference |
@@ -189,7 +187,7 @@ byte-exact. The original verifier remains available at
 | `dataset_summary.csv` | 180 rows with fold means and sample standard deviations (`ddof=1`) |
 | `overall_summary.csv` | 18 learner/model rows, equally weighted dataset means |
 | `per_label_folds.csv` | 9,090 rows with support, confusion counts, coverage and F1 |
-| `thresholds_audit.csv` | Per-label thresholds and SAMG state |
+| `thresholds_audit.csv` | Per-label acceptance and rejection thresholds |
 | `partitions_audit.csv` | Per-label independent/dependent group membership |
 | `predictions/*.npz` | 900 files: test indices, truth, probabilities, full/partial predictions and scaler state |
 | `cells/*.json` | 900 resumable checkpoints with metrics and captured warnings |
@@ -218,12 +216,9 @@ The output is an unpacked project at `dist/BR_CC-v6.3.3-final/`, a ZIP at
 `dist/BR_CC-v6.3.3-final.zip` and its `.zip.sha256` sidecar. The package
 contains only the frozen source/configuration, final workflow scripts and
 tests, final dataset inputs/metadata, the 900-fit result set and this README.
-It omits historical results, experimental reports, paper drafts, reference
-PDFs, unrelated datasets, caches, `.git` and the virtual environment.
 
 All 78 source/configuration files listed in the benchmark manifest are kept
-byte-for-byte, including earlier modules/configurations captured by that
-snapshot. This preserves the existing provenance and verification contract.
+byte-for-byte to preserve the recorded source snapshot.
 `PACKAGE_MANIFEST.json` records the packaging commit, original benchmark
 commit, run ID and inventory counts. `PACKAGE_CHECKSUMS.sha256` covers every
 other packaged file. ZIP entries use fixed timestamps, a stable order and
@@ -248,7 +243,7 @@ Initialize a local repository so the benchmark runner can record provenance
 for new runs (Git needs your usual local author configuration):
 
 ```powershell
-git init -b paper/v6.3.3-final
+git init -b main
 git add .
 git commit -m "Initialize final artifact snapshot"
 ```
@@ -272,14 +267,3 @@ or execution, which creates extra local files such as caches and Git metadata.
 | [scripts/package_final.py](scripts/package_final.py) | Final package export and inventory verification |
 | [tests](tests) | Regression tests selected by `pytest-final.ini` |
 | [data/README.md](data/README.md) | Dataset normalization, provenance and citations |
-
-Historical runners and configurations serve earlier experiments. Use the
-entry points above for the final v6.3.3 workflow.
-
-The legacy schema-v3 runner has a known metadata limitation:
-`_evaluation_policy_config` records `gsi_penalty` for MLC-PA even when
-`abstention_penalty` differs. Its complete cache identity still includes both
-penalties, but the nested policy description can be inaccurate. The regression
-is retained as an expected failure in the broader legacy suite. The frozen
-final runner uses the linear penalty directly and does not call this helper;
-the original P0 source bytes are preserved.
